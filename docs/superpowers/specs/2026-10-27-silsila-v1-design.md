@@ -66,7 +66,8 @@ Anyone in a family, friend, or work group. It must work for a 10-year-old and an
 | Khatma (ختمة) | A group, plus its schedule and its repeating rounds. Shown in the UI as the group. |
 | Round (دورة) | One pass through all 30 ajza'. Round 1, round 2, and so on. |
 | Juz' (جزء), ajza' (أجزاء) | One of the 30 standard parts of the Quran. The only unit of work in v1. |
-| Member | Someone who joined the khatma through its link. |
+| Member | Someone who opened the khatma's link **and verified their phone number** (3.4). Viewers who never verify aren't members. |
+| Viewer | Anyone with the link who hasn't verified. Can look, can't act. |
 | Creator | The member who created the khatma. |
 
 ### 3.2 Creating a khatma
@@ -93,14 +94,27 @@ After creating it, the creator lands on the khatma screen with a large "invite" 
 - Round 1 starts when the khatma is created. Each round has a target end: its start time plus the period.
 - When the 30th juz' is marked done, the group sees the celebration, and the next round starts right away, with a fresh target end. A fast group finishes more khatmas. Ali decided this.
 - If the target end passes with ajza' still unread, the round stays open until all 30 are done. Rounds never overlap, so the next round starts only when this one completes.
-- Passing the target end doesn't take anyone's juz' away. A held juz' returns to the pool only when all three are true: the round is past its target end, the person has held it for more than 3x their pace (see 4.1), and they haven't answered the "keep or release?" nudge (see 4.2) within 24 hours. The person then gets a private, kind message: "We opened juz' 12 so others can help. You can take it back anytime." Nobody else is told who held it. This rule is **[builder's call]**, made after review found that releasing everything at the target end breaks daily khatmas.
-- **"No deadline" has no target end.** For that schedule, the features that depend on a deadline are off: the overdue release, the "round is behind" nudge, the target end above the grid, and the deadline line in "remind the group". The 1.5x and 3x pace nudges still apply **[builder's call]**.
+- Passing the target end doesn't take anyone's juz' away by itself. See "Releasing a held juz'" below.
+- **"No deadline" has no target end.** For that schedule, the "round is behind" nudge, the target end above the grid, and the deadline line in "remind the group" are off. The pace nudges and the release rule below still apply, so one abandoned juz' can't stall the khatma forever **[builder's call]**.
+
+#### Releasing a held juz' **[builder's call]**
+
+The goal: nobody loses a juz' they're actively reading, and no abandoned juz' blocks a round forever. Earlier drafts released everything at the target end, which breaks daily khatmas.
+
+1. **The keep-or-release question.** When someone has held a juz' for 3x their pace (4.1), the app asks "keep juz' 12, or let someone else help?". The question always appears inside the app the next time they open it. It's also sent as a push notification if they have push on. Turning nudges off stops the reminders in 4.2 but not this question, because it protects the group.
+2. **"Keep"** restarts the clock. The question comes back after another 1x their pace. There's no limit on how many times someone can answer "keep"; they're still reading.
+3. **Automatic release** happens when the question has gone unanswered for:
+   - 24 hours after it was seen in the app or delivered by push, or
+   - 72 hours after it was first raised, if the person never opened the app and has no push.
+
+   For khatmas with a deadline, automatic release also requires the round to be past its target end. For "no deadline" khatmas, it also requires the juz' to have been held for at least 14 days.
+4. **After release**, the person gets a private, kind message the next time they open the app: "We opened juz' 12 so others can help. You can take it back anytime." Nobody else is told who held it.
 
 ### 3.4 Joining and verifying
 
 - Any member can share the invite link. The share button opens WhatsApp with a ready-made Arabic message.
-- Tapping the link opens the khatma in the Silsila app if it's installed (iOS universal links, Android app links). Otherwise it opens the web version straight away, with no app store in the way. The web page shows the inviter and khatma name in plain HTML at once, while the Flutter app loads behind it.
-- Anyone with the link can see the khatma, its pool, and who is reading what, with no name, number, or verification.
+- Tapping the link opens the khatma in the Silsila app if it's installed (iOS universal links, Android app links). Otherwise it opens the web version straight away, with no app store in the way. The web page shows the inviter and khatma name in plain HTML at once, while the Flutter app loads behind it. To make that work on a static host, each member's share button builds their own link (khatma invite code plus a short member ID, for example `silsila.app/j/fam38Qx?from=a7`). A small inline script in the HTML fetches the khatma name and inviter's display name from a Convex HTTP endpoint, which returns only those two fields, and shows them before Flutter starts **[builder's call]**.
+- Anyone with the link can see the khatma and its pool with no name, number, or verification. Reader names on tiles are shown only to verified members; viewers see "يُقرأ" without names **[builder's call]**.
 - **Taking a juz' requires a verified phone number.** Ali decided this. The first time someone taps "take a juz'", one sheet asks for their name and offers one button: "تحقّق عبر واتساب" (verify with WhatsApp). See 5.2 for how it works.
 - A person becomes a member of the khatma when they verify. Viewers who never verify aren't members and don't count toward the member total **[builder's call]**.
 - No password or email.
@@ -118,7 +132,7 @@ After creating it, the creator lands on the khatma screen with a large "invite" 
 
 While holding a juz', the main screen shows it in large text with two buttons:
 
-- **"I finished" (أتممت القراءة).** The juz' turns done. The person sees "تقبّل الله منك" and an offer to take another juz' if any are open. An undo option stays visible for 10 seconds.
+- **"I finished" (أتممت القراءة).** The juz' turns done. The person sees "تقبّل الله منك" and an offer to take another juz' if any are open. An undo option stays visible for 10 seconds. If this was the 30th juz', the completion effects in 3.8 (push, completed-rounds count, new round) wait until the undo window closes, so an undo never has to reverse an announcement **[builder's call]**.
 - **"I can't finish it" (لا أستطيع إكماله)**, the smaller of the two. The juz' returns to the pool. Nobody is notified, and nobody sees who released it.
 
 ### 3.7 The pool view
@@ -136,7 +150,7 @@ Above the grid: "١٨ من ٣٠ تمّت" with a progress bar, and the round's t
 When the 30th juz' is marked done:
 
 - Every member sees a celebration screen the next time they open the app: the round number, the number of people who took part, and a khatm dua made only of Quranic duas, such as «رَبَّنَا تَقَبَّلْ مِنَّا إِنَّكَ أَنتَ السَّمِيعُ العَلِيمُ» (2:127). Ali decided on Quranic duas only, because the popular long khatm dua has a disputed attribution. The builder picks the verses and must copy them exactly, with diacritics, from a verified mushaf text source.
-- A push notification goes to all members who enabled notifications: "ختمنا القرآن معاً، الحمد لله".
+- A push notification goes to all members who enabled notifications: "ختمنا القرآن معاً، الحمد لله". Quiet hours (4.2) apply: a member in their quiet hours gets it at 07:00 their time.
 - A WhatsApp share button posts "we completed khatma number 12 together" to the family group.
 - The round's history is kept, so the group sees "12 khatmas completed together".
 
@@ -160,7 +174,7 @@ When the 30th juz' is marked done:
 Limits **[builder's call]**:
 
 - At most one nudge per person per khatma per day.
-- No notifications between 22:00 and 07:00 in the person's time zone.
+- No push notifications of any kind between 22:00 and 07:00 in the person's time zone, including the completion push. Anything due in that window is delivered at 07:00. The one-per-day cap covers nudges only, not the completion push or the keep-or-release question.
 - Each person can turn off nudges for a khatma.
 
 "Behind" means the number of open ajza' is more than the expected pace of the members who hold nothing can cover before the target end. The builder picks the exact formula.
@@ -186,12 +200,20 @@ A person's identity is their phone number, verified through WhatsApp. Ali decide
 
 **How verification works ("reverse" verification):**
 
-1. The person taps "تحقّق عبر واتساب". The app creates a pending verification with a random one-time code, tied to this app or browser session. It expires after 10 minutes.
-2. The app opens `wa.me/<Silsila's WhatsApp number>?text=...` with a ready-made message such as "رمز التحقق في سلسلة: 4821".
+1. The person taps "تحقّق عبر واتساب". The app creates a pending verification with a random one-time code, tied to this app or browser session. The code is at least 10 characters from a 32-character alphabet, unique among all pending verifications, used once, and expires after 10 minutes. The person never types it, so length costs nothing.
+2. The app opens `wa.me/<Silsila's WhatsApp number>?text=...` with a ready-made message such as "رمز التحقق في سلسلة: K7Q2-9XMB-4T".
 3. The person taps send in WhatsApp. They never type their number or copy a code.
 4. Silsila's WhatsApp Business Cloud API webhook receives the message. WhatsApp supplies the sender's phone number. The backend matches the code, saves the number in E.164 format, and marks the person verified.
 5. The app watches the verification live and continues automatically: "تمّ التحقق" and the take-a-juz' sheet. Silsila also replies in WhatsApp with "تمّ التحقق، ارجع إلى سلسلة" and a link back. Replies within 24 hours of a user's message don't need an approved template.
-6. The app shows the masked number to the person ("‎+971 50 ••• 1234، هذا رقمك؟") with a "not me" option. This catches a verification link that was forwarded to someone else.
+6. The app shows the masked number to the person ("‎+971 50 ••• 1234، هذا رقمك؟") with a "not me" option. This catches an honest mistake, such as a family member sending the message from their own phone.
+
+**Protection against account takeover [builder's call]:** a scammer could start a verification on their own phone, then forward the WhatsApp link to a victim ("tap to join our khatma"). If the victim sends it, the scammer's session would be tied to the victim's number. The "not me" check doesn't stop this, because the scammer sees it, not the victim. So:
+
+- **New number (no Silsila account yet):** one-tap verification as above. The scammer gains only an empty account, with none of the victim's history.
+- **Number that already has an account:** after the message arrives, Silsila replies in the same WhatsApp chat with a 6-digit code, and the app asks for it. Only the real owner sees that reply, so a forwarded link is useless. This costs existing users one extra step only when they sign in on a new device.
+- Every new sign-in triggers a WhatsApp reply to the number: "New sign-in to Silsila on [device type]. If this wasn't you, tap here." The link signs out every other session.
+- The app's settings show the person's signed-in devices with "sign out all other devices".
+- Verify the webhook signature on every request. Rate-limit verification attempts per session, per sending number, and per IP address.
 
 **Rules:**
 
