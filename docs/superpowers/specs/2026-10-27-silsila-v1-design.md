@@ -101,22 +101,26 @@ After creating it, the creator lands on the khatma screen with a large "invite" 
 
 The goal: nobody loses a juz' they're actively reading, and no abandoned juz' blocks a round forever. Earlier drafts released everything at the target end, which breaks daily khatmas.
 
-1. **The keep-or-release question.** When someone has held a juz' for 3x their pace (4.1), the app asks "keep juz' 12, or let someone else help?". The question always appears inside the app the next time they open it. It's also sent as a push notification if they have push on. Turning nudges off stops the reminders in 4.2 but not this question, because it protects the group.
-2. **"Keep"** restarts the clock. The question comes back after another 1x their pace. There's no limit on how many times someone can answer "keep"; they're still reading.
-3. **Automatic release** happens when the question has gone unanswered for:
-   - 24 hours after it was seen in the app or delivered by push, or
-   - 72 hours after it was first raised, if the person never opened the app and has no push.
+1. **The keep-or-release question** ("keep juz' 12, or let someone else help?") is raised at the earlier of:
+   - the person has held the juz' for 3x their pace (4.1), or
+   - the round is past its target end and the person has held the juz' for at least 24 hours. This keeps daily and 3-day khatmas moving.
 
-   For khatmas with a deadline, automatic release also requires the round to be past its target end. For "no deadline" khatmas, it also requires the juz' to have been held for at least 14 days.
+   The question always appears inside the app the next time they open it. It's also sent as a push notification if they have push on, respecting quiet hours. Turning nudges off stops the reminders in 4.2 but not this question, because it protects the group.
+2. **"Keep"** restarts the clock. The question comes back after another 1x their pace, or after another 24 hours if the round is past its target end, whichever is sooner. There's no limit on how many times someone can answer "keep"; they're still reading.
+3. **Automatic release** happens when the question goes unanswered for either:
+   - 24 hours after the app reports that the question was shown on screen, or
+   - 72 hours after the question was raised, whether or not it was seen.
+
+   Push providers don't confirm that a notification was seen, so a sent push never starts the 24-hour timer. Only the app reporting the question on screen does. For khatmas with a deadline, automatic release also requires the round to be past its target end. For "no deadline" khatmas, it also requires the juz' to have been held for at least 14 days.
 4. **After release**, the person gets a private, kind message the next time they open the app: "We opened juz' 12 so others can help. You can take it back anytime." Nobody else is told who held it.
 
 ### 3.4 Joining and verifying
 
 - Any member can share the invite link. The share button opens WhatsApp with a ready-made Arabic message.
-- Tapping the link opens the khatma in the Silsila app if it's installed (iOS universal links, Android app links). Otherwise it opens the web version straight away, with no app store in the way. The web page shows the inviter and khatma name in plain HTML at once, while the Flutter app loads behind it. To make that work on a static host, each member's share button builds their own link (khatma invite code plus a short member ID, for example `silsila.app/j/fam38Qx?from=a7`). A small inline script in the HTML fetches the khatma name and inviter's display name from a Convex HTTP endpoint, which returns only those two fields, and shows them before Flutter starts **[builder's call]**.
-- Anyone with the link can see the khatma and its pool with no name, number, or verification. Reader names on tiles are shown only to verified members; viewers see "يُقرأ" without names **[builder's call]**.
+- Tapping the link opens the khatma in the Silsila app if it's installed (iOS universal links, Android app links). Otherwise it opens the web version straight away, with no app store in the way. The web page shows the inviter and khatma name in plain HTML at once, while the Flutter app loads behind it. To make that work on a static host, each member's share button builds their own link: the khatma invite code plus that member's random sharing token of at least 10 characters, for example `silsila.app/j/fam38Qx?from=Hq7cT2mZ9w`. Tokens are unguessable, so nobody can list members by trying values. A small inline script in the HTML fetches the khatma name and the inviter's display name from a rate-limited Convex HTTP endpoint, which returns only those two fields for a valid code and token pair, and shows them before Flutter starts **[builder's call]**.
+- Anyone with the link can see the khatma and its pool with no name, number, or verification. Reader names on tiles are shown only to members (see below); viewers see "يُقرأ" without names **[builder's call]**.
 - **Taking a juz' requires a verified phone number.** Ali decided this. The first time someone taps "take a juz'", one sheet asks for their name and offers one button: "تحقّق عبر واتساب" (verify with WhatsApp). See 5.2 for how it works.
-- A person becomes a member of the khatma when they verify. Viewers who never verify aren't members and don't count toward the member total **[builder's call]**.
+- A person becomes a member of a khatma the first time they take a juz' in it, or when they create it. Someone already verified through another khatma doesn't verify again; they become a member here when they take their first juz' here. Viewers, verified or not, aren't members, don't count toward the 60-member cap, and don't get this khatma's notifications **[builder's call]**.
 - No password or email.
 - Members per khatma are capped at 60 **[builder's call]**, to limit abuse of a leaked link.
 
@@ -132,7 +136,7 @@ The goal: nobody loses a juz' they're actively reading, and no abandoned juz' bl
 
 While holding a juz', the main screen shows it in large text with two buttons:
 
-- **"I finished" (أتممت القراءة).** The juz' turns done. The person sees "تقبّل الله منك" and an offer to take another juz' if any are open. An undo option stays visible for 10 seconds. If this was the 30th juz', the completion effects in 3.8 (push, completed-rounds count, new round) wait until the undo window closes, so an undo never has to reverse an announcement **[builder's call]**.
+- **"I finished" (أتممت القراءة).** The juz' turns done. The person sees "تقبّل الله منك" and an offer to take another juz' if any are open. An undo option stays visible for 10 seconds. Completion (3.8) fires only once all 30 ajza' are done and 10 seconds have passed since the most recent "I finished" in the round. Every member's undo window closes within 10 seconds of their own tap, and the most recent tap is the last to close, so no undo can ever reopen an announced round. Any undo before that point cancels the pending completion **[builder's call]**.
 - **"I can't finish it" (لا أستطيع إكماله)**, the smaller of the two. The juz' returns to the pool. Nobody is notified, and nobody sees who released it.
 
 ### 3.7 The pool view
@@ -159,7 +163,7 @@ When the 30th juz' is marked done:
 ### 4.1 Pace
 
 - The app records how long each person takes from taking a juz' to marking it done.
-- A person's pace is the median of their last 5 finished ajza' across all their khatmas. Until they have 3 finished ajza', the default pace is 3 days **[builder's call]**.
+- A person's pace is the median of their last 5 finished ajza' across all their khatmas. Until they have 3 finished ajza', the default pace is 3 days. Finishes in under 20 minutes don't count toward pace, because they're likely mistaken taps or ajza' already read. Pace is always kept between 1 and 7 days, so nudges never fire within hours and never wait weeks **[builder's call]**.
 - Pace is private. Only that person can see it, on their own screen, phrased positively: "you usually finish a juz' in about 2 days".
 
 ### 4.2 Nudges (all private, to one person)
@@ -238,10 +242,13 @@ A person's identity is their phone number, verified through WhatsApp. Ali decide
 The creator isn't a manager, but someone must handle mistakes. The creator can:
 
 - Rename the khatma and change its schedule. Changes apply from the next round.
-- Remove a member. Their held juz' returns to the pool.
-- Reset the invite link if it leaks.
+- Remove a member. Their held juz' returns to the pool, and their phone number is blocked from rejoining this khatma until the creator unblocks it.
+- Reset the invite link if it leaks. Old links, including members' personal sharing links, stop working.
+- Hand the creator role to another member.
 
-Nothing else. The creator can't assign ajza' or mark ajza' done for others **[builder's call]**.
+Nothing else. The creator can't assign ajza' or mark ajza' done for others.
+
+If the creator hasn't opened the app for 30 days, the creator role passes automatically to the member who has been in the khatma longest and opened the app in the last 7 days, and the old creator is told privately. That way a lost phone can't leave a khatma without anyone to fix a leaked link **[builder's call]**.
 
 ## 6. Notifications in v1
 
@@ -283,10 +290,15 @@ Pace and rotation derive from assignments. The builder owns the actual schema.
 
 ## 9. Privacy and safety
 
-- Store only a display name, a verified phone number, language, time zone, and push subscriptions. No emails.
+- What the system stores, and nothing else:
+  - **Per person:** display name, verified phone number (E.164), language, time zone, push subscriptions, and hashed session tokens with device type and last-used time (for the signed-in devices list in 5.2).
+  - **Per verification:** the one-time code, the session it belongs to, timestamps, status, and the sending phone number.
+  - **For rate limiting:** IP addresses, kept for at most 24 hours.
+  - **Reading activity:** taken, finished, and released times per juz' (for pace and rotation).
+  - No emails, contacts, or location.
 - Phone numbers are never shown to other members. A person sees only their own number, masked.
 - Anyone with a khatma's invite link can view it. Only verified members can act in it. The creator can reset a leaked link (5.4).
-- Verify the WhatsApp webhook signature on every request, and rate-limit verification attempts per session and per number.
+- Verify the WhatsApp webhook signature on every request. Rate-limit verification attempts per session, per sending number, and per IP address (5.2).
 - No third-party analytics in v1 **[builder's call]**.
 - Rate-limit joining and taking ajza' to slow abuse.
 
