@@ -2,6 +2,7 @@ import { parsePhoneNumberFromString } from "libphonenumber-js/min";
 
 const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
 const DISPLAY_NAME_MAX = 40;
+const KHATMA_NAME_MAX = 60;
 
 /** Replaces ASCII digits with Eastern Arabic digits (١٢٣). */
 export function toArabicDigits(v: number | string): string {
@@ -39,6 +40,22 @@ export function cleanDisplayName(raw: string): string | null {
     .trim();
   if (!/[\p{L}\p{N}]/u.test(cleaned)) return null;
   return Array.from(cleaned).slice(0, DISPLAY_NAME_MAX).join("").trim();
+}
+
+/**
+ * Trims, collapses whitespace, strips control, format, and blank-filler
+ * characters (keeping ZWNJ and ZWJ), and caps the result at 60 characters.
+ * Empty (or `null`) input gives `null`.
+ */
+export function cleanKhatmaName(raw: string | null): string | null {
+  if (raw === null) return null;
+  const cleaned = raw
+    .replace(/\s+/gu, " ")
+    .replace(CONTROL_OR_FORMAT, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const capped = Array.from(cleaned).slice(0, KHATMA_NAME_MAX).join("").trim();
+  return capped === "" ? null : capped;
 }
 
 /** `+971501234567` becomes `+971 50 ••• 4567`. Unparseable input is masked to its last 4 digits. */

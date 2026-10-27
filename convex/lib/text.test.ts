@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cleanDisplayName,
+  cleanKhatmaName,
   maskPhone,
   normalizeDigits,
   toArabicDigits,
@@ -82,5 +83,33 @@ describe("maskPhone", () => {
 
   it("falls back to a fully masked form for unparseable input", () => {
     expect(maskPhone("garbage")).not.toMatch(/garbage/);
+  });
+});
+
+describe("cleanKhatmaName", () => {
+  it("returns null for null, empty, or whitespace-only input", () => {
+    expect(cleanKhatmaName(null)).toBeNull();
+    expect(cleanKhatmaName("")).toBeNull();
+    expect(cleanKhatmaName(" \t\n ")).toBeNull();
+    expect(cleanKhatmaName("\u0007\u200B\u2800")).toBeNull();
+  });
+
+  it("trims, collapses whitespace, and strips control characters", () => {
+    expect(cleanKhatmaName("  ختمة   العائلة \u0007\u202E")).toBe(
+      "ختمة العائلة",
+    );
+    expect(cleanKhatmaName("a\tb\nc")).toBe("a b c");
+  });
+
+  it("keeps ZWNJ and ZWJ", () => {
+    expect(cleanKhatmaName("می\u200Cخواهم")).toBe("می\u200Cخواهم");
+  });
+
+  it("caps at 60 characters and never leaves a trailing space", () => {
+    expect(cleanKhatmaName("ب".repeat(100))).toBe("ب".repeat(60));
+    expect(cleanKhatmaName(`${"ب".repeat(59)} ${"ج".repeat(10)}`)).toBe(
+      "ب".repeat(59),
+    );
+    expect(Array.from(cleanKhatmaName("😀".repeat(70)) ?? "")).toHaveLength(60);
   });
 });
