@@ -15,8 +15,9 @@ const SITE = "https://silsila.example";
 
 const NO_MATCH =
   "لم نجد رمز تحقق صالحاً. ارجع إلى سلسلة واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
-const MATCHED = "تمّ التحقق ✅ ارجع إلى سلسلة لتكمل.";
-const PIN_RE = /^رمز الدخول إلى سلسلة: (\d{6})\nلا تشاركه مع أحد\.$/;
+const MATCHED = `تمّ التحقق ✅ ارجع إلى سلسلة لتكمل:\n${SITE}`;
+const PIN_RE =
+  /^رمز الدخول إلى سلسلة: (\d{6})\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك\. لا تعطه لأحد، فسلسلة لا تطلبه منك أبداً\. إن لم تطلبه الآن فتجاهل هذه الرسالة\.$/;
 
 type T = TestConvexForDataModel<DataModel>;
 type Sent = { to: string; body: string };
@@ -261,6 +262,44 @@ test("start over HTTP: CORS preflight, origins, and error codes", async () => {
   const maint = await post({ displayName: "علي", clientKey: "c3" });
   expect(maint.status).toBe(503);
   expect(await maint.json()).toEqual({ error: "maintenance" });
+});
+
+test("the Vite dev origin is allowed only in dev", async () => {
+  const t = convexTest(schema, modules);
+  const preflight = () =>
+    t.fetch("/api/verification/start", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:5173",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+  const post = () =>
+    t.fetch("/api/verification/start", {
+      method: "POST",
+      headers: { Origin: "http://localhost:5173" },
+      body: JSON.stringify({ displayName: "علي", clientKey: "c-dev" }),
+    });
+
+  // dev (SILSILA_ENV=dev from beforeEach)
+  expect((await preflight()).headers.get("Access-Control-Allow-Origin")).toBe(
+    "http://localhost:5173",
+  );
+  expect((await post()).status).toBe(200);
+
+  // prod: only SITE_URL is allowed
+  vi.stubEnv("SILSILA_ENV", "prod");
+  const pre = await preflight();
+  expect(pre.status).toBe(403);
+  expect(pre.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  const res = await post();
+  expect(res.status).toBe(403);
+  expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  const site = await t.fetch("/api/verification/start", {
+    method: "OPTIONS",
+    headers: { Origin: SITE, "Access-Control-Request-Method": "POST" },
+  });
+  expect(site.headers.get("Access-Control-Allow-Origin")).toBe(SITE);
 });
 
 test("startInternal rate-limits per client and per IP", async () => {
@@ -825,11 +864,11 @@ test("device labels are sanitized before reaching the WhatsApp alert", async () 
   const res = await claim(
     t,
     v,
-    "Chrome‮ https://evil.example/x?y=1 " + "z".repeat(100),
+    "Chrome\u202E https://evil.example/x?y=1 " + "z".repeat(100),
   );
   expect(res).toHaveProperty("sessionToken");
   const session = await t.run((ctx) => ctx.db.query("sessions").unique());
-  expect(session!.deviceLabel).not.toMatch(/[:/?=.‮]/);
+  expect(session!.deviceLabel).not.toMatch(/[:/?=.\u202E]/);
   expect(Array.from(session!.deviceLabel).length).toBeLessThanOrEqual(40);
   expect(sent.at(-1)!.body).not.toContain("evil.example");
 });

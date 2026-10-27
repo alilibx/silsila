@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
-import { env, parseIncoming, siteUrl } from "./whatsapp";
+import { env, isDev, parseIncoming, siteUrl } from "./whatsapp";
 
 const http = httpRouter();
 
@@ -17,7 +17,7 @@ const MAX_IP = 64;
 
 function allowedOrigin(origin: string): boolean {
   const site = siteUrl();
-  return origin === DEV_ORIGIN || (site !== "" && origin === site);
+  return (isDev() && origin === DEV_ORIGIN) || (site !== "" && origin === site);
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {

@@ -286,6 +286,29 @@ test("sendText never retries other 4xx", async () => {
   }
 });
 
+test("sendText in dev survives an unreadable error body", async () => {
+  const t = convexTest(schema, modules);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const broken = () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error("connection reset"));
+        },
+      }),
+      { status: 400 },
+    );
+  const mock = vi.fn(async () => broken());
+  vi.stubGlobal("fetch", mock);
+  expect(
+    await t.action(internal.whatsapp.sendText, {
+      to: "+971501234567",
+      body: "x",
+    }),
+  ).toBe(false);
+  expect(mock).toHaveBeenCalledTimes(1);
+});
+
 test("webhook rejects a bad signature", async () => {
   const t = convexTest(schema, modules);
   const body = JSON.stringify(sampleWebhook);

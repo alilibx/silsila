@@ -69,6 +69,20 @@ describe("cleanDisplayName", () => {
     const name = cleanDisplayName("ا".repeat(39) + " " + "ب".repeat(10));
     expect(name).toBe("ا".repeat(39));
   });
+
+  it("requires a letter or digit within the first 40 characters", () => {
+    expect(cleanDisplayName("-".repeat(45) + "a")).toBeNull();
+    expect(cleanDisplayName("-".repeat(39) + "a")).toBe("-".repeat(39) + "a");
+  });
+
+  it("does not leave a trailing ZWNJ or ZWJ after cutting", () => {
+    expect(cleanDisplayName("ا".repeat(39) + "\u200C" + "ب".repeat(5))).toBe(
+      "ا".repeat(39),
+    );
+    expect(cleanDisplayName("ا".repeat(38) + " \u200D" + "ب")).toBe(
+      "ا".repeat(38),
+    );
+  });
 });
 
 describe("maskPhone", () => {
@@ -94,6 +108,14 @@ describe("cleanKhatmaName", () => {
     expect(cleanKhatmaName("\u0007\u200B\u2800")).toBeNull();
   });
 
+  it("returns null unless a letter or digit remains", () => {
+    expect(cleanKhatmaName("\u200C")).toBeNull();
+    expect(cleanKhatmaName("\u200C\u200D \u200C")).toBeNull();
+    expect(cleanKhatmaName("-- !!")).toBeNull();
+    expect(cleanKhatmaName("😀".repeat(3))).toBeNull();
+    expect(cleanKhatmaName("ختمة ١")).toBe("ختمة ١");
+  });
+
   it("trims, collapses whitespace, and strips control characters", () => {
     expect(cleanKhatmaName("  ختمة   العائلة \u0007\u202E")).toBe(
       "ختمة العائلة",
@@ -110,6 +132,8 @@ describe("cleanKhatmaName", () => {
     expect(cleanKhatmaName(`${"ب".repeat(59)} ${"ج".repeat(10)}`)).toBe(
       "ب".repeat(59),
     );
-    expect(Array.from(cleanKhatmaName("😀".repeat(70)) ?? "")).toHaveLength(60);
+    expect(
+      Array.from(cleanKhatmaName("ب" + "😀".repeat(70)) ?? ""),
+    ).toHaveLength(60);
   });
 });

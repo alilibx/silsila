@@ -15,36 +15,47 @@ const CONTROL_OR_FORMAT = new RegExp(
   "gu",
 );
 
-/**
- * Trims, collapses whitespace, and strips control, format (bidi marks and
- * overrides, zero-width space, ...), and blank-filler characters, keeping ZWNJ
- * and ZWJ. Returns `null` unless a letter or digit remains; otherwise at most
- * 40 characters.
- */
-export function cleanDisplayName(raw: string): string | null {
-  const cleaned = raw
+const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+// Trailing whitespace, ZWNJ, and ZWJ: a cut can strand a joiner at the end.
+const TRAILING_SPACE_OR_JOINER = /[\s\u200C\u200D]+$/u;
+
+/** Collapses whitespace and strips control, format, and blank-filler characters. */
+function clean(raw: string): string {
+  return raw
     .replace(/\s+/gu, " ") // tabs and newlines become spaces before controls are stripped
     .replace(CONTROL_OR_FORMAT, "")
     .replace(/\s+/gu, " ")
     .trim();
-  if (!/[\p{L}\p{N}]/u.test(cleaned)) return null;
-  return Array.from(cleaned).slice(0, DISPLAY_NAME_MAX).join("").trim();
+}
+
+/** Cuts to `max` code points, then drops trailing spaces, ZWNJ, and ZWJ. */
+function cap(text: string, max: number): string {
+  return Array.from(text)
+    .slice(0, max)
+    .join("")
+    .replace(TRAILING_SPACE_OR_JOINER, "");
 }
 
 /**
- * Trims, collapses whitespace, strips control, format, and blank-filler
- * characters (keeping ZWNJ and ZWJ), and caps the result at 60 characters.
- * Empty (or `null`) input gives `null`.
+ * Trims, collapses whitespace, and strips control, format (bidi marks and
+ * overrides, zero-width space, ...), and blank-filler characters, keeping ZWNJ
+ * and ZWJ. Cuts to 40 characters (never ending in a space or joiner), then
+ * returns `null` unless a letter or digit remains.
+ */
+export function cleanDisplayName(raw: string): string | null {
+  const capped = cap(clean(raw), DISPLAY_NAME_MAX);
+  return HAS_LETTER_OR_DIGIT.test(capped) ? capped : null;
+}
+
+/**
+ * Like `cleanDisplayName` with a 60-character cap: `null` input, or a name
+ * with no letter or digit left (blank, punctuation, emoji, or joiners only),
+ * gives `null`.
  */
 export function cleanKhatmaName(raw: string | null): string | null {
   if (raw === null) return null;
-  const cleaned = raw
-    .replace(/\s+/gu, " ")
-    .replace(CONTROL_OR_FORMAT, "")
-    .replace(/\s+/gu, " ")
-    .trim();
-  const capped = Array.from(cleaned).slice(0, KHATMA_NAME_MAX).join("").trim();
-  return capped === "" ? null : capped;
+  const capped = cap(clean(raw), KHATMA_NAME_MAX);
+  return HAS_LETTER_OR_DIGIT.test(capped) ? capped : null;
 }
 
 /** `+971501234567` becomes `+971 50 ••• 4567`. Unparseable input is masked to its last 4 digits. */

@@ -266,7 +266,7 @@ test("updateDisplayName rejects blank names and stores the cleaned name", async 
   const t = convexTest(schema, modules);
   const personId = await addPerson(t, "+971501234567");
   await addSession(t, personId, "tok_1", "al_1");
-  for (const bad of ["   ", "", "​⠀ㅤ", "\u0007\u0000"]) {
+  for (const bad of ["   ", "", "\u200B\u2800\u3164", "\u0007\u0000"]) {
     await expect(
       t.mutation(api.people.updateDisplayName, {
         sessionToken: "tok_1",
@@ -276,14 +276,14 @@ test("updateDisplayName rejects blank names and stores the cleaned name", async 
   }
   await t.mutation(api.people.updateDisplayName, {
     sessionToken: "tok_1",
-    displayName: "  أبو‮   " + "ب".repeat(60),
+    displayName: "  أبو\u202E   " + "ب".repeat(60),
   });
   const person = await t.run((ctx) => ctx.db.get(personId));
   expect(person?.displayName).toBe(
     ("أبو " + "ب".repeat(60)).slice(0, 40).trim(),
   );
   expect(Array.from(person!.displayName).length).toBeLessThanOrEqual(40);
-  expect(person!.displayName).not.toMatch(/‮/);
+  expect(person!.displayName).not.toMatch(/\u202E/);
 });
 
 test("sessionMutation touches lastUsedAt at most once per hour; sessionQuery never writes", async () => {

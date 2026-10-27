@@ -54,9 +54,16 @@ export const verificationMessage = (code: string) =>
   `رمز التحقق في سلسلة: ${code}`;
 export const NO_MATCH_REPLY =
   "لم نجد رمز تحقق صالحاً. ارجع إلى سلسلة واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
-export const MATCHED_REPLY = "تمّ التحقق ✅ ارجع إلى سلسلة لتكمل.";
+/** Ends with a link back to the site (spec 5.2 step 5) when one is configured. */
+export const matchedReply = () => {
+  const url = siteUrl();
+  return url
+    ? `تمّ التحقق ✅ ارجع إلى سلسلة لتكمل:\n${url}`
+    : "تمّ التحقق ✅ ارجع إلى سلسلة لتكمل.";
+};
+/** Says what the code is for, so a forwarded-link victim knows not to hand it over. */
 export const pinReply = (pin: string) =>
-  `رمز الدخول إلى سلسلة: ${pin}\nلا تشاركه مع أحد.`;
+  `رمز الدخول إلى سلسلة: ${pin}\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فسلسلة لا تطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
 export const signInAlert = (deviceLabel: string, alertToken: string) =>
   `تسجيل دخول جديد إلى سلسلة من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: ${siteUrl()}/signout?t=${alertToken}`;
 /** Sent instead of `signInAlert` when the sign-in created the account. */
@@ -192,7 +199,7 @@ export async function sendWhatsAppText(
     if (res.ok) return true;
     // Graph errors describe the request, not the message body, but keep
     // prod logs to the status code.
-    const detail = isDev() ? ` ${await res.text()}` : "";
+    const detail = isDev() ? ` ${await res.text().catch(() => "")}` : "";
     console.error(`whatsapp send failed: HTTP ${res.status}${detail}`);
     // Throttling and server errors are retried once; other 4xx never are.
     const retryable = res.status === 429 || res.status >= 500;
@@ -255,7 +262,7 @@ export const handleIncoming = internalAction({
         await sendWhatsAppText(phone, NO_MATCH_REPLY);
         return;
       case "matched":
-        await sendWhatsAppText(phone, MATCHED_REPLY);
+        await sendWhatsAppText(phone, matchedReply());
         return;
       case "needs_pin":
         await sendWhatsAppText(phone, pinReply(pin));
