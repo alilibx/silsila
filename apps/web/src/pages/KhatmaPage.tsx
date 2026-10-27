@@ -4,13 +4,19 @@ import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
 import { useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { Button } from "../components/Button";
 import { MainCard } from "../components/MainCard";
 import { PoolGrid } from "../components/PoolGrid";
 import { ReleaseSheet } from "../components/ReleaseSheet";
 import { Ring } from "../components/Ring";
+import { InviteSheet, RemindSheet } from "../components/ShareSheets";
 import { TakeSheet } from "../components/TakeSheet";
 import { Toast } from "../components/Toast";
 import { useKhatmaActions } from "../features/khatma/useKhatmaActions";
+import {
+  useShareSheet,
+  type ShareSheet,
+} from "../features/share/useShareSheet";
 import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
@@ -41,6 +47,7 @@ export function KhatmaPage() {
   });
   const actions = useKhatmaActions(view, inviteCode);
   const { sheet, busy } = actions;
+  const share = useShareSheet();
 
   // The server decides who is signed in; a stored token alone proves nothing.
   const tokenIsDead =
@@ -85,6 +92,16 @@ export function KhatmaPage() {
           onTake={actions.take}
           onFinish={() => void actions.finish()}
           onRelease={actions.openRelease}
+          onInvite={share.openInvite}
+          onRemind={share.openRemind}
+        />
+      )}
+      {loaded && loaded.me.isMember && loaded.me.celebrateRound === null && (
+        <ShareSheets
+          view={loaded}
+          inviteCode={inviteCode}
+          sheet={share.sheet}
+          onClose={share.close}
         />
       )}
       {loaded && sheet?.kind === "take" && (
@@ -132,14 +149,19 @@ function KhatmaContent({
   onTake,
   onFinish,
   onRelease,
+  onInvite,
+  onRemind,
 }: {
   view: KhatmaView;
   busy: boolean;
   onTake: (juz: number) => void;
   onFinish: () => void;
   onRelease: () => void;
+  onInvite: () => void;
+  onRemind: () => void;
 }) {
   const title = khatmaTitle(view);
+  const hasOpen = view.tiles.some((tile) => tile.state === "open");
 
   return (
     <main className="mx-auto max-w-xl p-5">
@@ -187,6 +209,18 @@ function KhatmaContent({
         onRelease={onRelease}
         busy={busy}
       />
+      {view.me.isMember && (
+        <div className="mt-4 grid gap-3">
+          <Button variant="whatsapp" onClick={onInvite}>
+            {t.share.inviteButton}
+          </Button>
+          {hasOpen && (
+            <Button variant="ghost" onClick={onRemind}>
+              {t.share.remindButton}
+            </Button>
+          )}
+        </div>
+      )}
       <PoolGrid tiles={view.tiles} onTake={onTake} />
 
       {view.completedRounds > 0 && (
@@ -195,5 +229,38 @@ function KhatmaContent({
         </p>
       )}
     </main>
+  );
+}
+
+function ShareSheets({
+  view,
+  inviteCode,
+  sheet,
+  onClose,
+}: {
+  view: KhatmaView;
+  inviteCode: string;
+  sheet: ShareSheet;
+  onClose: () => void;
+}) {
+  if (sheet === "remind") {
+    return (
+      <RemindSheet
+        inviteCode={inviteCode}
+        khatmaName={khatmaTitle(view)}
+        openJuz={view.tiles.filter((x) => x.state === "open").map((x) => x.juz)}
+        targetEndAt={view.targetEndAt}
+        onClose={onClose}
+      />
+    );
+  }
+  if (sheet === null) return null;
+  return (
+    <InviteSheet
+      inviteCode={inviteCode}
+      khatmaName={khatmaTitle(view)}
+      justCreated={sheet === "created"}
+      onClose={onClose}
+    />
   );
 }

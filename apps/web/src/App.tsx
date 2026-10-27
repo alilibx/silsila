@@ -3,6 +3,7 @@ import { CreatePage } from "./pages/CreatePage";
 import { HomePage } from "./pages/HomePage";
 import { KhatmaPage } from "./pages/KhatmaPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SignOutPage } from "./pages/SignOutPage";
 
 export function App() {
@@ -11,6 +12,7 @@ export function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/new" element={<CreatePage />} />
       <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
       <Route path="/signout" element={<SignOutPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

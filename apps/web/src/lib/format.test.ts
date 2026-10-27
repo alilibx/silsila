@@ -7,6 +7,11 @@ describe("formatDate", () => {
   it("formats a Gregorian date in Arabic", () => {
     expect(formatDate(Date.UTC(2026, 9, 30, 12))).toContain("أكتوبر");
   });
+
+  it("always uses Eastern Arabic digits", () => {
+    expect(formatDate(Date.UTC(2026, 9, 30, 12))).toMatch(/٣٠/);
+    expect(formatDate(Date.UTC(2026, 9, 30, 12))).not.toMatch(/[0-9]/);
+  });
 });
 
 describe("@convex alias", () => {

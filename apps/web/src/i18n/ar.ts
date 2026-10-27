@@ -165,6 +165,98 @@ export const ar = {
       },
     },
   },
+  home: {
+    hello: (name: string) => `السلام عليكم، ${name}`,
+    helloAnon: "السلام عليكم",
+    signedOutIntro:
+      "سلسلة تجمع أحبابك على ختمة واحدة للقرآن، يأخذ كل واحد جزءاً واحداً في كل مرة. أنشئ ختمة وادعُ أهلك وأصحابك.",
+    empty: "لا توجد ختمات بعد. ابدأ ختمة جديدة وادعُ أحبابك إليها.",
+    startNew: "＋ ابدأ ختمة جديدة",
+    startNewPlain: "ابدأ ختمة جديدة",
+    settings: "إعداداتي",
+    doneOf: (done: string, total: string) => `${done} من ${total} تمّت`,
+    yours: (n: string, name: string) => `جزؤك: ${n} · ${name}`,
+    loadError: commonErrors.network,
+  },
+  create: {
+    nameLabel: "اسم الختمة",
+    optional: "(اختياري)",
+    namePlaceholder: (date: string) => `ختمة ${date}`,
+    scheduleLegend: "كل كم تختمون؟",
+    subtitles: {
+      daily: "نختم كل يوم",
+      weekly: "الأكثر شيوعاً",
+      none: "نقرأ على راحتنا",
+    } as Partial<Record<Schedule, string>>,
+    submit: "أنشئ الختمة",
+    submitting: "جارٍ الإنشاء",
+    beforeCreate: "قبل أن تنشئ ختمة",
+    back: "رجوع",
+    errors: {
+      rate_limited:
+        "أنشأتَ ختمات كثيرة اليوم. جرّب غداً بإذن الله، أو استخدم إحدى ختماتك.",
+      maintenance: "سلسلة في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+      not_signed_in: "سجّل دخولك أولاً ثم أنشئ الختمة.",
+      network: commonErrors.network,
+      generic: commonErrors.generic,
+    },
+  },
+  share: {
+    inviteButton: "ادعُ أحبابك",
+    remindButton: "ذكّر المجموعة",
+    inviteTitle: "ادعُ أحبابك",
+    createdTitle: "تمّ إنشاء الختمة. ادعُ أحبابك",
+    remindTitle: "ذكّر المجموعة",
+    previewHint: "هذه الرسالة التي ستُرسل:",
+    remindNote: "الرسالة لا تذكر أسماء أحد",
+    send: "أرسل على واتساب",
+    done: "تمّ",
+    preparing: "جارٍ تجهيز رابطك",
+    error: commonErrors.network,
+  },
+  messages: {
+    invite: (name: string, url: string) =>
+      `السلام عليكم 🤍\nانضم إلينا في «${name}». نختم القرآن معاً، وكل واحد يأخذ جزءاً واحداً في كل مرة.\nاضغط هنا: ${url}`,
+    remindCount: (n: number, digits: string) =>
+      n === 1
+        ? "بقي جزء واحد"
+        : n === 2
+          ? "بقي جزءان"
+          : n <= 10
+            ? `بقي ${digits} أجزاء`
+            : `بقي ${digits} جزءاً`,
+    remind: (name: string, remaining: string, until: string | null) =>
+      `السلام عليكم 🤍\n«${name}»: ${remaining}${until ? ` حتى ${until}` : ""}.`,
+    remindOpen: (list: string) => `الأجزاء المتاحة: ${list}`,
+    remindLink: (url: string) => `خذ جزءاً من هنا: ${url}`,
+  },
+  signOut: {
+    kept: "سجّلنا خروج الأجهزة الأخرى. هذا الجهاز ما زال مسجّلاً.",
+    all: "سجّلنا خروجك من كل الأجهزة.",
+    invalid: "هذا الرابط لم يعد صالحاً.",
+    error: commonErrors.network,
+    retry: "حاول مرة أخرى",
+  },
+  settings: {
+    nameLabel: "اسمك",
+    save: "احفظ الاسم",
+    saving: "جارٍ الحفظ",
+    saved: "تمّ حفظ الاسم",
+    numberLabel: "رقمك",
+    devicesHeading: "الأجهزة المسجّلة",
+    thisDevice: "هذا الجهاز",
+    lastUsed: (date: string) => `آخر استخدام: ${date}`,
+    signOut: "تسجيل خروج",
+    signOutOthers: "تسجيل الخروج من كل الأجهزة الأخرى",
+    signedOutOthers: "سجّلنا خروج الأجهزة الأخرى.",
+    signedOutOne: "سجّلنا خروج ذلك الجهاز.",
+    signedOutPrompt:
+      "لا يوجد حساب مسجّل على هذا الجهاز. ابدأ ختمة أو انضم إلى ختمة، وسنتحقق من رقمك عبر واتساب.",
+    errors: {
+      invalid_name: "لم نستطع قبول هذا الاسم. اكتب اسماً قصيراً بحروف عادية.",
+      network: commonErrors.network,
+    },
+  },
   celebration: {
     title: "ختمنا القرآن معاً",
     subtitle: (name: string, round: string) =>

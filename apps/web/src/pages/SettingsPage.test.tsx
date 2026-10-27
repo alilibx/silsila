@@ -1,0 +1,180 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ConvexError } from "convex/values";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SettingsPage } from "./SettingsPage";
+
+const m = vi.hoisted(() => ({
+  me: undefined as unknown,
+  list: undefined as unknown,
+  token: undefined as string | undefined,
+  clear: vi.fn(),
+  fns: {
+    updateDisplayName: vi.fn(),
+    signOut: vi.fn(),
+    signOutOne: vi.fn(),
+    signOutOthers: vi.fn(),
+  },
+}));
+
+vi.mock("../lib/session", () => ({
+  useSessionToken: () => m.token,
+  clearSessionToken: () => m.clear(),
+}));
+vi.mock("convex/react", async () => {
+  const { getFunctionName } = await import("convex/server");
+  return {
+    useQuery: (ref: never) =>
+      getFunctionName(ref) === "sessions:me" ? m.me : m.list,
+    useMutation: (ref: never) => {
+      const name = getFunctionName(ref).split(":")[1] as
+        "updateDisplayName" | "signOut" | "signOutOne" | "signOutOthers";
+      return m.fns[name];
+    },
+  };
+});
+
+const renderPage = () =>
+  render(
+    <MemoryRouter initialEntries={["/settings"]}>
+      <Routes>
+        <Route path="/" element={<p>home-page</p>} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+describe("SettingsPage", () => {
+  beforeEach(() => {
+    Object.values(m.fns).forEach((f) => f.mockReset().mockResolvedValue(null));
+    m.clear.mockReset();
+    m.token = "tok";
+    m.me = { displayName: "أبو علي", maskedPhone: "+971 •• ••• 4567" };
+    m.list = [
+      {
+        sessionId: "s1",
+        deviceLabel: "iPhone · Safari",
+        lastUsedAt: Date.UTC(2026, 9, 27, 12),
+        isCurrent: true,
+      },
+      {
+        sessionId: "s2",
+        deviceLabel: "Windows · Chrome",
+        lastUsedAt: Date.UTC(2026, 9, 20, 12),
+        isCurrent: false,
+      },
+    ];
+  });
+
+  it("shows the masked number left-to-right", () => {
+    renderPage();
+    const number = screen.getByText("+971 •• ••• 4567");
+    expect(number).toHaveAttribute("dir", "ltr");
+  });
+
+  it("signed out: a sign-in prompt with a link home", () => {
+    m.token = undefined;
+    m.me = null;
+    m.list = [];
+    renderPage();
+    expect(screen.getByText(/لا يوجد حساب مسجّل/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "الصفحة الرئيسية" }),
+    ).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("saves the display name", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const input = screen.getByLabelText("اسمك");
+    expect(input).toHaveValue("أبو علي");
+    await user.clear(input);
+    await user.type(input, "  أم سلمى ");
+    await user.click(screen.getByRole("button", { name: "احفظ الاسم" }));
+    expect(m.fns.updateDisplayName).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      displayName: "أم سلمى",
+    });
+    expect(await screen.findByText("تمّ حفظ الاسم")).toBeInTheDocument();
+  });
+
+  it("shows invalid_name kindly", async () => {
+    m.fns.updateDisplayName.mockRejectedValue(
+      new ConvexError({ code: "invalid_name" }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: "احفظ الاسم" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "لم نستطع قبول هذا الاسم",
+    );
+  });
+
+  it("lists devices, marking this one", () => {
+    renderPage();
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("iPhone · Safari");
+    expect(items[0]).toHaveTextContent("هذا الجهاز");
+    expect(items[0]).toHaveTextContent(/آخر استخدام: /);
+    expect(items[1]).toHaveTextContent("Windows · Chrome");
+    expect(items[1]).not.toHaveTextContent("هذا الجهاز");
+    expect(screen.getAllByRole("button", { name: /^تسجيل خروج/ })).toHaveLength(
+      2,
+    );
+  });
+
+  it("signs out another device by its id", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const other = screen.getAllByRole("listitem")[1]!;
+    await user.click(within(other).getByRole("button", { name: /تسجيل خروج/ }));
+    expect(m.fns.signOutOne).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      sessionId: "s2",
+    });
+    expect(m.clear).not.toHaveBeenCalled();
+  });
+
+  it("signing out this device clears the token and goes home", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const current = screen.getAllByRole("listitem")[0]!;
+    await user.click(
+      within(current).getByRole("button", { name: /تسجيل خروج/ }),
+    );
+    expect(m.fns.signOut).toHaveBeenCalledWith({ sessionToken: "tok" });
+    expect(m.fns.signOutOne).not.toHaveBeenCalled();
+    expect(m.clear).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("home-page")).toBeInTheDocument();
+  });
+
+  it("settings lists devices and signs out others", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      screen.getByRole("button", {
+        name: "تسجيل الخروج من كل الأجهزة الأخرى",
+      }),
+    );
+    expect(m.fns.signOutOthers).toHaveBeenCalledWith({ sessionToken: "tok" });
+    expect(
+      await screen.findByText("سجّلنا خروج الأجهزة الأخرى."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not clear the token when signing out this device fails", async () => {
+    m.fns.signOut.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      within(screen.getAllByRole("listitem")[0]!).getByRole("button", {
+        name: /تسجيل خروج/,
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("تعذّر الاتصال");
+    expect(m.clear).not.toHaveBeenCalled();
+  });
+});
