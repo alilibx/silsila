@@ -88,3 +88,19 @@
     }
   }
 }
+
+@keyframes toast-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
+@layer utilities {
+  /* The undo countdown. It carries real information, so reduced motion keeps it. */
+  .animate-toast-shrink {
+    animation: toast-shrink linear both;
+  }
+}

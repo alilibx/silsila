@@ -26,6 +26,8 @@ pnpm test
 
 `pnpm dev` runs `convex dev` against a local anonymous backend (`http://127.0.0.1:3210`, no Convex account or cloud project needed). On first run Convex writes the deployment settings to `.env.local`, which is git-ignored. The web dev server joins `pnpm dev` once `apps/web` exists.
 
+The celebration duas (Quran 2:127 and 2:201) are copied verbatim from the Tanzil Quran Text (Uthmani, Version 1.1) of the [Tanzil Project](https://tanzil.net), used under its licence, which asks for the source and a link.
+
 The cloud Convex project (region EU West, Ireland) is created at deploy time; no cloud deployment exists yet, so there is no dev deployment name to record here.
 
 Tests run with Vitest: `convex/**` in the `edge-runtime` environment (required by `convex-test`), `apps/web/**` in `jsdom`. CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, and test on Node 22 for every pull request.

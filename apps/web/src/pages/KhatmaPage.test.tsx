@@ -30,6 +30,7 @@ vi.mock("../features/verify/VerifySheet", () => ({
 }));
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQuery(...args),
+  useMutation: () => vi.fn(),
 }));
 
 function renderAt(url: string) {
@@ -271,7 +272,7 @@ describe("KhatmaPage", () => {
       expect(clearSessionToken).not.toHaveBeenCalled();
     });
 
-    it("does not open the sheet while signed in", async () => {
+    it("opens the take sheet, not the verify sheet, while signed in", async () => {
       useSessionToken.mockReturnValue("tok");
       useQuery.mockReturnValue(
         makeView({
@@ -286,7 +287,12 @@ describe("KhatmaPage", () => {
       );
       renderAt("/j/CODE");
       await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("dialog", { name: "الجزء ٣" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("dialog", { name: "قبل أن تأخذ جزءاً" }),
+      ).not.toBeInTheDocument();
       expect(clearSessionToken).not.toHaveBeenCalled();
     });
   });

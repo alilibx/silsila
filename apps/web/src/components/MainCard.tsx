@@ -9,12 +9,20 @@ type Props = {
   onTake: (juz: number) => void;
   onFinish: () => void;
   onRelease: () => void;
+  /** A mutation is running: its buttons are disabled so a double tap cannot repeat it. */
+  busy?: boolean;
 };
 
 const card =
   "rounded-3xl border border-line bg-card p-4.5 shadow-[0_2px_0_rgba(0,0,0,0.03)]";
 
-export function MainCard({ view, onTake, onFinish, onRelease }: Props) {
+export function MainCard({
+  view,
+  onTake,
+  onFinish,
+  onRelease,
+  busy = false,
+}: Props) {
   const { holding, suggestion } = view.me;
 
   if (holding !== null) {
@@ -42,8 +50,10 @@ export function MainCard({ view, onTake, onFinish, onRelease }: Props) {
           </div>
         )}
         <div className="grid gap-3">
-          <Button onClick={onFinish}>{t.card.finish}</Button>
-          <Button variant="ghost" onClick={onRelease}>
+          <Button onClick={onFinish} disabled={busy}>
+            {t.card.finish}
+          </Button>
+          <Button variant="ghost" onClick={onRelease} disabled={busy}>
             {t.card.release}
           </Button>
         </div>
@@ -55,7 +65,9 @@ export function MainCard({ view, onTake, onFinish, onRelease }: Props) {
     const juz = JUZ.find((j) => j.number === suggestion);
     return (
       <div className={card}>
-        <Button onClick={() => onTake(suggestion)}>{t.card.take}</Button>
+        <Button onClick={() => onTake(suggestion)} disabled={busy}>
+          {t.card.take}
+        </Button>
         {juz && (
           <p className="mt-3 text-center text-ink-soft">
             {t.card.suggest(toArabicDigits(suggestion), juz.name)}
