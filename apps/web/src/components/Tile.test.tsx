@@ -95,4 +95,38 @@ describe("Tile", () => {
     await userEvent.click(button);
     expect(onTake).toHaveBeenCalledWith(14);
   });
+
+  // At 390px a tile has about 90px inside; "أنت تقرؤه" is about 81px wide at 18px in Readex Pro.
+  it("state word and reader name use the base text size and are never cut off mid-word", () => {
+    render(
+      <>
+        <Tile
+          tile={{
+            juz: 2,
+            name: "سيقول",
+            state: "reading",
+            readerName: null,
+            isMine: true,
+          }}
+          onTake={vi.fn()}
+        />
+        <Tile
+          tile={{
+            juz: 15,
+            name: "سبحان",
+            state: "reading",
+            readerName: "عبد الرحمن",
+            isMine: false,
+          }}
+          onTake={vi.fn()}
+        />
+      </>,
+    );
+    const chip = screen.getAllByText("أنت تقرؤه").at(-1)!;
+    expect(chip).toHaveClass("text-base");
+    expect(chip).not.toHaveClass("truncate");
+    const reader = screen.getByText("عبد الرحمن");
+    expect(reader).toHaveClass("text-base");
+    expect(reader).not.toHaveClass("truncate");
+  });
 });

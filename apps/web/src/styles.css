@@ -41,7 +41,8 @@
 
 @layer base {
   html {
-    font-size: 18px;
+    /* 18px at the browser default, and it still follows the phone's text-size setting. */
+    font-size: 112.5%;
     -webkit-tap-highlight-color: transparent;
   }
 
