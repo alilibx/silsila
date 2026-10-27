@@ -1,6 +1,16 @@
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import {
+  internalMutation,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import { onRoundCompleted } from "./hooks";
 import { targetEndFor } from "./lib/schedule";
+import { getSetting } from "./lib/settings";
+
+const JUZ_COUNT = 30;
 
 /**
  * Inserts round `number` of a khatma, starting at `startedAt` with the target
@@ -69,3 +79,56 @@ export function juzStates(
   }
   return byJuz;
 }
+
+/** How many of the 30 ajza' are done in a round's assignment rows. */
+export function doneCount(assignments: readonly Doc<"assignments">[]): number {
+  let done = 0;
+  for (const { state } of juzStates(assignments).values()) {
+    if (state === "done") done++;
+  }
+  return done;
+}
+
+/**
+ * Completes a round once all 30 ajza' are done and `completionDelayMs` has
+ * passed since the round's most recent finish, then starts the next round.
+ * Safe to schedule any number of times: it is a no-op unless the round is the
+ * khatma's current, still-open round, and it re-arms itself when a later
+ * finish moved the deadline.
+ */
+export const completeIfReady = internalMutation({
+  args: { roundId: v.id("rounds") },
+  handler: async (ctx, args): Promise<{ completed: boolean }> => {
+    const round = await ctx.db.get(args.roundId);
+    if (!round || round.completedAt !== null) return { completed: false };
+    const khatma = await ctx.db.get(round.khatmaId);
+    if (!khatma || khatma.currentRoundId !== round._id) {
+      return { completed: false };
+    }
+
+    const assignments = await roundAssignments(ctx, round._id);
+    if (doneCount(assignments) < JUZ_COUNT) return { completed: false };
+
+    const lastFinishedAt =
+      round.lastFinishedAt ??
+      Math.max(...assignments.map((a) => a.finishedAt ?? 0));
+    const readyAt =
+      lastFinishedAt + (await getSetting(ctx, "completionDelayMs"));
+    const now = Date.now();
+    if (now < readyAt) {
+      // A later finish moved the deadline: come back then instead of dropping.
+      await ctx.scheduler.runAt(readyAt, internal.rounds.completeIfReady, {
+        roundId: round._id,
+      });
+      return { completed: false };
+    }
+
+    await ctx.db.patch(round._id, { completedAt: now });
+    await ctx.db.patch(khatma._id, {
+      completedRounds: khatma.completedRounds + 1,
+    });
+    await insertRound(ctx, khatma._id, round.number + 1, now);
+    await onRoundCompleted(ctx, khatma._id, round.number);
+    return { completed: true };
+  },
+});

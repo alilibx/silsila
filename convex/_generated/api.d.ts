@@ -10,6 +10,7 @@
 
 import type * as crons from "../crons.js";
 import type * as dev from "../dev.js";
+import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as khatmas from "../khatmas.js";
 import type * as lib_crypto from "../lib/crypto.js";
@@ -37,6 +38,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   dev: typeof dev;
+  hooks: typeof hooks;
   http: typeof http;
   khatmas: typeof khatmas;
   "lib/crypto": typeof lib_crypto;

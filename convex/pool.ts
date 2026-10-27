@@ -1,11 +1,21 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { getSetting } from "./lib/settings";
-import { requirePerson, sessionMutation } from "./lib/session";
-import { juzStates, roundAssignments } from "./rounds";
+import {
+  requirePerson,
+  sessionMutation,
+  type SessionContext,
+} from "./lib/session";
+import {
+  doneCount,
+  heldAssignment,
+  juzStates,
+  roundAssignments,
+} from "./rounds";
 
 const JUZ_COUNT = 30;
 const MINUTE_MS = 60_000;
@@ -189,6 +199,174 @@ export const take = sessionMutation({
       takenAt: Date.now(),
       finishedAt: null,
       releasedAt: null,
+      releasedBySystem: false,
+    });
+    return { ok: true };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Finish, undo, release
+
+export type FinishResult =
+  | { ok: true; undoUntil: number }
+  | { ok: false; reason: "not_holding" | "blocked" | "rate_limited" };
+
+export type UndoResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "window_closed"
+        | "holding_another"
+        | "round_completed"
+        | "nothing_to_undo"
+        | "blocked"
+        | "rate_limited";
+    };
+
+export type ReleaseResult =
+  | { ok: true }
+  | { ok: false; reason: "not_holding" | "blocked" | "rate_limited" };
+
+/**
+ * What finish, undo, and release share: the signed-in person, the khatma
+ * behind the invite code and its current round, after the blocked check and
+ * the per-person pool rate limit (the same bucket as `take`).
+ */
+async function poolActor(
+  ctx: MutationCtx & SessionContext,
+  inviteCode: string,
+): Promise<
+  | {
+      ok: true;
+      person: Doc<"people">;
+      khatma: Doc<"khatmas">;
+      round: Doc<"rounds">;
+    }
+  | { ok: false; reason: "blocked" | "rate_limited" }
+> {
+  const person = requirePerson(ctx);
+  const khatma = await khatmaByInviteCode(ctx, inviteCode);
+  if (!khatma?.currentRoundId) throw new ConvexError({ code: "not_found" });
+  const round = await ctx.db.get(khatma.currentRoundId);
+  if (!round) throw new ConvexError({ code: "not_found" });
+
+  const member = await ctx.db
+    .query("members")
+    .withIndex("by_khatma_person", (q) =>
+      q.eq("khatmaId", khatma._id).eq("personId", person._id),
+    )
+    .first();
+  if (member?.status === "blocked") return { ok: false, reason: "blocked" };
+
+  const allowed = await checkRateLimit(
+    ctx,
+    `pool:${person._id}`,
+    await getSetting(ctx, "poolActionsPerPersonPerMinute"),
+    MINUTE_MS,
+  );
+  if (!allowed) return { ok: false, reason: "rate_limited" };
+  return { ok: true, person, khatma, round };
+}
+
+export const finish = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<FinishResult> => {
+    const actor = await poolActor(ctx, args.inviteCode);
+    if (!actor.ok) return actor;
+    const { person, round } = actor;
+
+    const assignments = await roundAssignments(ctx, round._id);
+    const held = heldAssignment(assignments, person._id);
+    if (!held) return { ok: false, reason: "not_holding" };
+
+    const now = Date.now();
+    await ctx.db.patch(held._id, { finishedAt: now });
+    await ctx.db.patch(round._id, { lastFinishedAt: now });
+    if (doneCount(assignments) + 1 >= JUZ_COUNT) {
+      await ctx.scheduler.runAt(
+        now + (await getSetting(ctx, "completionDelayMs")),
+        internal.rounds.completeIfReady,
+        { roundId: round._id },
+      );
+    }
+    return {
+      ok: true,
+      undoUntil: now + (await getSetting(ctx, "undoWindowMs")),
+    };
+  },
+});
+
+export const undoFinish = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<UndoResult> => {
+    const actor = await poolActor(ctx, args.inviteCode);
+    if (!actor.ok) return actor;
+    const { person, khatma, round } = actor;
+
+    const assignments = await roundAssignments(ctx, round._id);
+    const lastDone = assignments
+      .filter((a) => a.personId === person._id && a.finishedAt !== null)
+      .sort(
+        (a, b) =>
+          (b.finishedAt ?? 0) - (a.finishedAt ?? 0) ||
+          b._creationTime - a._creationTime,
+      )[0];
+    if (!lastDone) {
+      // Their last finish may belong to a round that has since completed.
+      const earlier = await ctx.db
+        .query("assignments")
+        .withIndex("by_khatma_person", (q) =>
+          q.eq("khatmaId", khatma._id).eq("personId", person._id),
+        )
+        .filter((q) => q.neq(q.field("finishedAt"), null))
+        .first();
+      return {
+        ok: false,
+        reason: earlier ? "round_completed" : "nothing_to_undo",
+      };
+    }
+    if (round.completedAt !== null) {
+      return { ok: false, reason: "round_completed" };
+    }
+    const now = Date.now();
+    if (
+      now - (lastDone.finishedAt ?? 0) >
+      (await getSetting(ctx, "undoWindowMs"))
+    ) {
+      return { ok: false, reason: "window_closed" };
+    }
+    if (heldAssignment(assignments, person._id)) {
+      return { ok: false, reason: "holding_another" };
+    }
+
+    await ctx.db.patch(lastDone._id, { finishedAt: null });
+    // The deadline for completion follows the latest finish that still stands.
+    const remaining = assignments
+      .filter((a) => a._id !== lastDone._id && a.finishedAt !== null)
+      .map((a) => a.finishedAt as number);
+    await ctx.db.patch(round._id, {
+      lastFinishedAt: remaining.length > 0 ? Math.max(...remaining) : null,
+    });
+    return { ok: true };
+  },
+});
+
+export const release = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<ReleaseResult> => {
+    const actor = await poolActor(ctx, args.inviteCode);
+    if (!actor.ok) return actor;
+    const { person, round } = actor;
+
+    const held = heldAssignment(
+      await roundAssignments(ctx, round._id),
+      person._id,
+    );
+    if (!held) return { ok: false, reason: "not_holding" };
+    await ctx.db.patch(held._id, {
+      releasedAt: Date.now(),
       releasedBySystem: false,
     });
     return { ok: true };

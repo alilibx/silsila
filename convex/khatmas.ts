@@ -14,7 +14,7 @@ import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { SCHEDULES, type Schedule } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
-import { resolveSession, sessionQuery } from "./lib/session";
+import { resolveSession, sessionMutation, sessionQuery } from "./lib/session";
 import { cleanKhatmaName } from "./lib/text";
 import { suggestJuz } from "./pool";
 import {
@@ -332,6 +332,29 @@ async function lastCompletedRound(
   }
   return { roundNumber: round.number, participants: finished.size };
 }
+
+// ---------------------------------------------------------------------------
+// Celebration
+
+/**
+ * Marks the latest completed round as celebrated for the caller, so
+ * `view.me.celebrateRound` goes back to null. Never throws: signed-out
+ * callers, unknown codes, non-members, and blocked members get `{ ok: false }`.
+ */
+export const markCelebrated = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    if (!ctx.person) return { ok: false };
+    const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
+    if (!khatma) return { ok: false };
+    const member = await activeMembership(ctx, khatma._id, ctx.person._id);
+    if (!member) return { ok: false };
+    await ctx.db.patch(member._id, {
+      lastCelebratedRound: khatma.completedRounds,
+    });
+    return { ok: true };
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Mine
