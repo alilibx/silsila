@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 
 const root = createRoot(document.getElementById("root")!);
@@ -20,11 +21,13 @@ if (!convexUrl) {
   const convex = new ConvexReactClient(convexUrl);
   root.render(
     <StrictMode>
-      <ConvexProvider client={convex}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </ConvexProvider>
+      <ErrorBoundary>
+        <ConvexProvider client={convex}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ConvexProvider>
+      </ErrorBoundary>
     </StrictMode>,
   );
 }

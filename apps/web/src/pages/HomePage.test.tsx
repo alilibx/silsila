@@ -238,7 +238,9 @@ describe("HomePage", () => {
       m.token = "tok";
       m.me = { displayName: "أبو علي", maskedPhone: "x" };
       renderHome();
-      expect(screen.queryByRole("button", { name: t.signIn.button })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: t.signIn.button }),
+      ).toBeNull();
     });
   });
 });

@@ -4,6 +4,7 @@ import { normalizeDigits } from "@convex/lib/digits";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/ar";
+import { convexSiteUrl } from "../../lib/env";
 import { deviceLabel } from "../../lib/format";
 import {
   getClientKey,
@@ -172,14 +173,11 @@ export function useVerification(intent?: VerifyIntent) {
       setErrorCode(null);
       let res: Response;
       try {
-        res = await fetch(
-          `${import.meta.env.VITE_CONVEX_SITE_URL}/api/verification/start`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ displayName, clientKey: getClientKey() }),
-          },
-        );
+        res = await fetch(`${convexSiteUrl()}/api/verification/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ displayName, clientKey: getClientKey() }),
+        });
       } catch {
         closeBlank();
         return fail("network");
