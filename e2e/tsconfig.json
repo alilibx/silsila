@@ -6,5 +6,5 @@
       "@convex/*": ["../convex/*"]
     }
   },
-  "include": ["./**/*.ts", "../playwright.config.ts"]
+  "include": ["./**/*.ts"]
 }

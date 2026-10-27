@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  // Root tool configs, which run in Node.
+  "include": ["vitest.config.ts", "playwright.config.ts"]
+}

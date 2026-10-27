@@ -11,7 +11,7 @@
     "dev": "run-p dev:convex dev:web",
     "dev:convex": "convex dev",
     "dev:web": "pnpm --if-present --filter ./apps/web dev",
-    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p e2e",
+    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
