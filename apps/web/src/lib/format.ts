@@ -10,6 +10,7 @@ export function formatDate(ms: number): string {
   return dateFormat.format(ms);
 }
 
+// iPadOS 13+ reports itself as a Mac and ChromeOS falls into Linux; neither is distinguishable here.
 // Order matters: iPhone/iPad UAs say "like Mac OS X", and Android UAs say "Linux".
 const DEVICES: ReadonlyArray<readonly [RegExp, string]> = [
   [/iPhone/, "iPhone"],

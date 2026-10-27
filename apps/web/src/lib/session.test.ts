@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearSessionToken,
   getClientKey,
@@ -11,6 +11,11 @@ import {
 
 beforeEach(() => {
   localStorage.clear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  clearSessionToken();
 });
 
 describe("session token storage", () => {
@@ -83,5 +88,31 @@ describe("getClientKey", () => {
     expect(key).toMatch(/^[0-9a-f]{32,}$/);
     localStorage.clear();
     expect(getClientKey()).not.toBe(key);
+  });
+});
+
+describe.each([
+  ["setItem throws", ["setItem"]],
+  ["setItem and getItem throw", ["setItem", "getItem"]],
+] as const)("storage failures (%s)", (_name, failing) => {
+  beforeEach(() => {
+    for (const method of failing) {
+      vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+    }
+  });
+
+  it("still round-trips and clears the session token", () => {
+    setSessionToken("tok");
+    expect(getSessionToken()).toBe("tok");
+    clearSessionToken();
+    expect(getSessionToken()).toBeNull();
+  });
+
+  it("keeps the client key stable", () => {
+    const key = getClientKey();
+    expect(key).toMatch(/^[0-9a-f]{32}$/);
+    expect(getClientKey()).toBe(key);
   });
 });

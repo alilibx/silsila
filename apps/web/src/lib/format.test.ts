@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { toArabicDigits } from "@convex/lib/text";
 import { t } from "../i18n/ar";
 import { deviceLabel, formatDate } from "./format";
 
 describe("formatDate", () => {
   it("formats a Gregorian date in Arabic", () => {
     expect(formatDate(Date.UTC(2026, 9, 30, 12))).toContain("أكتوبر");
+  });
+});
+
+describe("@convex alias", () => {
+  it("resolves shared convex helpers", () => {
+    expect(toArabicDigits(12)).toBe("١٢");
   });
 });
 

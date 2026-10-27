@@ -3,30 +3,35 @@ import { useSyncExternalStore } from "react";
 const SESSION_KEY = "silsila.session";
 const CLIENT_KEY = "silsila.client";
 
-// localStorage can throw (blocked storage); fall back to memory so the app still works for the tab.
+// localStorage can throw (blocked or full storage). Writes then land in memory, and reads
+// check both, so a value written in this tab is always readable in this tab.
 const memory = new Map<string, string>();
 
 function read(key: string): string | null {
   try {
-    return localStorage.getItem(key);
+    const stored = localStorage.getItem(key);
+    if (stored !== null) return stored;
   } catch {
-    return memory.get(key) ?? null;
+    // fall through to memory
   }
+  return memory.get(key) ?? null;
 }
 
 function write(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
+    memory.delete(key);
   } catch {
     memory.set(key, value);
   }
 }
 
 function remove(key: string): void {
+  memory.delete(key);
   try {
     localStorage.removeItem(key);
   } catch {
-    memory.delete(key);
+    // nothing else to clear
   }
 }
 
