@@ -1,11 +1,21 @@
 # Deploying Silsila
 
-Two things are deployed, and they are independent:
+Two things are deployed, and they ship together from one Vercel build (Convex's documented Vercel integration):
 
-| Part                                | Where                           | How it ships                                               |
-| ----------------------------------- | ------------------------------- | ---------------------------------------------------------- |
-| Backend (`convex/`)                 | Convex production, EU West (Ireland) | `pnpm exec convex deploy` from CI on every push to `main` |
-| Web app (`apps/web`, Vite + React)  | Vercel project `silsila-web`    | Vercel's Git integration, root directory `apps/web`        |
+| Part                               | Where                                | How it ships                                                        |
+| ---------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
+| Backend (`convex/`)                | Convex production, EU West (Ireland) | `convex deploy`, run first by the Vercel build command              |
+| Web app (`apps/web`, Vite + React) | Vercel project `silsila-web`         | Vercel's Git integration, root directory `apps/web`, same build     |
+
+The build command lives in `apps/web/vercel.json`:
+
+```sh
+cd ../.. && pnpm exec convex deploy --cmd 'pnpm --filter web build' --cmd-url-env-var-name VITE_CONVEX_URL
+```
+
+Vercel runs it from the root directory `apps/web`, so it first moves to the repository root (where `convex/` and the `convex` CLI live). `convex deploy` pushes the functions to the deployment that `CONVEX_DEPLOY_KEY` belongs to, then runs `pnpm --filter web build` with `VITE_CONVEX_URL` set to that deployment's URL, and Vercel serves `apps/web/dist`. If the push fails, the web build never runs, so the site and its backend cannot drift apart. The web app derives the HTTP actions URL (`https://<name>.convex.site`) from `VITE_CONVEX_URL` (`https://<name>.convex.cloud`) when `VITE_CONVEX_SITE_URL` is unset (`apps/web/src/lib/env.ts`).
+
+GitHub Actions (`.github/workflows/ci.yml`) only checks: install, typecheck, lint, test, and `pnpm --filter web build`. It deploys nothing and needs no secrets.
 
 Nothing here is created yet. Until it is, development and the end-to-end test run entirely on the local anonymous Convex backend (see the README).
 
@@ -15,7 +25,7 @@ Names only. Values never go in the repo.
 
 ### Convex production deployment
 
-Set in the Convex dashboard (Settings, Environment Variables) or with `pnpm exec convex env set --prod NAME`.
+Set in the Convex dashboard (Settings, Environment Variables) or with `pnpm exec convex env set --prod NAME <value>` (the value is required).
 
 | Name                       | What it is for                                                                                                          | How to rotate                                                                                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -32,20 +42,16 @@ Production answers `whatsapp_not_configured` from `/api/verification/start` unti
 
 ### Vercel project `silsila-web`
 
-Build-time and public (they end up in the browser bundle). Changing one needs a redeploy.
+| Name                   | Environment | What it is for                                                                                                                         | How to rotate                                                                                                                                  |
+| ---------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONVEX_DEPLOY_KEY`    | Production  | Lets the build command push functions to the production deployment and tells `convex deploy` which deployment that is. Secret.          | Generate a new production deploy key in the Convex dashboard (Settings, URL and Deploy Key), replace the Vercel variable, redeploy, then delete the old key. |
+| `VITE_CONVEX_SITE_URL` | optional    | Only needed if the HTTP actions URL is not the `.convex.site` twin of the client URL (for example a custom domain). Public.              | Not a secret. Change it and redeploy.                                                                                                           |
 
-| Name                   | What it is for                                         | How to rotate                                                |
-| ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
-| `VITE_CONVEX_URL`      | Production Convex client URL, `https://<prod>.convex.cloud`. | Not a secret. Update only if the deployment is replaced.     |
-| `VITE_CONVEX_SITE_URL` | Production HTTP actions URL, `https://<prod>.convex.site`.   | Not a secret. Update only if the deployment is replaced.     |
+`VITE_CONVEX_URL` is not set by hand: `convex deploy --cmd-url-env-var-name VITE_CONVEX_URL` provides it to the build. Anything starting with `VITE_` ends up in the browser bundle, so only public values may use that prefix.
 
-### GitHub repository secret
+Preview deployments (pull requests) also run the build command. Without a key for the Preview environment `convex deploy` fails and the preview build fails with it. Either add a Convex **preview** deploy key as `CONVEX_DEPLOY_KEY` for Preview (each branch then gets its own preview backend), or turn off preview deployments in Vercel. Never give Preview the production key.
 
-| Name                | What it is for                                                                                           | How to rotate                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `CONVEX_DEPLOY_KEY` | Lets the `deploy` job in `.github/workflows/ci.yml` push functions to the production deployment. Secret. | Generate a new production deploy key in the Convex dashboard (Settings, URL and Deploy Key), replace the secret, delete the old key. |
-
-While the secret is absent, the `deploy` job logs a notice and skips every other step, so merging to `main` stays green.
+There is no GitHub secret: CI deploys nothing.
 
 ### Local only
 
@@ -56,10 +62,10 @@ While the secret is absent, the `deploy` job logs a notice and skips every other
 These need accounts and real systems, so they are not automated.
 
 1. **Create the production Convex deployment.** New project in the Convex dashboard, production deployment in **EU West (Ireland)**. Note the two URLs: `https://<prod>.convex.cloud` and `https://<prod>.convex.site`.
-2. **Deploy key to GitHub.** In the deployment settings generate a production deploy key. In the GitHub repository add it as the secret `CONVEX_DEPLOY_KEY`. Merge to `main` (or re-run the `deploy` job) and confirm the functions arrive.
-3. **Set the Convex production environment.** `SILSILA_ENV=prod` and `SITE_URL=https://<domain>` now. The `WHATSAPP_*` values wait for step 6.
-4. **Create the Vercel project `silsila-web`.** Import the GitHub repository, set **Root Directory** to `apps/web`, and keep "Include source files outside of the Root Directory" enabled: the web app imports types and helpers from `convex/` through the `@convex` alias. Framework preset Vite. Set `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL` for Production. `apps/web/vercel.json` already rewrites every path to `/index.html` and sets the security headers.
-5. **Point the domain** at Vercel (ARQ-249), then make sure `SITE_URL` in Convex matches the final origin exactly.
+2. **Set the Convex production environment.** `pnpm exec convex env set --prod SILSILA_ENV prod` and `pnpm exec convex env set --prod SITE_URL https://wirdak.app` (or the same in the dashboard). The `WHATSAPP_*` values wait for step 6.
+3. **Generate a production deploy key** in the deployment settings (Settings, URL and Deploy Key).
+4. **Create the Vercel project `silsila-web`.** Import the GitHub repository, set **Root Directory** to `apps/web`, and keep "Include source files outside of the Root Directory" enabled: the web app imports types and helpers from `convex/` through the `@convex` alias, and the build command runs from the repository root. Framework preset Vite. `apps/web/vercel.json` sets the build command and output directory, rewrites every path to `/index.html`, and sets the security headers; leave the build and output settings in the dashboard on their defaults so the file wins. Add `CONVEX_DEPLOY_KEY` (from step 3) for the **Production** environment only, and decide about previews (see above). Deploy, and confirm in the build log that `convex deploy` pushed the functions before the Vite build ran.
+5. **Point the domain** `wirdak.app` at Vercel (ARQ-249), then make sure `SITE_URL` in Convex is exactly `https://wirdak.app`. The admin panel (plan 2) will live at `admin.wirdak.app` as its own Vercel project.
 6. **WhatsApp setup (ARQ-246).** In the Meta app, set the webhook callback URL to `https://<prod>.convex.site/whatsapp/webhook` and the verify token to the value of `WHATSAPP_VERIFY_TOKEN`, then subscribe to `messages`. Set the six `WHATSAPP_*` variables in Convex production.
 7. **Real-phone test.** On a real phone open the production site, start a khatma, press the WhatsApp button, send the ready-made message, confirm "نعم، هذا رقمي", then create a khatma, take a juz', and finish it. Repeat with a second phone using the invite link.
 
@@ -69,10 +75,12 @@ The per-IP limit on `/api/verification/start` relies on `ctx.meta.getRequestMeta
 
 ## Data retention
 
-Client IP addresses exist only inside rate-limit keys. They are kept for at most 24 hours (the length of their window) and are purged by an hourly cron (`convex/crons.ts`, `maintenance:purge`). The same job deletes phone numbers from verifications after 24 hours and WhatsApp message IDs after 7 days.
+Client IP addresses exist only inside the `verifyStart:ip:<address>` rate-limit keys. Each key lives only for its 10-minute window, and an hourly cron (`convex/crons.ts`, `maintenance:purge`) deletes expired windows, so an address is kept for at most about 70 minutes after its last request. The same job deletes phone numbers from verifications after 24 hours and WhatsApp message IDs after 7 days.
 
 ## Follow-ups
 
 - **Content-Security-Policy.** `vercel.json` has no CSP on purpose: it must allow the Convex origins (`https://*.convex.cloud` for the client, including `wss:`) and the Google Fonts origins, and a wrong CSP breaks the site silently. Add one deliberately, in report-only mode first.
 - **End-to-end test in CI.** `pnpm e2e` runs only on a developer machine. CI would need the Playwright Chromium install and the Convex local backend binary download.
+- **Self-host the fonts (M9).** `apps/web/index.html` loads Readex Pro, Aref Ruqaa and Amiri Quran from Google Fonts, which tells Google about every visit and fails offline. Serve them from `apps/web/public` (with their licences) and drop the Google origins from the future CSP.
+- **Refresh `lastUsedAt` on views (M8).** `sessionQuery` never writes, so a session's "last used" date (settings, the devices step) moves only when the person takes, finishes, or otherwise changes something. Someone who only looks at the khatma appears idle. Add a cheap, rate-limited "touch" mutation the app calls on open.
 - **Manifest icons.** `apps/web/public/manifest.webmanifest` has no icons yet, so "add to home screen" gets a generic icon.
