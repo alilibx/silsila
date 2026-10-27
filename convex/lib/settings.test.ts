@@ -45,6 +45,7 @@ test("defaults match the spec", () => {
     verificationTtlMs: 600_000,
     pinMaxAttempts: 5,
     verifyStartPerClientPer10Min: 5,
+    verifyStartPerIpPer10Min: 30,
     verifyPerPhonePerHour: 10,
     verifyGlobalPerMinute: 120,
     poolActionsPerPersonPerMinute: 10,

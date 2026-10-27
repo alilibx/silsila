@@ -8,6 +8,8 @@ export const SETTING_DEFAULTS = {
   verificationTtlMs: 600_000,
   pinMaxAttempts: 5,
   verifyStartPerClientPer10Min: 5,
+  /** looser than per-client: carrier NAT and shared home Wi-Fi put many people on one IP */
+  verifyStartPerIpPer10Min: 30,
   verifyPerPhonePerHour: 10,
   verifyGlobalPerMinute: 120,
   /** take, finish, undo, release combined */

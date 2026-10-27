@@ -262,7 +262,7 @@ export const createPending = internalMutation({
         (await checkRateLimit(
           ctx,
           `verifyStart:ip:${args.ip}`,
-          perClient,
+          await getSetting(ctx, "verifyStartPerIpPer10Min"),
           TEN_MIN_MS,
         ))) &&
       (await checkShardedRateLimit(
