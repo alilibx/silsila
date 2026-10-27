@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n/ar";
 import { SettingsPage } from "./SettingsPage";
 
 const m = vi.hoisted(() => ({
@@ -37,6 +38,45 @@ vi.mock("convex/react", async () => {
   };
 });
 
+vi.mock("../features/verify/VerifySheet", () => ({
+  VerifySheet: (props: {
+    title: string;
+    intent?: unknown;
+    onVerified: () => void;
+    onClose: () => void;
+  }) => (
+    <div
+      role="dialog"
+      aria-label={props.title}
+      data-intent={JSON.stringify(props.intent)}
+    >
+      <button
+        onClick={() => {
+          m.token = "fresh";
+          m.stored = "fresh";
+          m.me = { displayName: "أبو علي", maskedPhone: "+971 50 ••• 4567" };
+          props.onVerified();
+        }}
+      >
+        verified
+      </button>
+      <button onClick={props.onClose}>close</button>
+    </div>
+  ),
+}));
+
+const saveSignInProgress = () =>
+  localStorage.setItem(
+    "silsila.verify",
+    JSON.stringify({
+      verificationId: "v1",
+      secret: "sec",
+      displayName: "أبو علي",
+      expiresAt: Date.now() + 5 * 60_000,
+      intent: { kind: "signin" },
+    }),
+  );
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={["/settings"]}>
@@ -54,6 +94,7 @@ describe("SettingsPage", () => {
     m.token = "tok";
     m.stored = "tok";
     m.me = { displayName: "أبو علي", maskedPhone: "+971 •• ••• 4567" };
+    localStorage.clear();
     m.list = [
       {
         sessionId: "s1",
@@ -198,5 +239,44 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("button", { name: "احفظ الاسم" }));
     await screen.findByText("تمّ حفظ الاسم");
     expect(input).toHaveValue("أم سلمى");
+  });
+
+  describe("signing in on a new phone", () => {
+    beforeEach(() => {
+      m.token = undefined;
+      m.stored = null;
+      m.me = null;
+      m.list = [];
+    });
+
+    it("offers a secondary sign-in button that opens verification, and stays here after", async () => {
+      const user = userEvent.setup();
+      const view = renderPage();
+      await user.click(screen.getByRole("button", { name: t.signIn.button }));
+      const sheet = screen.getByRole("dialog", { name: t.signIn.title });
+      expect(JSON.parse(sheet.dataset.intent ?? "null")).toEqual({
+        kind: "signin",
+      });
+      await user.click(screen.getByRole("button", { name: "verified" }));
+      view.rerender(
+        <MemoryRouter initialEntries={["/settings"]}>
+          <Routes>
+            <Route path="/" element={<p>home-page</p>} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByRole("textbox")).toHaveValue("أبو علي");
+      expect(screen.queryByText("home-page")).toBeNull();
+    });
+
+    it("reopens the sign-in sheet after the tab reloads mid-verification", () => {
+      saveSignInProgress();
+      renderPage();
+      expect(
+        screen.getByRole("dialog", { name: t.signIn.title }),
+      ).toBeInTheDocument();
+    });
   });
 });

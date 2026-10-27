@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router";
 import { Button, buttonClass } from "../components/Button";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
+import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { formatDate } from "../lib/format";
 import { clearSessionToken, useSessionToken } from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
@@ -17,17 +18,32 @@ export function SettingsPage() {
   const sessionToken = useSessionToken();
   const me = useQuery(api.sessions.me, { sessionToken });
   useClearDeadToken(sessionToken, me === null);
+  const signIn = useSignInSheet();
 
-  if (me === undefined) {
-    return (
-      <main aria-busy="true" className="mx-auto max-w-xl p-5">
-        <p className="py-16 text-center text-xl text-ink-soft">
-          {t.common.loading}
-        </p>
-      </main>
-    );
-  }
+  // The sheet sits outside the page body so it survives the reload a new session token triggers.
+  return (
+    <>
+      {me === undefined ? (
+        <main aria-busy="true" className="mx-auto max-w-xl p-5">
+          <p className="py-16 text-center text-xl text-ink-soft">
+            {t.common.loading}
+          </p>
+        </main>
+      ) : (
+        <SettingsContent me={me} onSignIn={signIn.open} />
+      )}
+      {signIn.sheet}
+    </>
+  );
+}
 
+function SettingsContent({
+  me,
+  onSignIn,
+}: {
+  me: { displayName: string; maskedPhone: string } | null;
+  onSignIn: () => void;
+}) {
   return (
     <main className="mx-auto max-w-xl p-5">
       <header className="mb-3.5">
@@ -42,9 +58,16 @@ export function SettingsPage() {
         {t.home.settings}
       </h1>
       {me === null ? (
-        <p className="mt-4 leading-relaxed text-ink-soft">
-          {t.settings.signedOutPrompt}
-        </p>
+        <>
+          <p className="mt-4 leading-relaxed text-ink-soft">
+            {t.settings.signedOutPrompt}
+          </p>
+          <div className="mt-5">
+            <Button variant="ghost" onClick={onSignIn}>
+              {t.signIn.button}
+            </Button>
+          </div>
+        </>
       ) : (
         <SignedInSettings
           displayName={me.displayName}

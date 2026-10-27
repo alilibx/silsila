@@ -4,7 +4,8 @@ import { JUZ } from "@convex/lib/juz";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Link } from "react-router";
-import { buttonClass } from "../components/Button";
+import { Button, buttonClass } from "../components/Button";
+import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
 import { useSessionToken } from "../lib/session";
@@ -18,17 +19,37 @@ export function HomePage() {
   const mine = useQuery(api.khatmas.mine, { sessionToken });
   // A stored token the server answers as signed out is dead; clearing it makes this page signed out.
   useClearDeadToken(sessionToken, me === null);
+  const signIn = useSignInSheet();
 
-  if (me === undefined || mine === undefined) {
-    return (
-      <main aria-busy="true" className="mx-auto max-w-xl p-5">
-        <p className="py-16 text-center text-xl text-ink-soft">
-          {t.common.loading}
-        </p>
-      </main>
-    );
-  }
+  // The sheet sits outside the page body so it survives the reload a new session token triggers.
+  return (
+    <>
+      {me === undefined || mine === undefined ? (
+        <main aria-busy="true" className="mx-auto max-w-xl p-5">
+          <p className="py-16 text-center text-xl text-ink-soft">
+            {t.common.loading}
+          </p>
+        </main>
+      ) : (
+        <HomeContent me={me} mine={mine} onSignIn={signIn.open} />
+      )}
+      {signIn.sheet}
+    </>
+  );
+}
 
+type Me = NonNullable<FunctionReturnType<typeof api.sessions.me>>;
+type Mine = FunctionReturnType<typeof api.khatmas.mine>;
+
+function HomeContent({
+  me,
+  mine,
+  onSignIn,
+}: {
+  me: Me | null;
+  mine: Mine;
+  onSignIn: () => void;
+}) {
   return (
     <main className="mx-auto max-w-xl p-5">
       <header className="mb-3.5 flex items-center justify-between gap-3">
@@ -85,6 +106,11 @@ export function HomePage() {
           <Link to="/new" className={buttonClass("primary")}>
             {t.home.startNewPlain}
           </Link>
+          <div className="mt-3">
+            <Button variant="ghost" onClick={onSignIn}>
+              {t.signIn.button}
+            </Button>
+          </div>
         </>
       )}
     </main>
