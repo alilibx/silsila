@@ -144,7 +144,7 @@ While holding a juz', the main screen shows it in large text with two buttons:
 A grid of 30 tiles, one per juz'. Each tile shows the juz' number and its name, taken from the opening words of the juz' in the mushaf, such as "عمّ" for 30, "تبارك" for 29, and "قد سمع" for 28. Using the opening words avoids regional naming differences **[builder's call]**. Each tile has one of three states, shown with color plus a word, never color alone:
 
 - **Open (متاح):** anyone can take it.
-- **Being read (يُقرأ):** shows the reader's name, because Ali's pain point was not knowing who has what. Once the round is past its target end and this person has held the juz' for more than 3x their pace, the name is hidden and the tile shows only "يُقرأ". Ali decided this.
+- **Being read (يُقرأ):** shows the reader's name to members, because Ali's pain point was not knowing who has what. The name stays until the juz' is done or released. It's never hidden for being late, and tiles never show how long someone has held a juz', so nothing on the tile signals who is slow. The release rule (3.3) keeps any name from sitting on a tile for long. Ali decided this after review showed that hiding an overdue name tells everyone that person is late.
 - **Done (تمّ):** shows no name, so nobody can count who finished the most. Ali decided this.
 
 Above the grid: "١٨ من ٣٠ تمّت" with a progress bar, and the round's target end.
@@ -305,7 +305,7 @@ Pace and rotation derive from assignments. The builder owns the actual schema.
 ## 10. Decisions Ali made after review (2026-10-27)
 
 1. When a round finishes early, the next round starts right away (3.3).
-2. The grid shows names only on ajza' being read, and hides them once a juz' is overdue. Finished ajza' show no names (3.7).
+2. The grid shows names only on ajza' being read, and never hides them for being late. Finished ajza' show no names (3.7).
 3. v1 is Arabic only. English follows (5.1).
 4. The celebration uses Quranic duas only (3.8).
 5. People must verify a phone number to take a juz'. Anyone with the link can view without verifying (3.4, 5.2).
