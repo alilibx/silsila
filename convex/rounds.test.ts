@@ -147,6 +147,12 @@ async function viewAs(t: T, inviteCode: string, who: Who | null) {
   return res;
 }
 
+async function setSetting(t: T, key: string, value: unknown) {
+  await t.run((ctx) =>
+    ctx.db.insert("settings", { key, value, updatedAt: NOW }),
+  );
+}
+
 const finish = (t: T, code: string, who: Who) =>
   t.mutation(api.pool.finish, { sessionToken: who.token, inviteCode: code });
 const undo = (t: T, code: string, who: Who) =>
@@ -373,13 +379,40 @@ test("markCelebrated is a no-op for non-members, signed-out callers, blocked mem
   expect((await memberOf(t, khatma._id, ali)).lastCelebratedRound).toBe(3);
 });
 
-test("undo after the round has completed reports round_completed", async () => {
+test("undo right after the round completed reports round_completed", async () => {
   const { t, bob, code } = await almostDone(range(1, 29));
+  // a longer window than the completion delay, so the finish is still "recent"
+  await setSetting(t, "undoWindowMs", 60_000);
   await take(t, code, bob, 30);
   await finish(t, code, bob);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(await undo(t, code, bob)).toEqual({
     ok: false,
     reason: "round_completed",
+  });
+});
+
+test("undo in the next round, well after the window, reports window_closed", async () => {
+  const { t, bob, code } = await almostDone(range(1, 29));
+  await take(t, code, bob, 30);
+  await finish(t, code, bob);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  vi.advanceTimersByTime(60_000);
+  expect(await undo(t, code, bob)).toEqual({
+    ok: false,
+    reason: "window_closed",
+  });
+});
+
+test("undo is nothing_to_undo for someone who never finished in this khatma", async () => {
+  const { t, bob, code } = await almostDone(range(1, 29));
+  await take(t, code, bob, 30);
+  await finish(t, code, bob);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  // a newcomer has no finish anywhere in this khatma
+  const carol = await signedIn(t, "C");
+  expect(await undo(t, code, carol)).toEqual({
+    ok: false,
+    reason: "nothing_to_undo",
   });
 });

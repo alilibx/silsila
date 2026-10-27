@@ -115,6 +115,12 @@ const undo = (t: T, code: string, who: Who | null) =>
 const release = (t: T, code: string, who: Who | null) =>
   t.mutation(api.pool.release, { sessionToken: who?.token, inviteCode: code });
 
+async function setSetting(t: T, key: string, value: unknown) {
+  await t.run((ctx) =>
+    ctx.db.insert("settings", { key, value, updatedAt: NOW }),
+  );
+}
+
 async function setup() {
   const t = convexTest(schema, modules);
   const ali = await signedIn(t, "A");
@@ -330,7 +336,8 @@ test("blocked members get blocked from finish, undo, and release", async () => {
 
 test("finish, undo, and release share the pool limit with take", async () => {
   const { t, ali, code } = await setup();
-  for (let juz = 1; juz <= 5; juz++) {
+  await setSetting(t, "poolActionsPerPersonPerMinute", 4);
+  for (let juz = 1; juz <= 2; juz++) {
     expect(await take(t, code, ali, juz)).toEqual({ ok: true });
     expect(await finish(t, code, ali)).toMatchObject({ ok: true });
   }
@@ -345,4 +352,31 @@ test("finish, undo, and release share the pool limit with take", async () => {
     ok: false,
     reason: "not_holding",
   });
+});
+
+test("finish, undo, and release refuse in maintenance without spending the bucket", async () => {
+  for (const fn of [finish, undo, release]) {
+    const { t, ali, code } = await setup();
+    await take(t, code, ali, 1);
+    const limit = await t.run((ctx) =>
+      ctx.db
+        .query("rateLimits")
+        .withIndex("by_key", (q) => q.eq("key", `pool:${ali.personId}`))
+        .unique(),
+    );
+    await setSetting(t, "maintenanceMode", true);
+    expect(await fn(t, code, ali)).toEqual({
+      ok: false,
+      reason: "maintenance",
+    });
+    const after = await t.run((ctx) =>
+      ctx.db
+        .query("rateLimits")
+        .withIndex("by_key", (q) => q.eq("key", `pool:${ali.personId}`))
+        .unique(),
+    );
+    expect(after?.count).toBe(limit?.count);
+    // nothing changed: still holding juz 1
+    expect((await viewAs(t, code, ali)).me.holding).toBe(1);
+  }
 });

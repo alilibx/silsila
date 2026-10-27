@@ -210,7 +210,10 @@ export const take = sessionMutation({
 
 export type FinishResult =
   | { ok: true; undoUntil: number }
-  | { ok: false; reason: "not_holding" | "blocked" | "rate_limited" };
+  | {
+      ok: false;
+      reason: "not_holding" | "blocked" | "rate_limited" | "maintenance";
+    };
 
 export type UndoResult =
   | { ok: true }
@@ -222,17 +225,21 @@ export type UndoResult =
         | "round_completed"
         | "nothing_to_undo"
         | "blocked"
-        | "rate_limited";
+        | "rate_limited"
+        | "maintenance";
     };
 
 export type ReleaseResult =
   | { ok: true }
-  | { ok: false; reason: "not_holding" | "blocked" | "rate_limited" };
+  | {
+      ok: false;
+      reason: "not_holding" | "blocked" | "rate_limited" | "maintenance";
+    };
 
 /**
  * What finish, undo, and release share: the signed-in person, the khatma
- * behind the invite code and its current round, after the blocked check and
- * the per-person pool rate limit (the same bucket as `take`).
+ * behind the invite code and its current round, after the maintenance and
+ * blocked checks and the per-person pool rate limit (the same bucket as `take`).
  */
 async function poolActor(
   ctx: MutationCtx & SessionContext,
@@ -244,9 +251,13 @@ async function poolActor(
       khatma: Doc<"khatmas">;
       round: Doc<"rounds">;
     }
-  | { ok: false; reason: "blocked" | "rate_limited" }
+  | { ok: false; reason: "blocked" | "rate_limited" | "maintenance" }
 > {
   const person = requirePerson(ctx);
+  // before the rate limit, so a refused call does not spend the bucket
+  if (await getSetting(ctx, "maintenanceMode")) {
+    return { ok: false, reason: "maintenance" };
+  }
   const khatma = await khatmaByInviteCode(ctx, inviteCode);
   if (!khatma?.currentRoundId) throw new ConvexError({ code: "not_found" });
   const round = await ctx.db.get(khatma.currentRoundId);
@@ -313,28 +324,41 @@ export const undoFinish = sessionMutation({
           (b.finishedAt ?? 0) - (a.finishedAt ?? 0) ||
           b._creationTime - a._creationTime,
       )[0];
+    const undoWindowMs = await getSetting(ctx, "undoWindowMs");
+    const now = Date.now();
     if (!lastDone) {
-      // Their last finish may belong to a round that has since completed.
-      const earlier = await ctx.db
+      // Their latest finish, if any, is in an earlier round. Newest round first.
+      let latestRound: number | null = null;
+      let latestFinishedAt = 0;
+      const earlier = ctx.db
         .query("assignments")
         .withIndex("by_khatma_person", (q) =>
           q.eq("khatmaId", khatma._id).eq("personId", person._id),
         )
-        .filter((q) => q.neq(q.field("finishedAt"), null))
-        .first();
+        .order("desc")
+        .filter((q) => q.neq(q.field("finishedAt"), null));
+      for await (const a of earlier) {
+        latestRound ??= a.roundNumber;
+        if (a.roundNumber !== latestRound) break;
+        latestFinishedAt = Math.max(latestFinishedAt, a.finishedAt ?? 0);
+      }
+      if (latestRound === null) return { ok: false, reason: "nothing_to_undo" };
+      // Only a finish that just lost its round to completion is "completed";
+      // anything older has simply outlived the undo window.
       return {
         ok: false,
-        reason: earlier ? "round_completed" : "nothing_to_undo",
+        reason:
+          latestRound === round.number - 1 &&
+          now - latestFinishedAt <= undoWindowMs
+            ? "round_completed"
+            : "window_closed",
       };
     }
+    // Defensive: the current round is never completed (completion starts the next).
     if (round.completedAt !== null) {
       return { ok: false, reason: "round_completed" };
     }
-    const now = Date.now();
-    if (
-      now - (lastDone.finishedAt ?? 0) >
-      (await getSetting(ctx, "undoWindowMs"))
-    ) {
+    if (now - (lastDone.finishedAt ?? 0) > undoWindowMs) {
       return { ok: false, reason: "window_closed" };
     }
     if (heldAssignment(assignments, person._id)) {
