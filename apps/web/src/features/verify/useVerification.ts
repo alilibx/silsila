@@ -16,6 +16,7 @@ import {
   loadProgress,
   saveProgress,
   type Progress,
+  type VerifyIntent,
 } from "./progress";
 
 export type Step =
@@ -63,8 +64,11 @@ function openBlankWindow(): Window | null {
   }
 }
 
-export function useVerification() {
+/** `intent` is stored with the progress, so the right page can resume after a reload. */
+export function useVerification(intent?: VerifyIntent) {
   const [saved, setSaved] = useState<Progress | null>(loadProgress);
+  const intentRef = useRef(intent);
+  intentRef.current = intent;
   const [phase, setPhase] = useState<Phase>(null);
   const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
@@ -208,6 +212,7 @@ export function useVerification() {
         displayName,
         expiresAt: Date.now() + TTL_MS,
         waUrl,
+        ...(intentRef.current ? { intent: intentRef.current } : {}),
       };
       saveProgress(progress);
       setSaved(progress);

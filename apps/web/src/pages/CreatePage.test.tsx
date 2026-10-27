@@ -20,10 +20,15 @@ vi.mock("../lib/session", () => ({
 vi.mock("../features/verify/VerifySheet", () => ({
   VerifySheet: (props: {
     title: string;
+    intent?: unknown;
     onVerified: () => void;
     onClose: () => void;
   }) => (
-    <div role="dialog" aria-label={props.title}>
+    <div
+      role="dialog"
+      aria-label={props.title}
+      data-intent={JSON.stringify(props.intent)}
+    >
       <button
         onClick={() => {
           m.token = "fresh-token";
@@ -63,6 +68,7 @@ describe("CreatePage", () => {
     m.create.mockReset();
     m.create.mockResolvedValue({ inviteCode: "NEWCODE" });
     m.token = "tok";
+    localStorage.clear();
   });
 
   it("offers exactly six schedules and no yearly, weekly by default", () => {
@@ -188,5 +194,63 @@ describe("CreatePage", () => {
     });
     expect(await screen.findByText(/\/j\/NEWCODE/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("tells the verify sheet the name and schedule it is creating", async () => {
+    m.token = undefined;
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText(/اسم الختمة/), "ختمة الجمعة");
+    await user.click(screen.getByRole("radio", { name: /يومية/ }));
+    await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+    const sheet = screen.getByRole("dialog", { name: "قبل أن تنشئ ختمة" });
+    expect(JSON.parse(sheet.dataset.intent ?? "null")).toEqual({
+      kind: "create",
+      name: "ختمة الجمعة",
+      schedule: "daily",
+    });
+  });
+
+  it("after the tab reloads mid-verification: reopens the sheet with the form restored, then creates", async () => {
+    localStorage.setItem(
+      "silsila.verify",
+      JSON.stringify({
+        verificationId: "v1",
+        secret: "sec",
+        displayName: "علي",
+        expiresAt: Date.now() + 5 * 60_000,
+        intent: { kind: "create", name: "ختمة الجمعة", schedule: "daily" },
+      }),
+    );
+    m.token = undefined;
+    const user = userEvent.setup();
+    renderPage();
+    expect(
+      screen.getByRole("dialog", { name: "قبل أن تنشئ ختمة" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/اسم الختمة/)).toHaveValue("ختمة الجمعة");
+    expect(screen.getByRole("radio", { name: /يومية/ })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "verified" }));
+    expect(m.create).toHaveBeenCalledWith({
+      sessionToken: "fresh-token",
+      name: "ختمة الجمعة",
+      schedule: "daily",
+    });
+  });
+
+  it("ignores a verification in flight for something else", () => {
+    localStorage.setItem(
+      "silsila.verify",
+      JSON.stringify({
+        verificationId: "v1",
+        secret: "sec",
+        displayName: "علي",
+        expiresAt: Date.now() + 5 * 60_000,
+        intent: { kind: "take", inviteCode: "CODE", juz: 3 },
+      }),
+    );
+    m.token = undefined;
+    renderPage();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

@@ -23,8 +23,16 @@ vi.mock("../lib/session", () => ({
   clearSessionToken: () => {},
 }));
 vi.mock("../features/verify/VerifySheet", () => ({
-  VerifySheet: (props: { title: string; onVerified: () => void }) => (
-    <div role="dialog" aria-label={props.title}>
+  VerifySheet: (props: {
+    title: string;
+    intent?: unknown;
+    onVerified: () => void;
+  }) => (
+    <div
+      role="dialog"
+      aria-label={props.title}
+      data-intent={JSON.stringify(props.intent)}
+    >
       <button onClick={props.onVerified}>verified</button>
     </div>
   ),
@@ -91,6 +99,7 @@ beforeEach(() => {
     advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms),
   });
   vi.setSystemTime(NOW);
+  localStorage.clear();
   m.token = "tok";
   for (const fn of [
     m.query,
@@ -356,6 +365,63 @@ describe("take after verification", () => {
     show(makeView({ me: signedIn({ holding: 8, suggestion: null }) }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("جزؤك الآن")).toBeInTheDocument();
+  });
+
+  it("tells the verify sheet which juz' on which khatma it is for", async () => {
+    m.token = undefined;
+    const { user } = setup(signedOut());
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    const sheet = screen.getByRole("dialog", { name: t.verify.beforeTake });
+    expect(JSON.parse(sheet.dataset.intent ?? "null")).toEqual({
+      kind: "take",
+      inviteCode: "CODE",
+      juz: 3,
+    });
+  });
+
+  describe("after the tab reloads mid-verification", () => {
+    const saveProgress = (inviteCode: string) =>
+      localStorage.setItem(
+        "silsila.verify",
+        JSON.stringify({
+          verificationId: "v1",
+          secret: "sec",
+          displayName: "علي",
+          expiresAt: NOW + 5 * 60_000,
+          intent: { kind: "take", inviteCode, juz: 7 },
+        }),
+      );
+
+    it("reopens the verify sheet for the stored juz', then offers it once verified", async () => {
+      saveProgress("CODE");
+      m.token = undefined;
+      const { user, show } = setup(signedOut());
+      const sheet = screen.getByRole("dialog", { name: t.verify.beforeTake });
+      expect(JSON.parse(sheet.dataset.intent ?? "null")).toMatchObject({
+        juz: 7,
+      });
+      await user.click(screen.getByRole("button", { name: "verified" }));
+      m.token = "new";
+      show(makeView({ me: signedIn({ suggestion: 1 }) }));
+      expect(
+        screen.getByRole("dialog", { name: "الجزء ٧" }),
+      ).toBeInTheDocument();
+    });
+
+    it("stays closed on another khatma's page", () => {
+      saveProgress("OTHER");
+      m.token = undefined;
+      setup(signedOut());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("stays closed when the stored verification has expired", () => {
+      saveProgress("CODE");
+      vi.setSystemTime(NOW + 10 * 60_000);
+      m.token = undefined;
+      setup(signedOut());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   it("does not open the sheet from the stale signed-out view", async () => {

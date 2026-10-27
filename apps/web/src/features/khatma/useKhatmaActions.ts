@@ -10,6 +10,7 @@ import type {
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { UNDO_WINDOW_MS, type ToastData } from "../../components/Toast";
+import { pendingIntent } from "../verify/progress";
 import { t } from "../../i18n/ar";
 import { useSessionToken } from "../../lib/session";
 
@@ -32,6 +33,14 @@ const undoCopy: Record<Failure<UndoResult>, string> = {
   ...errors.shared,
   ...errors.undo,
 };
+
+/** The juz' of a verification still in flight for this khatma (e.g. the tab reloaded while in WhatsApp). */
+function resumedJuz(inviteCode: string): number | null {
+  const intent = pendingIntent();
+  return intent?.kind === "take" && intent.inviteCode === inviteCode
+    ? intent.juz
+    : null;
+}
 
 /** How long after losing a race we wait for the view to offer another juz'. */
 const LOST_WAIT_MS = 5_000;
@@ -65,8 +74,11 @@ export function useKhatmaActions(
   const signedIn = loaded?.me.signedIn ?? false;
   const celebrating = loaded !== null && loaded.me.celebrateRound !== null;
 
-  // The juz' a signed-out visitor tapped; it also means the verify sheet is open.
-  const [pendingJuz, setPendingJuz] = useState<number | null>(null);
+  // The juz' a signed-out visitor tapped; it also means the verify sheet is open. A verification
+  // already in flight for this khatma reopens the sheet, so a reloaded tab carries on.
+  const [pendingJuz, setPendingJuz] = useState<number | null>(() =>
+    resumedJuz(inviteCode),
+  );
   // The juz' to offer once the view has reloaded for the new session.
   const [verifiedJuz, setVerifiedJuz] = useState<number | null>(null);
   // The juz' someone else just took; we reopen the sheet when the view offers another.

@@ -7,10 +7,13 @@ import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { formatDate } from "../../lib/format";
 import { useSessionToken } from "../../lib/session";
+import type { VerifyIntent } from "./progress";
 import { useVerification } from "./useVerification";
 
 type Props = {
   title: string;
+  /** What the person is verifying for; saved so a reloaded tab can resume on the right page. */
+  intent?: VerifyIntent;
   onVerified: () => void;
   onClose: () => void;
 };
@@ -23,8 +26,8 @@ const stepHeading = { tabIndex: -1, [STEP_HEADING]: "" } as const;
 const hint = "mt-1.5 leading-relaxed text-ink-soft";
 const errorText = "mt-2 font-medium text-[#8A2B1E]";
 
-export function VerifySheet({ title, onVerified, onClose }: Props) {
-  const v = useVerification();
+export function VerifySheet({ title, intent, onVerified, onClose }: Props) {
+  const v = useVerification(intent);
 
   // Fire once, when the flow reaches its end; the page decides what comes next.
   const onVerifiedRef = useRef(onVerified);

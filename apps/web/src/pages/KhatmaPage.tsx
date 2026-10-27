@@ -119,6 +119,7 @@ export function KhatmaPage() {
       {actions.pendingJuz !== null && (
         <VerifySheet
           title={t.verify.beforeTake}
+          intent={{ kind: "take", inviteCode, juz: actions.pendingJuz }}
           onVerified={actions.verified}
           onClose={actions.cancelVerify}
         />

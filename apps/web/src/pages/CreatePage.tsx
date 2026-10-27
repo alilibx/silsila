@@ -4,6 +4,7 @@ import { useAction } from "convex/react";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "../components/Button";
+import { pendingIntent } from "../features/verify/progress";
 import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
@@ -17,13 +18,22 @@ import {
 const DEFAULT_SCHEDULE: Schedule = "weekly";
 const createErrors: Record<string, string> = t.create.errors;
 
+/** A create still waiting on verification (e.g. the tab reloaded while in WhatsApp). */
+function resumedCreate() {
+  const intent = pendingIntent();
+  return intent?.kind === "create" ? intent : null;
+}
+
 export function CreatePage() {
   const navigate = useNavigate();
   const signedIn = useSessionToken() !== undefined;
   const createKhatma = useAction(api.khatmas.create);
-  const [name, setName] = useState("");
-  const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
-  const [verifying, setVerifying] = useState(false);
+  const [resumed] = useState(resumedCreate);
+  const [name, setName] = useState(resumed?.name ?? "");
+  const [schedule, setSchedule] = useState<Schedule>(
+    resumed?.schedule ?? DEFAULT_SCHEDULE,
+  );
+  const [verifying, setVerifying] = useState(resumed !== null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const creatingRef = useRef(false);
@@ -143,6 +153,7 @@ export function CreatePage() {
       {verifying && (
         <VerifySheet
           title={t.create.beforeCreate}
+          intent={{ kind: "create", name, schedule }}
           onVerified={() => {
             setVerifying(false);
             void create();

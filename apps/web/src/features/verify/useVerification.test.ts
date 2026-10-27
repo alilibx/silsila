@@ -435,6 +435,21 @@ describe("useVerification: pin", () => {
   });
 });
 
+describe("useVerification: intent", () => {
+  it("stores what the verification is for with the progress", async () => {
+    reply(200, START);
+    const intent = { kind: "take", inviteCode: "CODE", juz: 7 } as const;
+    const { result } = renderHook(() => useVerification(intent));
+    await act(async () => {
+      await result.current.start("علي");
+    });
+    expect(JSON.parse(localStorage.getItem(STORE) ?? "null")).toMatchObject({
+      verificationId: "v1",
+      intent,
+    });
+  });
+});
+
 describe("useVerification: resume from storage", () => {
   const save = (over: Record<string, unknown> = {}) =>
     localStorage.setItem(
