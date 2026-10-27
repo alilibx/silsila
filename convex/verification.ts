@@ -24,6 +24,7 @@ import { getSetting } from "./lib/settings";
 import { insertSession } from "./sessions";
 import { cleanDisplayName, maskPhone, normalizeDigits } from "./lib/text";
 import {
+  accountCreatedAlert,
   env,
   isDev,
   pinReply,
@@ -97,21 +98,32 @@ async function personByPhone(ctx: QueryCtx, phone: string) {
     .first();
 }
 
+/**
+ * A fresh `now + verificationTtlMs` window with its own expiry timer. Earlier
+ * timers stay scheduled but `expire` ignores them (it checks `expiresAt`).
+ */
+async function freshExpiry(
+  ctx: MutationCtx,
+  verificationId: Id<"verifications">,
+): Promise<number> {
+  const expiresAt = Date.now() + (await getSetting(ctx, "verificationTtlMs"));
+  await ctx.scheduler.runAt(expiresAt, internal.verification.expire, {
+    verificationId,
+  });
+  return expiresAt;
+}
+
 /** Moves a verification to `needs_pin` with a fresh expiry and timer. */
 async function toNeedsPin(
   ctx: MutationCtx,
   doc: Doc<"verifications">,
   fields: { phone: string; pinHash: string; existingPersonId: Id<"people"> },
 ) {
-  const expiresAt = Date.now() + (await getSetting(ctx, "verificationTtlMs"));
   await ctx.db.patch(doc._id, {
     ...fields,
     status: "needs_pin",
     pinAttempts: 0,
-    expiresAt,
-  });
-  await ctx.scheduler.runAt(expiresAt, internal.verification.expire, {
-    verificationId: doc._id,
+    expiresAt: await freshExpiry(ctx, doc._id),
   });
 }
 
@@ -135,14 +147,22 @@ async function completeSignIn(
   doc: Doc<"verifications">,
   personId: Id<"people">,
   args: { tokenHash: string; alertTokenHash: string; deviceLabel: string },
-) {
-  await insertSession(ctx, {
+): Promise<Id<"sessions">> {
+  const sessionId = await insertSession(ctx, {
     personId,
     tokenHash: args.tokenHash,
     alertTokenHash: args.alertTokenHash,
     deviceLabel: args.deviceLabel,
   });
   await ctx.db.patch(doc._id, { status: "claimed", pinHash: undefined });
+  return sessionId;
+}
+
+/** New-account alert when this sign-in created the person, else the normal one. */
+function alertFor(created: boolean, deviceLabel: string, alertToken: string) {
+  return created
+    ? accountCreatedAlert(deviceLabel, alertToken)
+    : signInAlert(deviceLabel, alertToken);
 }
 
 /** Fresh session + alert tokens; raw values stay in the action. */
@@ -404,7 +424,12 @@ export const matchIncoming = internalMutation({
       });
       return "needs_pin";
     }
-    await ctx.db.patch(doc._id, { status: "matched", phone: args.phone });
+    // A fresh window to claim in, even if the message arrived at 9m59s.
+    await ctx.db.patch(doc._id, {
+      status: "matched",
+      phone: args.phone,
+      expiresAt: await freshExpiry(ctx, doc._id),
+    });
     return "matched";
   },
 });
@@ -413,7 +438,14 @@ export const matchIncoming = internalMutation({
 // Claim (new number) and PIN confirmation (existing number)
 
 type SignInResult =
-  | { kind: "ok"; phone: string }
+  | {
+      kind: "ok";
+      phone: string;
+      /** A person row was created for this phone by this sign-in. */
+      created: boolean;
+      /** The person's sessions other than the one just opened. */
+      otherSessions: number;
+    }
   | { kind: "needs_pin"; phone: string | null }
   | { kind: "expired" | "wrong_pin" | "too_many_attempts" };
 
@@ -452,7 +484,7 @@ export const claimInternal = internalMutation({
     }
     const personId = await insertPerson(ctx, doc, doc.phone, args.timeZone);
     await completeSignIn(ctx, doc, personId, args);
-    return { kind: "ok", phone: doc.phone };
+    return { kind: "ok", phone: doc.phone, created: true, otherSessions: 0 };
   },
 });
 
@@ -480,8 +512,17 @@ export const confirmPinInternal = internalMutation({
     const existing = await personByPhone(ctx, doc.phone);
     const personId =
       existing?._id ?? (await insertPerson(ctx, doc, doc.phone, args.timeZone));
-    await completeSignIn(ctx, doc, personId, args);
-    return { kind: "ok", phone: doc.phone };
+    const sessionId = await completeSignIn(ctx, doc, personId, args);
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_person", (q) => q.eq("personId", personId))
+      .collect();
+    return {
+      kind: "ok",
+      phone: doc.phone,
+      created: existing === null,
+      otherSessions: sessions.filter((s) => s._id !== sessionId).length,
+    };
   },
 });
 
@@ -512,7 +553,7 @@ export const claim = action({
       case "ok":
         await sendWhatsAppText(
           res.phone,
-          signInAlert(deviceLabel, tokens.alertToken),
+          alertFor(res.created, deviceLabel, tokens.alertToken),
         );
         return { sessionToken: tokens.sessionToken };
       case "needs_pin":
@@ -536,12 +577,13 @@ export const confirmPin = action({
     ctx,
     args,
   ): Promise<
-    | { sessionToken: string }
+    | { sessionToken: string; otherSessions: number }
     | { error: "wrong_pin" | "too_many_attempts" | "expired" }
   > => {
     const tokens = await newSessionTokens();
     const deviceLabel = cleanDeviceLabel(args.deviceLabel);
-    const pin = normalizeDigits(args.pin.slice(0, 64)).trim();
+    // "123 456", " ١٢٣٤٥٦ " and "123456" are the same PIN.
+    const pin = normalizeDigits(args.pin.slice(0, 64)).replace(/\s+/gu, "");
     const res = await ctx.runMutation(
       internal.verification.confirmPinInternal,
       {
@@ -558,9 +600,12 @@ export const confirmPin = action({
       case "ok":
         await sendWhatsAppText(
           res.phone,
-          signInAlert(deviceLabel, tokens.alertToken),
+          alertFor(res.created, deviceLabel, tokens.alertToken),
         );
-        return { sessionToken: tokens.sessionToken };
+        return {
+          sessionToken: tokens.sessionToken,
+          otherSessions: res.otherSessions,
+        };
       case "wrong_pin":
       case "too_many_attempts":
         return { error: res.kind };

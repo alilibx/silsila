@@ -325,7 +325,7 @@ test("new number: start → message → matched → claim → session", async ()
   const alert = sent.at(-1)!;
   expect(alert.to).toBe(PHONE);
   const m =
-    /^تسجيل دخول جديد إلى سلسلة من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: https:\/\/silsila\.example\/signout\?t=([A-Za-z0-9_-]{43})$/.exec(
+    /^تمّ إنشاء حساب في سلسلة برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/silsila\.example\/signout\?t=([A-Za-z0-9_-]{43})$/.exec(
       alert.body,
     );
   expect(m).not.toBeNull();
@@ -371,6 +371,7 @@ test("existing number needs the PIN from the WhatsApp reply", async () => {
   });
   const res = await confirmPin(t, v, pin);
   if (!("sessionToken" in res)) throw new Error(JSON.stringify(res));
+  expect(res.otherSessions).toBe(0);
   const session = await t.run((ctx) => ctx.db.query("sessions").unique());
   expect(session?.personId).toBe(personId);
   expect(
@@ -383,8 +384,9 @@ test("existing number needs the PIN from the WhatsApp reply", async () => {
   expect(
     await t.run(async (ctx) => (await ctx.db.query("people").collect()).length),
   ).toBe(1);
+  // an existing account gets the normal sign-in alert, not the new-account one
   expect(sent.at(-1)!.body).toMatch(
-    /^تسجيل دخول جديد إلى سلسلة من Android Chrome\. /,
+    /^تسجيل دخول جديد إلى سلسلة من Android Chrome\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: https:\/\/silsila\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
   );
   // the PIN is single use
   expect(await confirmPin(t, v, pin)).toEqual({ error: "expired" });
@@ -399,6 +401,66 @@ test("PIN accepts Arabic-Indic digits and surrounding spaces", async () => {
   const arabic = pin.replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]!);
   const res = await confirmPin(t, v, ` ${arabic} `);
   expect(res).toHaveProperty("sessionToken");
+});
+
+test("PIN ignores whitespace inside it", async () => {
+  const t = convexTest(schema, modules);
+  await addPerson(t);
+  const v = await start(t);
+  await send(t, v.message);
+  const pin = pinsSent()[0]!;
+  const spaced = `${pin.slice(0, 3)} ${pin.slice(3)}`; // "123 456"
+  expect(await confirmPin(t, v, spaced)).toHaveProperty("sessionToken");
+
+  const v2 = await start(t, "سعيد", "client-2");
+  await send(t, v2.message);
+  const pin2 = pinsSent()[1]!;
+  const messy = `\t${pin2.slice(0, 2)} ${pin2.slice(2, 4)}\u00A0${pin2.slice(4)}\n`;
+  expect(await confirmPin(t, v2, messy)).toHaveProperty("sessionToken");
+});
+
+test("confirmPin reports how many other sessions the account has", async () => {
+  const t = convexTest(schema, modules);
+  const personId = await addPerson(t);
+  for (const n of [1, 2]) {
+    await t.mutation(internal.sessions.create, {
+      personId,
+      tokenHash: await sha256Hex(`old-${n}`),
+      alertTokenHash: await sha256Hex(`old-alert-${n}`),
+      deviceLabel: `old ${n}`,
+    });
+  }
+  // another person's sessions don't count
+  const other = await addPerson(t, "+971509999999", "خالد");
+  await t.mutation(internal.sessions.create, {
+    personId: other,
+    tokenHash: await sha256Hex("other"),
+    alertTokenHash: await sha256Hex("other-alert"),
+    deviceLabel: "other",
+  });
+  const v = await start(t);
+  await send(t, v.message);
+  const res = await confirmPin(t, v, pinsSent()[0]!);
+  expect(res).toEqual({ sessionToken: expect.any(String), otherSessions: 2 });
+});
+
+test("a forwarded link on a new number: the owner learns an account was created", async () => {
+  const t = convexTest(schema, modules);
+  // attacker starts, victim (no account yet) sends the forwarded message
+  const attacker = await start(t, "مهاجم", "attacker");
+  await send(t, attacker.message);
+  expect(await claim(t, attacker)).toHaveProperty("sessionToken");
+  const createdAlert = sent.at(-1)!;
+  expect(createdAlert.to).toBe(PHONE);
+  expect(createdAlert.body).toMatch(
+    /^تمّ إنشاء حساب في سلسلة برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/silsila\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
+  );
+
+  // the real owner later signs in with the PIN and is told about the other session
+  const owner = await start(t, "صاحب الرقم", "owner");
+  await send(t, owner.message);
+  const res = await confirmPin(t, owner, pinsSent()[0]!);
+  expect(res).toEqual({ sessionToken: expect.any(String), otherSessions: 1 });
 });
 
 test("five wrong PINs lock the verification", async () => {
@@ -592,9 +654,49 @@ test("claim after expiry fails", async () => {
   const t = convexTest(schema, modules);
   const v = await start(t);
   await send(t, v.message);
-  vi.setSystemTime(NOW + TEN_MIN + 1);
+  const { expiresAt } = (await t.run((ctx) => ctx.db.get(v.verificationId)))!;
+  vi.setSystemTime(expiresAt);
   expect(await claim(t, v)).toEqual({ error: "expired" });
   expect(await sessionCount(t)).toBe(0);
+});
+
+test("a message at 9m59s still leaves about ten minutes to claim", async () => {
+  const t = convexTest(schema, modules);
+  const v = await start(t);
+  vi.advanceTimersByTime(TEN_MIN - 1000);
+  await send(t, v.message);
+  const row = (await t.run((ctx) => ctx.db.get(v.verificationId)))!;
+  expect(row.status).toBe("matched");
+  expect(row.expiresAt - (NOW + TEN_MIN - 1000 + TEN_MIN)).toBeLessThan(1000);
+  expect(row.expiresAt).toBeGreaterThanOrEqual(NOW + TEN_MIN - 1000 + TEN_MIN);
+
+  // the original timer fires at +10 min and must not expire it
+  vi.advanceTimersByTime(1000);
+  await t.finishInProgressScheduledFunctions();
+  expect((await status(t, v)).status).toBe("matched");
+
+  // 9 minutes after the message it can still be claimed
+  vi.advanceTimersByTime(9 * 60_000);
+  await t.finishInProgressScheduledFunctions();
+  expect(await claim(t, v)).toHaveProperty("sessionToken");
+});
+
+test("a matched verification left unclaimed expires on the fresh timer", async () => {
+  const t = convexTest(schema, modules);
+  const v = await start(t);
+  vi.advanceTimersByTime(5 * 60_000);
+  await send(t, v.message);
+  const { expiresAt } = (await t.run((ctx) => ctx.db.get(v.verificationId)))!;
+  vi.advanceTimersByTime(expiresAt - Date.now() - 1);
+  await t.finishInProgressScheduledFunctions();
+  expect((await t.run((ctx) => ctx.db.get(v.verificationId)))!.status).toBe(
+    "matched",
+  );
+  vi.advanceTimersByTime(1);
+  await t.finishInProgressScheduledFunctions();
+  expect((await t.run((ctx) => ctx.db.get(v.verificationId)))!.status).toBe(
+    "expired",
+  );
 });
 
 test("an unanswered verification becomes expired on time", async () => {

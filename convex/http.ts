@@ -173,7 +173,9 @@ http.route({
       console.error("whatsapp webhook: signed body is not JSON");
       return new Response(null, { status: 200 });
     }
-    for (const message of parseIncoming(payload)) {
+    // Only messages sent to our own business number.
+    const ours = env("WHATSAPP_PHONE_NUMBER_ID");
+    for (const message of parseIncoming(payload, ours)) {
       await ctx.scheduler.runAfter(
         0,
         internal.whatsapp.handleIncoming,

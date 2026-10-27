@@ -59,6 +59,9 @@ export const pinReply = (pin: string) =>
   `رمز الدخول إلى سلسلة: ${pin}\nلا تشاركه مع أحد.`;
 export const signInAlert = (deviceLabel: string, alertToken: string) =>
   `تسجيل دخول جديد إلى سلسلة من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: ${siteUrl()}/signout?t=${alertToken}`;
+/** Sent instead of `signInAlert` when the sign-in created the account. */
+export const accountCreatedAlert = (deviceLabel: string, alertToken: string) =>
+  `تمّ إنشاء حساب في سلسلة برقمك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: ${siteUrl()}/signout?t=${alertToken}`;
 
 // ---------------------------------------------------------------------------
 // Inbound parsing
@@ -82,14 +85,28 @@ function isObject(x: unknown): x is Record<string, unknown> {
 /**
  * Text messages from a Cloud API webhook payload. Anything that isn't a
  * well-formed text message (statuses, media, malformed entries) is skipped.
+ * With `onlyPhoneNumberId`, messages addressed to any other business number
+ * (`value.metadata.phone_number_id`), or with no metadata, are skipped too.
  */
-export function parseIncoming(payload: unknown): IncomingMessage[] {
+export function parseIncoming(
+  payload: unknown,
+  onlyPhoneNumberId?: string,
+): IncomingMessage[] {
   const out: IncomingMessage[] = [];
   if (!isObject(payload) || !Array.isArray(payload.entry)) return out;
   for (const entry of payload.entry) {
     if (!isObject(entry) || !Array.isArray(entry.changes)) continue;
     for (const change of entry.changes) {
       if (!isObject(change) || !isObject(change.value)) continue;
+      if (onlyPhoneNumberId !== undefined) {
+        const metadata = change.value.metadata;
+        if (
+          !isObject(metadata) ||
+          metadata.phone_number_id !== onlyPhoneNumberId
+        ) {
+          continue;
+        }
+      }
       const messages = change.value.messages;
       if (!Array.isArray(messages)) continue;
       for (const m of messages) {
@@ -120,6 +137,9 @@ export function parseIncoming(payload: unknown): IncomingMessage[] {
 // ---------------------------------------------------------------------------
 // Outbound
 
+const SEND_ATTEMPTS = 2;
+const SEND_RETRY_DELAY_MS = 500;
+
 /**
  * Sends a text message through the Graph API. Never throws: a failed reply
  * must not undo the state change that triggered it. Message bodies (PINs,
@@ -146,33 +166,38 @@ export async function sendWhatsAppText(
     return false;
   }
   const url = `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: digits,
-        type: "text",
-        text: { body },
-      }),
-    });
-    if (!res.ok) {
-      // Graph errors describe the request, not the message body, but keep
-      // prod logs to the status code.
-      const detail = isDev() ? ` ${await res.text()}` : "";
-      console.error(`whatsapp send failed: HTTP ${res.status}${detail}`);
+  const init: RequestInit = {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: digits,
+      type: "text",
+      text: { body },
+    }),
+  };
+  for (let attempt = 1; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (err) {
+      console.error(
+        `whatsapp send failed: ${err instanceof Error ? err.name : "error"}`,
+      );
       return false;
     }
-    return true;
-  } catch (err) {
-    console.error(
-      `whatsapp send failed: ${err instanceof Error ? err.name : "error"}`,
-    );
-    return false;
+    if (res.ok) return true;
+    // Graph errors describe the request, not the message body, but keep
+    // prod logs to the status code.
+    const detail = isDev() ? ` ${await res.text()}` : "";
+    console.error(`whatsapp send failed: HTTP ${res.status}${detail}`);
+    // Throttling and server errors are retried once; other 4xx never are.
+    const retryable = res.status === 429 || res.status >= 500;
+    if (!retryable || attempt >= SEND_ATTEMPTS) return false;
+    await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
   }
 }
 
