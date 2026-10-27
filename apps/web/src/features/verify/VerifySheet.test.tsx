@@ -343,4 +343,71 @@ describe("VerifySheet", () => {
     ui();
     expect(screen.getByLabelText(t.verify.pinLabel)).toHaveFocus();
   });
+
+  describe("focus follows the step", () => {
+    it("moves to each new step's heading: waiting, then confirm", async () => {
+      m.status = { status: "pending", maskedPhone: null };
+      const user = userEvent.setup();
+      const view = ui();
+      await signInStart(user);
+      const waiting = await screen.findByRole("heading", {
+        name: t.verify.waitingTitle,
+      });
+      await waitFor(() => expect(waiting).toHaveFocus());
+      expect(waiting).toHaveAttribute("tabindex", "-1");
+
+      m.status = { status: "matched", maskedPhone: "+971 50 ••• 1234" };
+      view.rerender(
+        <VerifySheet
+          title={t.verify.beforeTake}
+          onVerified={onVerified}
+          onClose={onClose}
+        />,
+      );
+      const confirm = await screen.findByRole("heading", {
+        name: t.verify.confirmTitle("علي"),
+      });
+      await waitFor(() => expect(confirm).toHaveFocus());
+    });
+
+    it("moves to the pin heading, and to the message on an error", async () => {
+      m.status = { status: "needs_pin", maskedPhone: "+971 50 ••• 1234" };
+      const user = userEvent.setup();
+      const view = ui();
+      await signInStart(user);
+      const pin = await screen.findByRole("heading", {
+        name: t.verify.pinTitle,
+      });
+      await waitFor(() => expect(pin).toHaveFocus());
+
+      m.status = { status: "expired", maskedPhone: null };
+      view.rerender(
+        <VerifySheet
+          title={t.verify.beforeTake}
+          onVerified={onVerified}
+          onClose={onClose}
+        />,
+      );
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(t.verify.errors.expired);
+      await waitFor(() => expect(alert).toHaveFocus());
+    });
+
+    it("moves to the devices heading", async () => {
+      m.status = { status: "needs_pin", maskedPhone: "+971 50 ••• 1234" };
+      m.confirmPin.mockResolvedValue({ sessionToken: "tok", otherSessions: 1 });
+      m.sessions = [];
+      const user = userEvent.setup();
+      ui();
+      await signInStart(user);
+      await user.type(
+        await screen.findByLabelText(t.verify.pinLabel),
+        "123456",
+      );
+      const devices = await screen.findByRole("heading", {
+        name: t.verify.devicesTitle,
+      });
+      await waitFor(() => expect(devices).toHaveFocus());
+    });
+  });
 });

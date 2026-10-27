@@ -16,7 +16,10 @@ type Props = {
 };
 
 const PIN_LENGTH = 6;
-const heading = "text-xl font-semibold";
+const heading = "text-xl font-semibold outline-none";
+/** Marks the element that takes focus when its step appears. */
+const STEP_HEADING = "data-step-heading";
+const stepHeading = { tabIndex: -1, [STEP_HEADING]: "" } as const;
 const hint = "mt-1.5 leading-relaxed text-ink-soft";
 const errorText = "mt-2 font-medium text-[#8A2B1E]";
 
@@ -30,6 +33,16 @@ export function VerifySheet({ title, onVerified, onClose }: Props) {
     if (v.step === "done") onVerifiedRef.current();
   }, [v.step]);
 
+  // When the step changes, focus its heading so a screen reader announces where the flow is.
+  // The first step keeps the sheet's own focus handling (and the PIN box's autofocus on resume).
+  const body = useRef<HTMLDivElement>(null);
+  const shownStep = useRef(v.step);
+  useEffect(() => {
+    if (shownStep.current === v.step) return;
+    shownStep.current = v.step;
+    body.current?.querySelector<HTMLElement>(`[${STEP_HEADING}]`)?.focus();
+  }, [v.step]);
+
   // Leaving at confirm or pin drops the attempt, so the next person on a shared phone
   // cannot continue it. Leaving while waiting keeps it: the user may be in WhatsApp.
   const close = () => {
@@ -39,12 +52,14 @@ export function VerifySheet({ title, onVerified, onClose }: Props) {
 
   return (
     <Sheet title={title} onClose={close}>
-      {v.step === "name" && <NameStep v={v} />}
-      {v.step === "waiting" && <WaitingStep v={v} />}
-      {v.step === "confirm" && <ConfirmStep v={v} />}
-      {v.step === "pin" && <PinStep v={v} />}
-      {v.step === "devices" && <DevicesStep v={v} />}
-      {v.step === "error" && <ErrorStep v={v} />}
+      <div ref={body}>
+        {v.step === "name" && <NameStep v={v} />}
+        {v.step === "waiting" && <WaitingStep v={v} />}
+        {v.step === "confirm" && <ConfirmStep v={v} />}
+        {v.step === "pin" && <PinStep v={v} />}
+        {v.step === "devices" && <DevicesStep v={v} />}
+        {v.step === "error" && <ErrorStep v={v} />}
+      </div>
     </Sheet>
   );
 }
@@ -101,7 +116,9 @@ function WaitingStep({ v }: StepProps) {
           aria-label={t.verify.waitingTitle}
           className="mx-auto mt-1.5 mb-4 size-14 rounded-full border-[5px] border-paper-2 border-t-wa motion-safe:animate-spin"
         />
-        <h3 className={heading}>{t.verify.waitingTitle}</h3>
+        <h3 className={heading} {...stepHeading}>
+          {t.verify.waitingTitle}
+        </h3>
         <p className={hint}>{t.verify.waitingHint}</p>
       </div>
       {v.waUrl && (
@@ -130,7 +147,7 @@ function ConfirmStep({ v }: StepProps) {
         >
           ✓
         </div>
-        <h3 className={`${heading} mt-3`}>
+        <h3 className={`${heading} mt-3`} {...stepHeading}>
           {t.verify.confirmTitle(v.displayName)}
         </h3>
         {v.maskedPhone && (
@@ -191,7 +208,9 @@ function PinStep({ v }: StepProps) {
         if (pin.length === PIN_LENGTH && !v.busy) void submit(pin);
       }}
     >
-      <h3 className={heading}>{t.verify.pinTitle}</h3>
+      <h3 className={heading} {...stepHeading}>
+        {t.verify.pinTitle}
+      </h3>
       <p className={hint}>
         {t.verify.pinHint}
         {v.maskedPhone && (
@@ -260,7 +279,9 @@ function DevicesStep({ v }: StepProps) {
   const others = sessions?.filter((s) => !s.isCurrent);
   return (
     <div>
-      <h3 className={heading}>{t.verify.devicesTitle}</h3>
+      <h3 className={heading} {...stepHeading}>
+        {t.verify.devicesTitle}
+      </h3>
       <p className={hint}>{t.verify.devicesHint}</p>
       {others === undefined ? (
         <p role="status" className="mt-3 text-ink-soft">
@@ -305,7 +326,11 @@ function DevicesStep({ v }: StepProps) {
 function ErrorStep({ v }: StepProps) {
   return (
     <div>
-      <p role="alert" className="mt-2 text-lg leading-relaxed">
+      <p
+        role="alert"
+        className="mt-2 text-lg leading-relaxed outline-none"
+        {...stepHeading}
+      >
         {v.error}
       </p>
       {v.canRetry && (
