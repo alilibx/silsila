@@ -104,7 +104,7 @@ export function useVerification() {
     else if (getSessionToken() !== null) step = "done";
     else {
       step = "error";
-      statusError = "expired";
+      statusError = "generic";
     }
   } else if (phase === "pin" || live.status === "needs_pin") {
     step = "pin";
@@ -127,15 +127,19 @@ export function useVerification() {
     setPhase("error");
   }
 
-  /** Runs one server call at a time; a thrown call is a network failure. */
-  async function run(kind: Exclude<Busy, null>, work: () => Promise<void>) {
+  /** Runs one server call at a time; a thrown call is a network failure (by default it ends the attempt). */
+  async function run(
+    kind: Exclude<Busy, null>,
+    work: () => Promise<void>,
+    onThrow: () => void = () => fail("network"),
+  ) {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(kind);
     try {
       await work();
     } catch {
-      fail("network");
+      onThrow();
     } finally {
       busyRef.current = false;
       setBusy(null);
@@ -211,61 +215,87 @@ export function useVerification() {
     });
   }
 
+  // A thrown call keeps the attempt and its step; the user taps again.
+  const keepStep = () => setErrorCode("network");
+
   async function confirm(): Promise<void> {
     if (!saved) return;
-    await run("claim", async () => {
-      const res = await claim({
-        verificationId: saved.verificationId as Id<"verifications">,
-        secret: saved.secret,
-        deviceLabel: deviceLabel(navigator.userAgent),
-        timeZone: timeZone(),
-      });
-      if ("sessionToken" in res) return finish(res.sessionToken, 0);
-      if (res.error === "needs_pin") {
+    await run(
+      "claim",
+      async () => {
         setErrorCode(null);
-        return setPhase("pin");
-      }
-      fail("expired");
-    });
+        const res = await claim({
+          verificationId: saved.verificationId as Id<"verifications">,
+          secret: saved.secret,
+          deviceLabel: deviceLabel(navigator.userAgent),
+          timeZone: timeZone(),
+        });
+        if ("sessionToken" in res) return finish(res.sessionToken, 0);
+        if (res.error === "needs_pin") return setPhase("pin");
+        fail("expired");
+      },
+      keepStep,
+    );
   }
 
   async function notMe(): Promise<void> {
     if (!saved) return;
-    await run("notMe", async () => {
-      await reject({
-        verificationId: saved.verificationId as Id<"verifications">,
-        secret: saved.secret,
-      });
-      fail("rejected");
-    });
+    await run(
+      "notMe",
+      async () => {
+        setErrorCode(null);
+        await reject({
+          verificationId: saved.verificationId as Id<"verifications">,
+          secret: saved.secret,
+        });
+        fail("rejected");
+      },
+      keepStep,
+    );
   }
 
   async function submitPin(raw: string): Promise<void> {
     const pin = normalizeDigits(raw).replace(/\D/gu, "");
     if (!saved || pin.length !== PIN_LENGTH) return;
-    await run("pin", async () => {
-      const res = await confirmPin({
-        verificationId: saved.verificationId as Id<"verifications">,
-        secret: saved.secret,
-        pin,
-        deviceLabel: deviceLabel(navigator.userAgent),
-        timeZone: timeZone(),
-      });
-      if ("sessionToken" in res) {
-        return finish(res.sessionToken, res.otherSessions);
-      }
-      if (res.error === "wrong_pin") return setErrorCode("wrong_pin");
-      fail(res.error);
-    });
+    await run(
+      "pin",
+      async () => {
+        setErrorCode(null);
+        const res = await confirmPin({
+          verificationId: saved.verificationId as Id<"verifications">,
+          secret: saved.secret,
+          pin,
+          deviceLabel: deviceLabel(navigator.userAgent),
+          timeZone: timeZone(),
+        });
+        if ("sessionToken" in res) {
+          return finish(res.sessionToken, res.otherSessions);
+        }
+        if (res.error === "wrong_pin") return setErrorCode("wrong_pin");
+        fail(res.error);
+      },
+      keepStep,
+    );
   }
 
+  /** The user is already signed in here, so a failure stays on the devices step. */
   async function signOutOthers(): Promise<void> {
-    await run("signOut", async () => {
-      await signOutOthersMutation({
-        sessionToken: getSessionToken() ?? undefined,
-      });
-      setPhase("done");
-    });
+    await run(
+      "signOut",
+      async () => {
+        setErrorCode(null);
+        await signOutOthersMutation({
+          sessionToken: getSessionToken() ?? undefined,
+        });
+        setPhase("done");
+      },
+      keepStep,
+    );
+  }
+
+  /** Forgets a sign-in that was not finished, e.g. when the sheet closes on a shared phone. */
+  function discard(): void {
+    clearProgress();
   }
 
   function continueFromDevices(): void {
@@ -305,5 +335,6 @@ export function useVerification() {
     continueFromDevices,
     reopenWhatsApp,
     reset,
+    discard,
   };
 }

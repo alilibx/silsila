@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { KhatmaView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { MainCard } from "../components/MainCard";
 import { PoolGrid } from "../components/PoolGrid";
@@ -10,7 +10,11 @@ import { Ring } from "../components/Ring";
 import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
-import { useSessionToken } from "../lib/session";
+import {
+  clearSessionToken,
+  getSessionToken,
+  useSessionToken,
+} from "../lib/session";
 import { NotFoundPage } from "./NotFoundPage";
 
 const chip =
@@ -34,8 +38,24 @@ export function KhatmaPage() {
     ...(from ? { from } : {}),
   });
 
+  // The server decides who is signed in; a stored token alone proves nothing.
+  const signedIn =
+    view !== undefined && !("notFound" in view) && view.me.signedIn;
+  const tokenIsDead =
+    sessionToken !== undefined &&
+    view !== undefined &&
+    !("notFound" in view) &&
+    !view.me.signedIn;
+
+  // A revoked or expired token is dead, and nothing else clears it. `view` is only defined
+  // once Convex has answered for the current args (it is undefined while they change), and
+  // the storage check skips a token that was replaced between render and effect.
+  useEffect(() => {
+    if (tokenIsDead && getSessionToken() === sessionToken) clearSessionToken();
+  }, [tokenIsDead, sessionToken]);
+
   const take = (juz: number) => {
-    if (sessionToken) openTakeSheet(juz);
+    if (signedIn) openTakeSheet(juz);
     else setPendingJuz(juz);
   };
   const verified = () => {

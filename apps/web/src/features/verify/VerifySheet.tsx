@@ -30,8 +30,15 @@ export function VerifySheet({ title, onVerified, onClose }: Props) {
     if (v.step === "done") onVerifiedRef.current();
   }, [v.step]);
 
+  // Leaving at confirm or pin drops the attempt, so the next person on a shared phone
+  // cannot continue it. Leaving while waiting keeps it: the user may be in WhatsApp.
+  const close = () => {
+    if (v.step === "confirm" || v.step === "pin") v.discard();
+    onClose();
+  };
+
   return (
-    <Sheet title={title} onClose={onClose}>
+    <Sheet title={title} onClose={close}>
       {v.step === "name" && <NameStep v={v} />}
       {v.step === "waiting" && <WaitingStep v={v} />}
       {v.step === "confirm" && <ConfirmStep v={v} />}

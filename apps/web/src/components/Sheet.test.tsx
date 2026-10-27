@@ -46,6 +46,21 @@ describe("Sheet", () => {
     }
   });
 
+  it("leaves focus on an autofocused field inside, and still restores the opener", () => {
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = render(
+      <Sheet title="x" onClose={() => {}}>
+        <input aria-label="field" autoFocus />
+      </Sheet>,
+    );
+    expect(screen.getByLabelText("field")).toHaveFocus();
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
   it("returns focus to the opener when it unmounts", () => {
     const opener = document.createElement("button");
     document.body.append(opener);

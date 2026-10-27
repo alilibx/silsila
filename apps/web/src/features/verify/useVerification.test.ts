@@ -46,7 +46,12 @@ const WA_URL =
   "https://wa.me/971500000000?text=" + encodeURIComponent(START.message);
 
 const fetchMock = vi.fn();
-const fakeWindow = { location: { href: "" }, closed: false, close: vi.fn() };
+const fakeWindow = {
+  location: { href: "" },
+  closed: false,
+  close: vi.fn(),
+  opener: {} as unknown,
+};
 const open = vi.fn();
 
 function reply(status: number, body: unknown) {
@@ -81,6 +86,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   fakeWindow.location.href = "";
   fakeWindow.closed = false;
+  fakeWindow.opener = {};
   fakeWindow.close.mockReset();
   open.mockReset();
   open.mockReturnValue(fakeWindow);
@@ -130,6 +136,7 @@ describe("useVerification: start", () => {
     const { result } = await started();
     expect(open).toHaveBeenCalledTimes(1);
     expect(fakeWindow.location.href).toBe(WA_URL);
+    expect(fakeWindow.opener).toBeNull();
     expect(result.current.waUrl).toBe(WA_URL);
     expect(result.current.opened).toBe(true);
   });
@@ -251,15 +258,22 @@ describe("useVerification: statuses", () => {
     expect(result.current.error).toBe(t.verify.errors.expired);
   });
 
-  it("a claim that throws is a network error", async () => {
+  it("a claim that throws keeps the attempt on the confirm step with a network error", async () => {
     setStatus("matched");
-    m.claim.mockRejectedValue(new Error("boom"));
+    m.claim.mockRejectedValueOnce(new Error("boom"));
+    m.claim.mockResolvedValueOnce({ sessionToken: "tok" });
     const { result } = await started();
     await act(async () => {
       await result.current.confirm();
     });
-    expect(result.current.step).toBe("error");
+    expect(result.current.step).toBe("confirm");
     expect(result.current.error).toBe(t.verify.errors.network);
+    expect(localStorage.getItem(STORE)).not.toBeNull();
+    await act(async () => {
+      await result.current.confirm();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.step).toBe("done");
   });
 
   it("status expired is an error and clears the saved progress", async () => {
@@ -267,6 +281,15 @@ describe("useVerification: statuses", () => {
     const { result } = await started();
     expect(result.current.step).toBe("error");
     expect(result.current.error).toBe(t.verify.errors.expired);
+    expect(localStorage.getItem(STORE)).toBeNull();
+  });
+
+  it("status rejected from the live query is a retryable error", async () => {
+    setStatus("rejected");
+    const { result } = await started();
+    expect(result.current.step).toBe("error");
+    expect(result.current.error).toBe(t.verify.errors.rejected);
+    expect(result.current.canRetry).toBe(true);
     expect(localStorage.getItem(STORE)).toBeNull();
   });
 
@@ -291,6 +314,7 @@ describe("useVerification: statuses", () => {
     setStatus("claimed");
     const noToken = await started();
     expect(noToken.result.current.step).toBe("error");
+    expect(noToken.result.current.error).toBe(t.verify.errors.generic);
     noToken.unmount();
     localStorage.clear();
     const { setSessionToken } = await import("../../lib/session");
@@ -336,6 +360,17 @@ describe("useVerification: pin", () => {
     expect(result.current.step).toBe("done");
   });
 
+  it("a pin call that throws keeps the pin step with a network error", async () => {
+    m.confirmPin.mockRejectedValue(new Error("boom"));
+    const { result } = await atPin();
+    await act(async () => {
+      await result.current.submitPin("123456");
+    });
+    expect(result.current.step).toBe("pin");
+    expect(result.current.error).toBe(t.verify.errors.network);
+    expect(localStorage.getItem(STORE)).not.toBeNull();
+  });
+
   it("ignores a pin that is not six digits", async () => {
     const { result } = await atPin();
     await act(async () => {
@@ -368,6 +403,23 @@ describe("useVerification: pin", () => {
       await result.current.signOutOthers();
     });
     expect(m.signOutOthers).toHaveBeenCalledWith({ sessionToken: "tok" });
+    expect(result.current.step).toBe("done");
+  });
+
+  it("a failed sign-out stays on the devices step with the error", async () => {
+    m.confirmPin.mockResolvedValue({ sessionToken: "tok", otherSessions: 2 });
+    m.signOutOthers.mockRejectedValue(new Error("offline"));
+    const { result } = await atPin();
+    await act(async () => {
+      await result.current.submitPin("123456");
+    });
+    await act(async () => {
+      await result.current.signOutOthers();
+    });
+    expect(result.current.step).toBe("devices");
+    expect(result.current.error).toBe(t.verify.errors.network);
+    expect(getSessionToken()).toBe("tok");
+    act(() => result.current.continueFromDevices());
     expect(result.current.step).toBe("done");
   });
 

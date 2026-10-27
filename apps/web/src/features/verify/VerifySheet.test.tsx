@@ -265,6 +265,55 @@ describe("VerifySheet", () => {
     });
   });
 
+  it("a failed sign-out shows the error on the devices step, and continue still finishes", async () => {
+    const user = userEvent.setup();
+    m.status = { status: "needs_pin", maskedPhone: "+971 50 ••• 1234" };
+    m.confirmPin.mockResolvedValue({ sessionToken: "tok", otherSessions: 1 });
+    m.signOutOthers.mockRejectedValue(new Error("offline"));
+    m.sessions = [];
+    ui();
+    await signInStart(user);
+    await user.type(await screen.findByLabelText(t.verify.pinLabel), "123456");
+    await user.click(
+      await screen.findByRole("button", { name: t.verify.signOutOthers }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.verify.errors.network,
+    );
+    expect(onVerified).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: t.verify.keep }));
+    expect(onVerified).toHaveBeenCalledTimes(1);
+  });
+
+  it("closing at confirm or pin drops the stored progress", async () => {
+    for (const status of ["matched", "needs_pin"]) {
+      localStorage.clear();
+      m.status = { status, maskedPhone: "+971 50 ••• 1234" };
+      const user = userEvent.setup();
+      const view = ui();
+      await signInStart(user);
+      await screen.findByRole("button", {
+        name: status === "matched" ? t.verify.yes : t.verify.pinSubmit,
+      });
+      expect(localStorage.getItem("silsila.verify")).not.toBeNull();
+      await user.click(screen.getByRole("button", { name: t.sheet.close }));
+      expect(localStorage.getItem("silsila.verify")).toBeNull();
+      view.unmount();
+    }
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("closing while waiting keeps the stored progress", async () => {
+    m.status = { status: "pending", maskedPhone: null };
+    const user = userEvent.setup();
+    ui();
+    await signInStart(user);
+    await screen.findByRole("status");
+    await user.click(screen.getByRole("button", { name: t.sheet.close }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("silsila.verify")).not.toBeNull();
+  });
+
   it("resumes a stored verification after a reload", () => {
     localStorage.setItem(
       "silsila.verify",
@@ -278,5 +327,20 @@ describe("VerifySheet", () => {
     m.status = { status: "matched", maskedPhone: "+971 50 ••• 1234" };
     ui();
     expect(screen.getByText(t.verify.confirmTitle("علي"))).toBeInTheDocument();
+  });
+
+  it("resuming at the pin step leaves focus in the pin box", () => {
+    localStorage.setItem(
+      "silsila.verify",
+      JSON.stringify({
+        verificationId: "v1",
+        secret: "sec",
+        displayName: "علي",
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+    m.status = { status: "needs_pin", maskedPhone: "+971 50 ••• 1234" };
+    ui();
+    expect(screen.getByLabelText(t.verify.pinLabel)).toHaveFocus();
   });
 });

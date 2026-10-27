@@ -9,8 +9,12 @@ import { NotFoundPage } from "./NotFoundPage";
 
 const useQuery = vi.fn();
 const useSessionToken = vi.fn<() => string | undefined>();
+const getSessionToken = vi.fn<() => string | null>();
+const clearSessionToken = vi.fn();
 vi.mock("../lib/session", () => ({
   useSessionToken: () => useSessionToken(),
+  getSessionToken: () => getSessionToken(),
+  clearSessionToken: () => clearSessionToken(),
 }));
 vi.mock("../features/verify/VerifySheet", () => ({
   VerifySheet: (props: {
@@ -44,6 +48,9 @@ describe("KhatmaPage", () => {
     useQuery.mockReset();
     useSessionToken.mockReset();
     useSessionToken.mockReturnValue(undefined);
+    getSessionToken.mockReset();
+    getSessionToken.mockReturnValue(null);
+    clearSessionToken.mockReset();
   });
 
   it("shows the not-found message for notFound", () => {
@@ -237,6 +244,33 @@ describe("KhatmaPage", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
+    it("a stored token the server rejects does not count as signed in, and is cleared", async () => {
+      useSessionToken.mockReturnValue("dead");
+      getSessionToken.mockReturnValue("dead");
+      useQuery.mockReturnValue(signedOutView());
+      renderAt("/j/CODE");
+      expect(clearSessionToken).toHaveBeenCalledTimes(1);
+      await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+      expect(
+        screen.getByRole("dialog", { name: "قبل أن تأخذ جزءاً" }),
+      ).toBeInTheDocument();
+    });
+
+    it("does not clear a token that changed since the result, nor while loading, nor when signed out", () => {
+      useSessionToken.mockReturnValue("old");
+      getSessionToken.mockReturnValue("new");
+      useQuery.mockReturnValue(signedOutView());
+      renderAt("/j/CODE");
+      useQuery.mockReturnValue(undefined);
+      getSessionToken.mockReturnValue("old");
+      renderAt("/j/CODE");
+      useSessionToken.mockReturnValue(undefined);
+      getSessionToken.mockReturnValue(null);
+      useQuery.mockReturnValue(signedOutView());
+      renderAt("/j/CODE");
+      expect(clearSessionToken).not.toHaveBeenCalled();
+    });
+
     it("does not open the sheet while signed in", async () => {
       useSessionToken.mockReturnValue("tok");
       useQuery.mockReturnValue(
@@ -253,6 +287,7 @@ describe("KhatmaPage", () => {
       renderAt("/j/CODE");
       await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(clearSessionToken).not.toHaveBeenCalled();
     });
   });
 });

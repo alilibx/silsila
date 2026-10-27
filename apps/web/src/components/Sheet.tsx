@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
@@ -22,9 +23,14 @@ export function Sheet({ title, onClose, children }: Props) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Read during the first render, before any child's autoFocus moves focus into the sheet.
+  const [opener] = useState(() => document.activeElement);
+
   useEffect(() => {
-    const opener = document.activeElement;
-    panel.current?.focus();
+    // An autofocused field inside the sheet (the PIN box on resume) keeps focus.
+    if (!panel.current?.contains(document.activeElement)) {
+      panel.current?.focus();
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onCloseRef.current();
     };
@@ -33,7 +39,7 @@ export function Sheet({ title, onClose, children }: Props) {
       document.removeEventListener("keydown", onKey);
       if (opener instanceof HTMLElement) opener.focus();
     };
-  }, []);
+  }, [opener]);
 
   // Tab wraps inside the sheet; the panel itself is the entry point when nothing inside has focus.
   function trapTab(event: ReactKeyboardEvent<HTMLDivElement>) {
