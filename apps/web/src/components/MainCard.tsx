@@ -1,6 +1,6 @@
 import type { KhatmaView } from "@convex/khatmas";
 import { JUZ } from "@convex/lib/juz";
-import { toArabicDigits } from "@convex/lib/text";
+import { toArabicDigits } from "@convex/lib/digits";
 import { t } from "../i18n/ar";
 import { Button } from "./Button";
 

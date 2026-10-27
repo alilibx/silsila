@@ -10,7 +10,6 @@ export const ar = {
     create: "ختمة جديدة",
     khatma: "الختمة",
     signOut: "تسجيل الخروج",
-    notFound: "هذه الصفحة غير موجودة",
   },
   common: {
     loading: "جارٍ التحميل",
@@ -29,10 +28,9 @@ export const ar = {
     none: "بلا موعد محدد",
   } satisfies Record<Schedule, string>,
   khatma: {
-    invited: (inviter: string) =>
-      `دعاك ${inviter} إلى هذه الختمة. تصفّحها بحرية، وعندما تأخذ جزءاً نتحقق من رقمك عبر واتساب.`,
-    invitedAnon:
-      "دُعيتَ إلى هذه الختمة. تصفّحها بحرية، وعندما تأخذ جزءاً نتحقق من رقمك عبر واتساب.",
+    invited: (inviter: string) => `دعاك ${inviter} إلى هذه الختمة.`,
+    invitedAnon: "دُعيتَ إلى هذه الختمة.",
+    verifyHint: "تصفّحها بحرية، وعندما تأخذ جزءاً نتحقق من رقمك عبر واتساب.",
     untitled: (date: string) => `ختمة ${date}`,
     round: (n: string) => `الختمة ${n}`,
     target: (date: string) => `الهدف: ${date}`,

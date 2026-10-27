@@ -1,11 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { KhatmaView } from "@convex/khatmas";
 import { makeTiles, makeView } from "../test/fixtures";
 import { KhatmaPage } from "./KhatmaPage";
 import { NotFoundPage } from "./NotFoundPage";
 
 const useQuery = vi.fn();
+const useSessionToken = vi.fn<() => string | undefined>();
+vi.mock("../lib/session", () => ({
+  useSessionToken: () => useSessionToken(),
+}));
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQuery(...args),
 }));
@@ -24,6 +29,8 @@ function renderAt(url: string) {
 describe("KhatmaPage", () => {
   beforeEach(() => {
     useQuery.mockReset();
+    useSessionToken.mockReset();
+    useSessionToken.mockReturnValue(undefined);
   });
 
   it("shows the not-found message for notFound", () => {
@@ -82,7 +89,8 @@ describe("KhatmaPage", () => {
     expect(
       screen.getByText("ختمتم معاً ١١ ختمة، الحمد لله"),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/^دعاك/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^الهدف:/)).toBeInTheDocument();
   });
 
   it("falls back to a dated title and hides the total when none finished", () => {
@@ -94,8 +102,29 @@ describe("KhatmaPage", () => {
     expect(screen.queryByText(/ختمتم معاً/)).not.toBeInTheDocument();
   });
 
-  it("shows the viewer ribbon to non-members only", () => {
-    useQuery.mockReturnValue(
+  it("sends sessionToken undefined when signed out and the token when signed in", () => {
+    useQuery.mockReturnValue(undefined);
+    renderAt("/j/CODE");
+    expect(useQuery.mock.calls[0]?.[1]).toHaveProperty(
+      "sessionToken",
+      undefined,
+    );
+    useQuery.mockClear();
+    useSessionToken.mockReturnValue("tok123");
+    renderAt("/j/CODE");
+    expect(useQuery.mock.calls[0]?.[1]).toMatchObject({
+      sessionToken: "tok123",
+    });
+  });
+
+  it("hides the target chip when there is no target end", () => {
+    useQuery.mockReturnValue(makeView({ targetEndAt: null }));
+    renderAt("/j/CODE");
+    expect(screen.queryByText(/^الهدف:/)).not.toBeInTheDocument();
+  });
+
+  describe("viewer ribbon", () => {
+    const viewer = (over: Partial<KhatmaView["me"]>) =>
       makeView({
         inviterName: "أحمد",
         me: {
@@ -104,10 +133,38 @@ describe("KhatmaPage", () => {
           holding: null,
           suggestion: 1,
           celebrateRound: null,
+          ...over,
         },
-      }),
-    );
-    renderAt("/j/CODE?from=SHARE1");
-    expect(screen.getByText(/^دعاك أحمد إلى هذه الختمة/)).toBeInTheDocument();
+      });
+
+    it("signed-out viewer sees the invite and the verification tail", () => {
+      useQuery.mockReturnValue(viewer({}));
+      renderAt("/j/CODE?from=SHARE1");
+      const ribbon = screen.getByRole("note");
+      expect(ribbon).toHaveTextContent("دعاك أحمد إلى هذه الختمة.");
+      expect(ribbon).toHaveTextContent("نتحقق من رقمك عبر واتساب");
+    });
+
+    it("signed-in non-member sees the invite without the verification tail", () => {
+      useQuery.mockReturnValue(viewer({ signedIn: true }));
+      renderAt("/j/CODE?from=SHARE1");
+      const ribbon = screen.getByRole("note");
+      expect(ribbon).toHaveTextContent("دعاك أحمد إلى هذه الختمة.");
+      expect(ribbon).not.toHaveTextContent("واتساب");
+    });
+
+    it("anonymous invite (no inviter name) still shows a ribbon", () => {
+      useQuery.mockReturnValue({ ...viewer({}), inviterName: null });
+      renderAt("/j/CODE");
+      const ribbon = screen.getByRole("note");
+      expect(ribbon).toHaveTextContent("دُعيتَ إلى هذه الختمة.");
+      expect(ribbon).not.toHaveTextContent("دعاك");
+    });
+
+    it("members get no ribbon", () => {
+      useQuery.mockReturnValue(makeView({ inviterName: "أحمد" }));
+      renderAt("/j/CODE?from=SHARE1");
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
   });
 });

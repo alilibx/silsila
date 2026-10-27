@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toArabicDigits } from "@convex/lib/text";
+import { toArabicDigits } from "@convex/lib/digits";
 import { t } from "../i18n/ar";
 import { deviceLabel, formatDate } from "./format";
 

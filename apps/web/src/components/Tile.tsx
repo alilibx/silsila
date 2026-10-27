@@ -1,5 +1,5 @@
 import type { TileView } from "@convex/khatmas";
-import { toArabicDigits } from "@convex/lib/text";
+import { toArabicDigits } from "@convex/lib/digits";
 import { t } from "../i18n/ar";
 
 type Props = { tile: TileView; onTake: (juz: number) => void };
@@ -21,7 +21,9 @@ export function Tile({ tile, onTake }: Props) {
     state === "done"
       ? t.tile.doneWord
       : state === "reading"
-        ? t.tile.reading
+        ? isMine
+          ? t.tile.mine
+          : t.tile.reading
         : t.tile.open;
   const label = [t.tile.juz(number), name, stateWord, reader]
     .filter(Boolean)

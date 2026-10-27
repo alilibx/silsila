@@ -1,5 +1,5 @@
 import type { TileView } from "@convex/khatmas";
-import { toArabicDigits } from "@convex/lib/text";
+import { toArabicDigits } from "@convex/lib/digits";
 import { t } from "../i18n/ar";
 import { Tile } from "./Tile";
 

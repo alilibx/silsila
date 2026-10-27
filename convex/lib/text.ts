@@ -1,21 +1,10 @@
 import { parsePhoneNumberFromString } from "libphonenumber-js/min";
 
-const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+// Re-exported so existing Convex imports keep working; the web app imports ./digits directly.
+export { normalizeDigits, toArabicDigits } from "./digits";
+
 const DISPLAY_NAME_MAX = 40;
 const KHATMA_NAME_MAX = 60;
-
-/** Replaces ASCII digits with Eastern Arabic digits (١٢٣). */
-export function toArabicDigits(v: number | string): string {
-  return String(v).replace(/\d/g, (d) => ARABIC_DIGITS[Number(d)] ?? d);
-}
-
-/** Maps Arabic-Indic (٠-٩) and Persian (۰-۹) digits to ASCII. */
-export function normalizeDigits(s: string): string {
-  return s.replace(/[٠-٩۰-۹]/g, (c) => {
-    const code = c.charCodeAt(0);
-    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
-  });
-}
 
 // Invisible characters that render as blank but are not whitespace or \p{Cf}:
 // Braille blank (U+2800), Hangul fillers (U+115F, U+1160, U+3164, U+FFA0).

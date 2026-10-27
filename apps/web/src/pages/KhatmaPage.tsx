@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { toArabicDigits } from "@convex/lib/text";
+import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { MainCard } from "../components/MainCard";
@@ -49,10 +49,14 @@ export function KhatmaPage() {
       </header>
 
       {!view.me.isMember && (
-        <p className="mb-3.5 rounded-ui border border-[#BFE0CB] bg-[#E7F5EC] p-3 text-ink">
+        <p
+          role="note"
+          className="mb-3.5 rounded-ui border border-[#BFE0CB] bg-[#E7F5EC] p-3 text-ink"
+        >
           {view.inviterName
             ? t.khatma.invited(view.inviterName)
             : t.khatma.invitedAnon}
+          {!view.me.signedIn && ` ${t.khatma.verifyHint}`}
         </p>
       )}
 

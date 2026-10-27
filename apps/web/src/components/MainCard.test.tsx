@@ -82,4 +82,11 @@ describe("MainCard", () => {
     expect(screen.getByText("كل الأجزاء مأخوذة الآن")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  it("renders no card for a blocked member (open tiles but no suggestion)", () => {
+    const { container } = render(
+      <MainCard view={makeView()} {...handlers()} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 });

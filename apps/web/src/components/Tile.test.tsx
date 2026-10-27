@@ -53,6 +53,9 @@ describe("Tile", () => {
       />,
     );
     expect(screen.getByText("أنت تقرؤه")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "الجزء ٨، ولو أننا، أنت تقرؤه" }),
+    ).toBeDisabled();
   });
 
   it("done tile never shows a name", () => {
