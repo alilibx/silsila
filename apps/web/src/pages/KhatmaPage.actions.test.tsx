@@ -204,7 +204,7 @@ describe("take", () => {
     const { user } = setup(makeView({ me: signedIn() }));
     await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
     await user.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
-    expect(toast()).toHaveTextContent(t.actions.errors.network);
+    expect(toast()).toHaveTextContent(t.errors.network);
     const again = screen.getByRole("button", { name: "نعم، هذا جزئي" });
     expect(again).toBeEnabled();
     await user.click(again);
@@ -228,6 +228,89 @@ describe("take", () => {
     expect(m.take).toHaveBeenCalledTimes(1);
     await act(async () => finish({ ok: true }));
     expect(toast()).toHaveTextContent("لك الآن");
+  });
+});
+
+describe("live region", () => {
+  it("is mounted before any toast, polite, and stays the same node when one arrives", async () => {
+    m.take.mockResolvedValue({ ok: true });
+    const { user } = setup(makeView({ me: signedIn() }));
+    const region = screen.getByRole("status");
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toBeEmptyDOMElement();
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    await user.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region).toHaveTextContent("لك الآن");
+  });
+});
+
+describe("stale state", () => {
+  const lostRace = async () => {
+    m.take.mockResolvedValue({ ok: false, reason: "taken" });
+    const ctx = setup(makeView({ me: signedIn() }));
+    await ctx.user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    await ctx.user.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
+    return ctx;
+  };
+  const later = () =>
+    makeView({
+      tiles: makeTiles({ 3: { state: "reading", readerName: "سارة" } }),
+      me: signedIn({ suggestion: 4 }),
+    });
+
+  it("the wait for a new suggestion is bounded: a later unrelated change opens nothing", async () => {
+    const { show } = await lostRace();
+    act(() => void vi.advanceTimersByTime(6_000));
+    show(later());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("any user action ends the wait", async () => {
+    const { user, show } = await lostRace();
+    await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
+    await user.click(screen.getByRole("button", { name: "ليس الآن" }));
+    show(later());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("a finished attempt does not reopen again on the next change", async () => {
+    const { user, show } = await lostRace();
+    show(later());
+    expect(screen.getByRole("dialog", { name: "الجزء ٤" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "ليس الآن" }));
+    show(
+      makeView({
+        tiles: makeTiles({ 3: { state: "reading" }, 4: { state: "reading" } }),
+        me: signedIn({ suggestion: 5 }),
+      }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("clears the take sheet when the celebration starts, and it stays gone afterwards", async () => {
+    const { user, show } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    show(
+      makeView({
+        lastCompleted: { roundNumber: 12, participants: 7 },
+        me: signedIn({ celebrateRound: 12 }),
+      }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    show(makeView({ me: signedIn() }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the release sheet when the juz' is no longer held", async () => {
+    const { user, show } = setup(
+      makeView({ me: signedIn({ holding: 5, suggestion: null }) }),
+    );
+    await user.click(screen.getByRole("button", { name: "لا أستطيع إكماله" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    show(makeView({ me: signedIn({ holding: null, suggestion: 3 }) }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -320,19 +403,37 @@ describe("finish and undo", () => {
     expect(screen.queryByRole("button", { name: "تراجع" })).toBeNull();
     expect(toast()).toHaveTextContent("تقبّل الله منك 🤍");
     act(() => void vi.advanceTimersByTime(10_000));
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(toast()).toBeEmptyDOMElement();
   });
 
-  it("clamps the countdown to ten seconds, and to zero when it already passed", async () => {
-    m.finish.mockResolvedValueOnce({ ok: true, undoUntil: NOW + 60_000 });
+  it.each([
+    ["ahead of this clock by a minute", NOW + 60_000],
+    ["already in the past", NOW - 5],
+    ["exactly now", NOW],
+  ])(
+    "a skewed undoUntil (%s) falls back to the full window from receipt",
+    async (_label, undoUntil) => {
+      m.finish.mockResolvedValue({ ok: true, undoUntil });
+      const { user } = setup(holding());
+      await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
+      expect(screen.getByTestId("undo-bar")).toHaveStyle({
+        animationDuration: "10000ms",
+      });
+      expect(screen.getByRole("button", { name: "تراجع" })).toBeInTheDocument();
+      act(() => void vi.advanceTimersByTime(9_900));
+      expect(screen.getByRole("button", { name: "تراجع" })).toBeInTheDocument();
+      act(() => void vi.advanceTimersByTime(200));
+      expect(screen.queryByRole("button", { name: "تراجع" })).toBeNull();
+    },
+  );
+
+  it("trusts a deadline inside the window, even when it is the last millisecond", async () => {
+    m.finish.mockResolvedValue({ ok: true, undoUntil: NOW + 10_000 });
     const { user } = setup(holding());
     await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
     expect(screen.getByTestId("undo-bar")).toHaveStyle({
       animationDuration: "10000ms",
     });
-    m.finish.mockResolvedValueOnce({ ok: true, undoUntil: NOW - 5 });
-    await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
-    expect(screen.queryByRole("button", { name: "تراجع" })).toBeNull();
   });
 
   it("only one toast shows at a time, and the newest wins", async () => {
@@ -345,6 +446,7 @@ describe("finish and undo", () => {
     await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
     await user.click(screen.getByRole("button", { name: "تراجع" }));
     expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(toast().children).toHaveLength(1);
     expect(toast()).toHaveTextContent(t.actions.errors.undo.window_closed);
     expect(toast()).not.toHaveTextContent("🤍");
   });
@@ -382,7 +484,7 @@ describe("finish and undo", () => {
     m.finish.mockRejectedValue(new Error("offline"));
     const { user } = setup(holding());
     await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
-    expect(toast()).toHaveTextContent(t.actions.errors.network);
+    expect(toast()).toHaveTextContent(t.errors.network);
     expect(
       screen.getByRole("button", { name: "أتممتُ القراءة" }),
     ).toBeEnabled();
@@ -448,7 +550,7 @@ describe("release", () => {
     const { user } = setup(holding());
     await user.click(screen.getByRole("button", { name: "لا أستطيع إكماله" }));
     await user.click(screen.getByRole("button", { name: "أعِده إلى الختمة" }));
-    expect(toast()).toHaveTextContent(t.actions.errors.network);
+    expect(toast()).toHaveTextContent(t.errors.network);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "أعِده إلى الختمة" }),
@@ -496,10 +598,10 @@ describe("celebration", () => {
     const { user } = setup(celebrating());
     const go = () => screen.getByRole("button", { name: "تابع إلى الختمة" });
     await user.click(go());
-    expect(toast()).toHaveTextContent(t.actions.errors.generic);
+    expect(toast()).toHaveTextContent(t.errors.generic);
     expect(go()).toBeEnabled();
     await user.click(go());
-    expect(toast()).toHaveTextContent(t.actions.errors.network);
+    expect(toast()).toHaveTextContent(t.errors.network);
     expect(m.markCelebrated).toHaveBeenCalledTimes(2);
   });
 

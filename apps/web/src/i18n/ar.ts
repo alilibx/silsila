@@ -1,7 +1,14 @@
 import type { Schedule } from "@convex/lib/schedule";
 
+/** Copy every feature shares for failures it cannot explain more precisely. */
+const commonErrors = {
+  network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
+  generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+} as const;
+
 /** Every UI string lives here. Components never contain Arabic literals. */
 export const ar = {
+  errors: commonErrors,
   app: {
     name: "سلسلة",
   },
@@ -108,8 +115,8 @@ export const ar = {
       maintenance: "سلسلة في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
       whatsapp_not_configured:
         "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه.",
-      network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
-      generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+      network: commonErrors.network,
+      generic: commonErrors.generic,
       expired: "انتهت مهلة الرمز. ابدأ من جديد، ولن يستغرق ذلك دقيقة.",
       rejected: "حسناً، لم نربط هذا الرقم. جرّب مرة أخرى بالرقم الذي تقصده.",
       wrong_pin:
@@ -138,8 +145,6 @@ export const ar = {
   /** Why an action did not go through. Every reason the server can give has kind copy. */
   actions: {
     errors: {
-      network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
-      generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
       notHolding: "ليس معك جزء الآن.",
       shared: {
         blocked:

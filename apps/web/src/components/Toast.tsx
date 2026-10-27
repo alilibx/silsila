@@ -9,8 +9,8 @@ export type ToastData = {
   /** A new id replaces the toast on screen and restarts its timers. */
   id: number;
   text: string;
-  /** Present for the finish toast: when the undo window closes (epoch ms). */
-  undoUntil?: number;
+  /** Present for the finish toast: how long the undo button stays, in ms (0 < n <= 10 000). */
+  undoMs?: number;
 };
 
 type Props = {
@@ -20,30 +20,22 @@ type Props = {
   onDismiss: () => void;
 };
 
-/** Time left for undo, clamped to 0..10 s so a skewed clock cannot stretch the window. */
-function undoMs(until: number): number {
-  return Math.min(UNDO_WINDOW_MS, Math.max(0, until - Date.now()));
-}
-
 /**
- * One toast at a time. A finish toast offers an undo button with a bar that drains over the time
- * left; at zero the button goes away, and the message lingers a moment longer. Mount it
- * with `key={toast.id}` so a new toast starts clean.
+ * One toast at a time, shown inside the page's always-mounted live region. A finish toast
+ * offers an undo button with a bar that drains over `undoMs`; at zero the button goes away
+ * and the message lingers a moment longer. Mount it with `key={toast.id}` so a new toast
+ * starts clean.
  */
 export function Toast({ toast, busy, onUndo, onDismiss }: Props) {
-  const { undoUntil } = toast;
-  const [remaining] = useState(() =>
-    undoUntil === undefined ? null : undoMs(undoUntil),
-  );
-  const [expired, setExpired] = useState(remaining === 0);
+  const remaining = toast.undoMs ?? null;
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     if (remaining === null) {
       timers.push(setTimeout(onDismiss, MESSAGE_MS));
     } else {
-      if (remaining > 0)
-        timers.push(setTimeout(() => setExpired(true), remaining));
+      timers.push(setTimeout(() => setExpired(true), remaining));
       timers.push(setTimeout(onDismiss, remaining + LINGER_MS));
     }
     return () => timers.forEach(clearTimeout);
@@ -53,11 +45,7 @@ export function Toast({ toast, busy, onUndo, onDismiss }: Props) {
   const canUndo = remaining !== null && !expired;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-x-4 bottom-5 z-30 mx-auto flex max-w-xl animate-sheet-up items-center justify-between gap-3 overflow-hidden rounded-[18px] bg-green-deep px-4 py-3.5 text-[#F7F1E3] shadow-[0_12px_30px_rgba(0,0,0,0.3)]"
-    >
+    <div className="fixed inset-x-4 bottom-5 z-30 mx-auto flex max-w-xl animate-sheet-up items-center justify-between gap-3 overflow-hidden rounded-[18px] bg-green-deep px-4 py-3.5 text-[#F7F1E3] shadow-[0_12px_30px_rgba(0,0,0,0.3)]">
       <span className="py-1.5 text-lg font-medium">{toast.text}</span>
       {canUndo && (
         <>

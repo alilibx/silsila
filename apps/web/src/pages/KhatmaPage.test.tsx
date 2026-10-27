@@ -70,7 +70,10 @@ describe("KhatmaPage", () => {
   it("shows a loading state while the query is pending", () => {
     useQuery.mockReturnValue(undefined);
     renderAt("/j/CODE");
-    expect(screen.getByRole("status")).toHaveTextContent("جارٍ التحميل");
+    expect(screen.getByText("جارٍ التحميل")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    // The page's one live region is for toasts; loading must not add a second status.
+    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
   it("passes the invite code and the from param, and omits from when absent", () => {
@@ -241,7 +244,7 @@ describe("KhatmaPage", () => {
           </Routes>
         </MemoryRouter>,
       );
-      expect(screen.getByRole("status")).toHaveTextContent("جارٍ التحميل");
+      expect(screen.getByText("جارٍ التحميل")).toBeInTheDocument();
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
