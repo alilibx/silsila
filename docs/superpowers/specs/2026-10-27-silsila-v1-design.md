@@ -312,7 +312,7 @@ Left to the builder: routing and state libraries, the i18n library, the web-push
 
 - **Khatma:** name, schedule, creator, invite code, created at, completed-rounds count.
 - **Member:** khatma, display name, person, joined at, nudges on or off.
-- **Person:** phone number (E.164), verified at, display name, device token hashes, language, time zone, push subscriptions.
+- **Person:** phone number (E.164), verified at, display name, hashed session tokens (with device type and last-used time), language, time zone, push subscriptions.
 - **Setting:** key, value, updated by, updated at.
 - **Admin:** phone number, added by, added at.
 - **Audit log entry:** admin, action, target, old value, new value, time.
