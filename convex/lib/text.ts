@@ -16,17 +16,28 @@ export function normalizeDigits(s: string): string {
   });
 }
 
+// Invisible characters that render as blank but are not whitespace or \p{Cf}:
+// Braille blank (U+2800), Hangul fillers (U+115F, U+1160, U+3164, U+FFA0).
+const BLANK_FILLERS = "\u2800\u115F\u1160\u3164\uFFA0";
+// ZWNJ and ZWJ are \p{Cf} but are meaningful in Persian, Arabic-script, and emoji text.
+const CONTROL_OR_FORMAT = new RegExp(
+  `[\\p{Cc}${BLANK_FILLERS}]|(?![\\u200C\\u200D])\\p{Cf}`,
+  "gu",
+);
+
 /**
- * Trims, collapses whitespace, and strips control and bidi-override characters.
- * Returns `null` when nothing is left; otherwise at most 40 characters.
+ * Trims, collapses whitespace, and strips control, format (bidi marks and
+ * overrides, zero-width space, ...), and blank-filler characters, keeping ZWNJ
+ * and ZWJ. Returns `null` unless a letter or digit remains; otherwise at most
+ * 40 characters.
  */
 export function cleanDisplayName(raw: string): string | null {
   const cleaned = raw
-    .replace(/\s+/gu, " ")
-    .replace(/[\p{Cc}‪-‮⁦-⁩]/gu, "")
+    .replace(/\s+/gu, " ") // tabs and newlines become spaces before controls are stripped
+    .replace(CONTROL_OR_FORMAT, "")
     .replace(/\s+/gu, " ")
     .trim();
-  if (cleaned === "") return null;
+  if (!/[\p{L}\p{N}]/u.test(cleaned)) return null;
   return Array.from(cleaned).slice(0, DISPLAY_NAME_MAX).join("").trim();
 }
 

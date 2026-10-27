@@ -13,9 +13,12 @@ import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_juz from "../lib/juz.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_schedule from "../lib/schedule.js";
+import type * as lib_session from "../lib/session.js";
 import type * as lib_settings from "../lib/settings.js";
 import type * as lib_text from "../lib/text.js";
 import type * as maintenance from "../maintenance.js";
+import type * as people from "../people.js";
+import type * as sessions from "../sessions.js";
 
 import type {
   ApiFromModules,
@@ -29,9 +32,12 @@ declare const fullApi: ApiFromModules<{
   "lib/juz": typeof lib_juz;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/schedule": typeof lib_schedule;
+  "lib/session": typeof lib_session;
   "lib/settings": typeof lib_settings;
   "lib/text": typeof lib_text;
   maintenance: typeof maintenance;
+  people: typeof people;
+  sessions: typeof sessions;
 }>;
 
 /**

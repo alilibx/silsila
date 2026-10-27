@@ -35,6 +35,31 @@ describe("cleanDisplayName", () => {
     expect(cleanDisplayName("a\u0000b")).toBe("ab");
   });
 
+  it("rejects names made only of invisible characters", () => {
+    expect(cleanDisplayName("\u200B")).toBeNull();
+    expect(cleanDisplayName("\u2800")).toBeNull();
+    expect(cleanDisplayName("\u3164")).toBeNull();
+    expect(cleanDisplayName(" \u200B\u2800\u3164 \u200E")).toBeNull();
+    expect(cleanDisplayName("\u200C\u200D")).toBeNull();
+    expect(cleanDisplayName("-- !!")).toBeNull();
+  });
+
+  it("keeps ZWNJ and ZWJ inside a name", () => {
+    expect(cleanDisplayName("می\u200Cخواهم")).toBe("می\u200Cخواهم");
+    expect(cleanDisplayName("a\u200Db")).toBe("a\u200Db");
+  });
+
+  it("strips zero-width, bidi marks, and bidi overrides", () => {
+    expect(cleanDisplayName("ab\u200Bc")).toBe("abc");
+    expect(cleanDisplayName("\u202Eعلي\u202C")).toBe("علي");
+    expect(cleanDisplayName("\u2066x\u2069\u200F")).toBe("x");
+  });
+
+  it("accepts digit-only and mixed names", () => {
+    expect(cleanDisplayName("١٢٣")).toBe("١٢٣");
+    expect(cleanDisplayName("😀 علي")).toBe("😀 علي");
+  });
+
   it("cuts to 40 characters", () => {
     expect(cleanDisplayName("ا".repeat(60))).toHaveLength(40);
   });
