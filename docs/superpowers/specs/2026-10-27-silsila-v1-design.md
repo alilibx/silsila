@@ -29,13 +29,14 @@ Anyone in a family, friend, or work group. It must work for a 10-year-old and an
 ### Goals (v1)
 
 1. Create a khatma with a name or a date, and a repeating schedule.
-2. Invite people with a link that opens the app if it's installed, or the web version instantly if not, with no password. Anyone with the link can view; taking a juz' requires a phone number verified through WhatsApp.
+2. Invite people with a link that opens the website instantly, with no app store and no password. Anyone with the link can view; taking a juz' requires a phone number verified through WhatsApp.
 3. Share a pool of 30 ajza'. Each person holds one juz' at a time and takes another after finishing.
 4. Rotate ajza', so people get offered ones they haven't read recently.
 5. Show everyone the state of the pool: open, being read (and by whom), and done.
 6. Learn each person's reading pace and nudge them privately and gently.
 7. Celebrate each completed khatma as a group, with the khatm dua.
-8. Ship iPhone and Android apps plus a web version from day one. Send reminders as push notifications, and offer WhatsApp share buttons.
+8. Ship a fast, mobile-first website and an admin panel. Send reminders as browser push notifications, and offer WhatsApp share buttons.
+9. Let Ali change app settings remotely from the admin panel, with changes reaching every open screen within seconds (5.5).
 
 ### Non-goals (v1)
 
@@ -44,6 +45,7 @@ Anyone in a family, friend, or work group. It must work for a 10-year-old and an
 - Reading or listening to the Quran inside the app. That comes later.
 - WhatsApp Business API reminders. That's v2.
 - AI assistance. That comes later.
+- iPhone and Android apps. Ali will decide the mobile technology after v1 (Expo or Flutter); see 7.
 - Passwords or email sign-in. Identity is a phone number verified through WhatsApp (5.2).
 - SMS verification. It's a fallback after v1.
 - Group chat. The group's WhatsApp group already does that.
@@ -117,7 +119,8 @@ The goal: nobody loses a juz' they're actively reading, and no abandoned juz' bl
 ### 3.4 Joining and verifying
 
 - Any member can share the invite link. The share button opens WhatsApp with a ready-made Arabic message.
-- Tapping the link opens the khatma in the Silsila app if it's installed (iOS universal links, Android app links). Otherwise it opens the web version straight away, with no app store in the way. The web page shows the inviter and khatma name in plain HTML at once, while the Flutter app loads behind it. To make that work on a static host, each member's share button builds their own link: the khatma invite code plus that member's random sharing token of at least 10 characters, for example `silsila.app/j/fam38Qx?from=Hq7cT2mZ9w`. Tokens are unguessable, so nobody can list members by trying values. A small inline script in the HTML fetches the khatma name and the inviter's display name from a rate-limited Convex HTTP endpoint, which returns only those two fields for a valid code and token pair, and shows them before Flutter starts **[builder's call]**.
+- Tapping the link opens the khatma on the website straight away, with no app store in the way. Each member's share button builds their own link: the khatma invite code plus that member's random sharing token of at least 10 characters, for example `silsila.app/j/fam38Qx?from=Hq7cT2mZ9w`. Tokens are unguessable, so nobody can list members by trying values. The page shows "دعاك أحمد إلى ختمة العائلة" at the top.
+- **WhatsApp link preview:** a small server function on the web host answers `/j/...` requests with Open Graph tags, so the WhatsApp chat itself shows the khatma name and inviter under the link. It reads only those two fields from a rate-limited Convex HTTP endpoint, which answers only for a valid code and token pair **[builder's call]**.
 - Anyone with the link can see the khatma and its pool with no name, number, or verification. Reader names on tiles are shown only to members (see below); viewers see "يُقرأ" without names **[builder's call]**.
 - **Taking a juz' requires a verified phone number.** Ali decided this. The first time someone taps "take a juz'", one sheet asks for their name and offers one button: "تحقّق عبر واتساب" (verify with WhatsApp). See 5.2 for how it works.
 - A person becomes a member of a khatma the first time they take a juz' in it, or when they create it. Someone already verified through another khatma doesn't verify again; they become a member here when they take their first juz' here. Viewers, verified or not, aren't members, don't count toward the 60-member cap, and don't get this khatma's notifications **[builder's call]**.
@@ -194,7 +197,7 @@ Limits **[builder's call]**:
 ### 5.1 Language and layout
 
 - v1 ships in Arabic only, right-to-left. Ali decided this.
-- All UI text lives in translation files from day one, with no hard-coded strings, so adding English later is mostly a translation job. Use direction-aware layout (Flutter's `EdgeInsetsDirectional`, `AlignmentDirectional`, and `start`/`end` rather than left/right), so the layout flips correctly when English arrives.
+- All UI text lives in translation files from day one, with no hard-coded strings, so adding English later is mostly a translation job. Use direction-neutral CSS (logical properties such as `margin-inline-start`, and Tailwind's `ms-`/`me-`/`ps-`/`pe-` utilities rather than left/right), so the layout flips correctly when English arrives.
 - Numbers in the Arabic UI use Eastern Arabic digits (١٢٣) **[builder's call]**.
 - Dates use the Gregorian calendar in v1. Hijri dates can come later **[builder's call]**.
 
@@ -221,8 +224,8 @@ A person's identity is their phone number, verified through WhatsApp. Ali decide
 
 **Rules:**
 
-- After verification, the backend issues a session token that the app stores securely (Keychain on iPhone, Keystore on Android, browser storage on web), so the person stays signed in.
-- On a new phone, app install, or browser, the person verifies again with the same number, and their khatmas and history come back. This replaces the "return link" from the earlier draft.
+- After verification, the backend issues a session token that the website stores in an HttpOnly, Secure cookie or, if the hosting setup makes that impractical, in browser storage, so the person stays signed in. The builder picks and documents which.
+- On a new phone or browser, the person verifies again with the same number, and their khatmas and history come back. This replaces the "return link" from the earlier draft.
 - One person can be in many khatmas. The home screen lists them.
 - People without WhatsApp can view khatmas but can't take a juz' in v1. An SMS code fallback comes after v1 **[builder's call]**. SMS costs money for every code, and the UAE requires registering a sender name.
 - Consent for WhatsApp reminders is a separate, explicit question in v2. Verifying doesn't subscribe anyone to messages **[builder's call]**.
@@ -250,38 +253,69 @@ Nothing else. The creator can't assign ajza' or mark ajza' done for others.
 
 If the creator hasn't opened the app for 30 days, the creator role passes automatically to the member who has been in the khatma longest and opened the app in the last 7 days, and the old creator is told privately. That way a lost phone can't leave a khatma without anyone to fix a leaked link **[builder's call]**.
 
+### 5.5 Admin panel and remote settings
+
+Ali decided that the app needs a web admin page for managing it remotely. Everything below is **[builder's call]** unless marked.
+
+**Settings (stored in a Convex settings table, applied live):**
+
+The website subscribes to the settings, so a change in the admin panel reaches every open screen within seconds, with no new release. Each setting has a default in code, so the site works if the table is empty.
+
+- Pace and release: default pace, pace bounds (1 to 7 days), the 1.5x and 3x nudge thresholds, release timers (24h, 72h, 14 days), and the rotation look-back (3 rounds).
+- Notifications: quiet hours, and the one-nudge-per-day cap.
+- Limits: members per khatma (60), and rate limits.
+- Content: schedule options shown when creating a khatma, the celebration duas (validated against the verified mushaf source before saving), and WhatsApp message templates for invites and reminders.
+- Switches: an announcement banner with on/off and text, maintenance mode (the site shows a kind message and blocks actions), and feature flags for future features, such as the SMS fallback.
+- Minimum client version: lets a future mobile app force an update; for the website it forces a reload after a breaking deploy.
+
+**Operations:**
+
+- Look up a khatma by invite code or name: members, round, and pool state.
+- Look up a person by phone number: their khatmas and sessions. Sign them out everywhere, or block or unblock the number.
+- Reset a khatma's invite link, or hand its creator role to another member, when a creator asks for help.
+- Basic numbers: active khatmas, members, ajza' finished per day, khatmas completed, and verification success rate. No per-person reading data in charts.
+
+**Access:**
+
+- Admins sign in with the same WhatsApp verification, and the 6-digit code step is always required for admins.
+- Only phone numbers on an admin allowlist can sign in. Ali's number is the first; adding admins happens in the admin panel and is logged.
+- Admin sessions expire after 12 hours.
+- Every change to settings or user data is written to an audit log: who, what, when, and the old and new values. The admin panel shows this log.
+- All admin queries and mutations check the admin role on the server. Hiding a button isn't access control.
+
 ## 6. Notifications in v1
 
-- Push notifications, requested only after the person takes their first juz', with a plain explanation of why.
-- **In the apps:** iPhone and Android push through Firebase Cloud Messaging (FCM), which delivers to iPhone through Apple's push service. Firebase is used only for push; Convex remains the backend.
-- **On the web:** browser push. On iPhone, browser push works only after adding the site to the home screen (iOS 16.4 or later). So after a web user takes their first juz', the web version suggests installing the app, with a direct App Store or Google Play link **[builder's call]**.
+- Browser push notifications (Web Push with VAPID keys), requested only after the person takes their first juz', with a plain explanation of why.
+- **iPhone limit (the known weak spot of v1):** browser push on iPhone works only after the person adds Silsila to their home screen, on iOS 16.4 or later. After an iPhone user takes their first juz', the site shows simple, illustrated steps for that. The site ships a web app manifest and a service worker so it can be added to the home screen. Many older iPhone users won't do it, which is why WhatsApp reminders (v2) and the mobile apps matter later.
 - For people without notifications, any member can tap "remind the group". It opens WhatsApp with a message listing the open ajza' and the target end. It never names anyone who is late.
 - WhatsApp messages sent directly by the app are v2.
 
 ## 7. Technology (decided by Ali)
 
-Ali changed the stack on 2026-10-27 after seeing the prototype, so that mobile apps ship from day one.
+Ali settled the stack on 2026-10-27 after a final review: v1 is the website and the admin panel, both on Convex. The mobile apps come later, and Ali will choose their technology then.
 
-- **Client:** Flutter, one codebase for the iPhone app, the Android app, and the web version.
-- **Over-the-air fixes:** Shorebird code push for the iPhone and Android apps. Web deploys reach everyone immediately and don't need it.
+- **Public website (`apps/web`):** Vite + React + TypeScript + Tailwind CSS. Mobile-first, right-to-left, small first download. Installable to the home screen (manifest and service worker).
+- **Admin panel (`apps/admin`):** a separate Vite + React + TypeScript app on its own address, such as `admin.silsila.app`. Desktop-first. See 5.5.
 - **Backend:** Convex, for live updates across members' screens, transactional "take a juz'" to prevent double-booking, scheduled functions for round boundaries and nudges, and HTTP actions for the WhatsApp webhook. Ali chose Convex over Firebase and Supabase after a comparison.
 - **Convex region:** EU West (Ireland), the closer of Convex's two regions (US East and Ireland) to Gulf users **[builder's call]**. A deployment's region can't be changed later.
-- **Flutter-to-Convex client (main technical risk):** Convex has no official Flutter client. Community options include `dartvex`, `convex_flutter` (wraps Convex's Rust client), and `convex_dart`. The builder must:
-  1. Make the first plan task a proof that the chosen client works on a real iPhone, Android phone, and the web: live subscriptions, custom-token sign-in after WhatsApp verification, and reconnecting after a dropped connection. If it fails, stop and report to Ali before building further.
-  2. Wrap the client in one thin data layer, so screens never call it directly and replacing it touches one place.
-- **Web hosting:** the builder picks a static host for the Flutter web build, and it must also serve the files that iOS universal links and Android app links need.
+- **Convex client:** the official Convex React client in both apps.
+- **Repo layout:** one repo with `convex/` (backend), `apps/web`, and `apps/admin`. Both apps import Convex's generated types, so a backend change that breaks a screen fails the type check. A mobile app can be added later as `apps/mobile`; keep business rules (rotation, pace, release, completion) in Convex functions, not in the website, so a future mobile app reuses them unchanged.
+- **Web hosting:** the builder picks a host that serves static Vite builds and supports a small server function for the WhatsApp link preview (3.4), such as Vercel or Cloudflare Pages.
 - **Sign-in:** phone number verified through WhatsApp (see 5.2). No passwords.
 - **WhatsApp:** v1 uses share links plus the WhatsApp Business Cloud API for receiving verification messages and replying within the 24-hour window. Reminders sent through the API, which need approved templates and consent, are v2.
-- **Prerequisites only Ali can do:** a Meta Business account, a dedicated phone number for Silsila registered on the WhatsApp Business Cloud API, Meta business verification, an Apple Developer account, a Google Play developer account, a Shorebird account, and a Firebase project with an Apple push key (APNs) for notifications. They're tracked as Linear tasks assigned to Ali.
+- **Prerequisites only Ali can do:** a Meta Business account, a dedicated phone number for Silsila registered on the WhatsApp Business Cloud API, Meta business verification, and a domain name for the website and admin panel. They're tracked as Linear tasks assigned to Ali. Apple, Google Play, and push-service accounts wait for the mobile decision.
 - **Repo:** public, at `github.com/alilibx/silsila`. No secrets in the repo.
 
-Left to the builder: state management, the i18n setup (Flutter's built-in localization is fine), the web-push setup, the test setup, which community Convex client to use (after the proof task), and the source of juz' metadata (names and starting surah and ayah, for example from Tanzil's public metadata).
+Left to the builder: routing and state libraries, the i18n library, the web-push library, the test setup, the admin UI component library, and the source of juz' metadata (names and starting surah and ayah, for example from Tanzil's public metadata).
 
 ## 8. Data the system needs (sketch, not a schema)
 
 - **Khatma:** name, schedule, creator, invite code, created at, completed-rounds count.
 - **Member:** khatma, display name, person, joined at, nudges on or off.
 - **Person:** phone number (E.164), verified at, display name, device token hashes, language, time zone, push subscriptions.
+- **Setting:** key, value, updated by, updated at.
+- **Admin:** phone number, added by, added at.
+- **Audit log entry:** admin, action, target, old value, new value, time.
 - **Verification:** one-time code, app or browser session, created at, expires at, status, verified phone number.
 - **Round:** khatma, number, start, target end, completed at.
 - **Assignment:** round, juz' number (1 to 30), member, taken at, finished at, released at, released-by-system flag.
@@ -309,7 +343,7 @@ Pace and rotation derive from assignments. The builder owns the actual schema.
 3. v1 is Arabic only. English follows (5.1).
 4. The celebration uses Quranic duas only (3.8).
 5. People must verify a phone number to take a juz'. Anyone with the link can view without verifying (3.4, 5.2).
-6. iPhone and Android apps ship in v1, alongside the web version. Flutter with Shorebird is the client, and Convex is the backend (7).
+6. v1 is a Vite + React website plus a separate Vite + React admin panel, with Convex as the backend and settings managed live from the admin panel (5.5, 7). The mobile apps come later, and their technology (Expo or Flutter) is decided then.
 
 ## 11. Prototype
 
