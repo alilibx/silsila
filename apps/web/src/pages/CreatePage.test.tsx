@@ -13,6 +13,9 @@ const m = vi.hoisted(() => ({
 vi.mock("../lib/session", () => ({
   useSessionToken: () => m.token,
   getSessionToken: () => m.token ?? null,
+  clearSessionToken: () => {
+    m.token = undefined;
+  },
 }));
 vi.mock("../features/verify/VerifySheet", () => ({
   VerifySheet: (props: {
@@ -162,5 +165,28 @@ describe("CreatePage", () => {
     renderPage();
     await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("تعذّر الاتصال");
+  });
+
+  it("a dead token: clears it, signs in again, then creates once more with the same values", async () => {
+    m.create.mockRejectedValueOnce(new ConvexError({ code: "not_signed_in" }));
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText(/اسم الختمة/), "ختمة الجيران");
+    await user.click(screen.getByRole("radio", { name: /كل أسبوعين/ }));
+    await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+    expect(
+      await screen.findByRole("dialog", { name: "قبل أن تنشئ ختمة" }),
+    ).toBeInTheDocument();
+    expect(m.token).toBeUndefined();
+    expect(m.create).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "verified" }));
+    expect(m.create).toHaveBeenCalledTimes(2);
+    expect(m.create).toHaveBeenLastCalledWith({
+      sessionToken: "fresh-token",
+      name: "ختمة الجيران",
+      schedule: "biweekly",
+    });
+    expect(await screen.findByText(/\/j\/NEWCODE/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

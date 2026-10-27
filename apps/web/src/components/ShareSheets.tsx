@@ -1,3 +1,4 @@
+import type { ShareSheet } from "../features/share/useShareSheet";
 import { useShareUrl } from "../features/share/useShareUrl";
 import { t } from "../i18n/ar";
 import { inviteMessage, remindMessage, waShareLink } from "../lib/whatsapp";
@@ -110,6 +111,29 @@ export function RemindSheet({
       note={t.share.remindNote}
       closeLabel={t.share.done}
       onClose={onClose}
+    />
+  );
+}
+
+type ShareSheetsProps = {
+  sheet: ShareSheet;
+  inviteCode: string;
+  khatmaName: string;
+  openJuz: number[];
+  targetEndAt: number | null;
+  onClose: () => void;
+};
+
+/** Whichever share sheet is open, or nothing. */
+export function ShareSheets({ sheet, ...rest }: ShareSheetsProps) {
+  if (sheet === "remind") return <RemindSheet {...rest} />;
+  if (sheet === null) return null;
+  return (
+    <InviteSheet
+      inviteCode={rest.inviteCode}
+      khatmaName={rest.khatmaName}
+      justCreated={sheet === "created"}
+      onClose={rest.onClose}
     />
   );
 }

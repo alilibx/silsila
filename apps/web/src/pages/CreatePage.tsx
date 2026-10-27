@@ -8,7 +8,11 @@ import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { formatDate } from "../lib/format";
-import { getSessionToken, useSessionToken } from "../lib/session";
+import {
+  clearSessionToken,
+  getSessionToken,
+  useSessionToken,
+} from "../lib/session";
 
 const DEFAULT_SCHEDULE: Schedule = "weekly";
 const createErrors: Record<string, string> = t.create.errors;
@@ -41,13 +45,19 @@ export function CreatePage() {
       });
     } catch (caught) {
       const code = errorCode(caught);
+      creatingRef.current = false;
+      setCreating(false);
+      if (code === "not_signed_in") {
+        // The stored token is dead: forget it and sign in again, then create with the same values.
+        clearSessionToken();
+        setVerifying(true);
+        return;
+      }
       setError(
         code === null
           ? t.create.errors.network
           : (createErrors[code] ?? t.create.errors.generic),
       );
-      creatingRef.current = false;
-      setCreating(false);
     }
   }
 

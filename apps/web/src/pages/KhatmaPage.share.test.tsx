@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KhatmaView } from "@convex/khatmas";
@@ -168,5 +169,25 @@ describe("KhatmaPage invite and remind", () => {
     await user.click(screen.getByRole("button", { name: "ادعُ أحبابك" }));
     await user.click(await screen.findByRole("button", { name: "تمّ" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("fetches the share token once per sheet open, even under StrictMode", async () => {
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={["/j/CODE"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+    await user.click(screen.getByRole("button", { name: "ادعُ أحبابك" }));
+    await screen.findByRole("link", { name: "أرسل على واتساب" });
+    expect(m.ensure).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "تمّ" }));
+    await user.click(screen.getByRole("button", { name: "ذكّر المجموعة" }));
+    await screen.findByRole("link", { name: "أرسل على واتساب" });
+    expect(m.ensure).toHaveBeenCalledTimes(2);
   });
 });

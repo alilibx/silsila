@@ -39,6 +39,19 @@ function saveOutcome(key: string, outcome: Outcome): void {
   }
 }
 
+/** Removes `t` from the address bar, keeping the router's history state. */
+function stripToken(): void {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("t")) return;
+  params.delete("t");
+  const query = params.toString();
+  history.replaceState(
+    history.state,
+    "",
+    location.pathname + (query ? `?${query}` : "") + location.hash,
+  );
+}
+
 function lastKey(): string | null {
   try {
     return sessionStorage.getItem(LAST_KEY);
@@ -65,17 +78,11 @@ export function SignOutPage() {
   const signOutOthers = useMutation(api.sessions.signOutOthersByAlertToken);
   const started = useRef(false);
 
+  // The link is only spent once its outcome is remembered. Until then `t` stays in the address
+  // bar, so a reload mid-flight or after a network failure can still finish the job.
   useEffect(() => {
-    if (!new URLSearchParams(location.search).has("t")) return;
-    const params = new URLSearchParams(location.search);
-    params.delete("t");
-    const query = params.toString();
-    history.replaceState(
-      history.state,
-      "",
-      location.pathname + (query ? `?${query}` : "") + location.hash,
-    );
-  }, []);
+    if (outcome !== null) stripToken();
+  }, [outcome]);
 
   async function run(alertToken: string, storeKey: string) {
     started.current = true;

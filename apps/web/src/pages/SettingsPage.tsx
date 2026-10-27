@@ -8,6 +8,7 @@ import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { formatDate } from "../lib/format";
 import { clearSessionToken, useSessionToken } from "../lib/session";
+import { useClearDeadToken } from "../lib/useClearDeadToken";
 
 const headingClass = "mt-8 mb-3 text-xl font-semibold";
 const settingsErrors: Record<string, string> = t.settings.errors;
@@ -15,6 +16,7 @@ const settingsErrors: Record<string, string> = t.settings.errors;
 export function SettingsPage() {
   const sessionToken = useSessionToken();
   const me = useQuery(api.sessions.me, { sessionToken });
+  useClearDeadToken(sessionToken, me === null);
 
   if (me === undefined) {
     return (
@@ -87,7 +89,9 @@ function NameForm({ initial }: { initial: string }) {
     setSaved(false);
     setError(null);
     try {
-      await update({ sessionToken, displayName: name.trim() });
+      const trimmed = name.trim();
+      await update({ sessionToken, displayName: trimmed });
+      setName(trimmed);
       setSaved(true);
     } catch (caught) {
       const code = errorCode(caught);

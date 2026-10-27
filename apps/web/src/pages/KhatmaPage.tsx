@@ -2,29 +2,22 @@ import { api } from "@convex/_generated/api";
 import type { KhatmaView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
-import { useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
 import { MainCard } from "../components/MainCard";
 import { PoolGrid } from "../components/PoolGrid";
 import { ReleaseSheet } from "../components/ReleaseSheet";
 import { Ring } from "../components/Ring";
-import { InviteSheet, RemindSheet } from "../components/ShareSheets";
+import { ShareSheets } from "../components/ShareSheets";
 import { TakeSheet } from "../components/TakeSheet";
 import { Toast } from "../components/Toast";
 import { useKhatmaActions } from "../features/khatma/useKhatmaActions";
-import {
-  useShareSheet,
-  type ShareSheet,
-} from "../features/share/useShareSheet";
+import { useShareSheet } from "../features/share/useShareSheet";
 import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
-import {
-  clearSessionToken,
-  getSessionToken,
-  useSessionToken,
-} from "../lib/session";
+import { useSessionToken } from "../lib/session";
+import { useClearDeadToken } from "../lib/useClearDeadToken";
 import { CelebrationPage } from "./CelebrationPage";
 import { NotFoundPage } from "./NotFoundPage";
 
@@ -56,14 +49,14 @@ export function KhatmaPage() {
     !("notFound" in view) &&
     !view.me.signedIn;
 
-  // A revoked or expired token is dead, and nothing else clears it. `view` is only defined
-  // once Convex has answered for the current args (it is undefined while they change), and
-  // the storage check skips a token that was replaced between render and effect.
-  useEffect(() => {
-    if (tokenIsDead && getSessionToken() === sessionToken) clearSessionToken();
-  }, [tokenIsDead, sessionToken]);
+  // `view` is only defined once Convex has answered for the current args (it is undefined
+  // while they change), so a dead token is never judged on a stale answer.
+  useClearDeadToken(sessionToken, tokenIsDead);
 
   const loaded = view !== undefined && !("notFound" in view) ? view : null;
+  const openJuz = (loaded?.tiles ?? [])
+    .filter((tile) => tile.state === "open")
+    .map((tile) => tile.juz);
 
   // The sheets sit outside the page body so they survive the reload the new session token triggers.
   return (
@@ -94,13 +87,16 @@ export function KhatmaPage() {
           onRelease={actions.openRelease}
           onInvite={share.openInvite}
           onRemind={share.openRemind}
+          hasOpen={openJuz.length > 0}
         />
       )}
       {loaded && loaded.me.isMember && loaded.me.celebrateRound === null && (
         <ShareSheets
-          view={loaded}
-          inviteCode={inviteCode}
           sheet={share.sheet}
+          inviteCode={inviteCode}
+          khatmaName={khatmaTitle(loaded)}
+          openJuz={openJuz}
+          targetEndAt={loaded.targetEndAt}
           onClose={share.close}
         />
       )}
@@ -151,6 +147,7 @@ function KhatmaContent({
   onRelease,
   onInvite,
   onRemind,
+  hasOpen,
 }: {
   view: KhatmaView;
   busy: boolean;
@@ -159,9 +156,9 @@ function KhatmaContent({
   onRelease: () => void;
   onInvite: () => void;
   onRemind: () => void;
+  hasOpen: boolean;
 }) {
   const title = khatmaTitle(view);
-  const hasOpen = view.tiles.some((tile) => tile.state === "open");
 
   return (
     <main className="mx-auto max-w-xl p-5">
@@ -229,38 +226,5 @@ function KhatmaContent({
         </p>
       )}
     </main>
-  );
-}
-
-function ShareSheets({
-  view,
-  inviteCode,
-  sheet,
-  onClose,
-}: {
-  view: KhatmaView;
-  inviteCode: string;
-  sheet: ShareSheet;
-  onClose: () => void;
-}) {
-  if (sheet === "remind") {
-    return (
-      <RemindSheet
-        inviteCode={inviteCode}
-        khatmaName={khatmaTitle(view)}
-        openJuz={view.tiles.filter((x) => x.state === "open").map((x) => x.juz)}
-        targetEndAt={view.targetEndAt}
-        onClose={onClose}
-      />
-    );
-  }
-  if (sheet === null) return null;
-  return (
-    <InviteSheet
-      inviteCode={inviteCode}
-      khatmaName={khatmaTitle(view)}
-      justCreated={sheet === "created"}
-      onClose={onClose}
-    />
   );
 }

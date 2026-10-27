@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   list: undefined as unknown,
   token: undefined as string | undefined,
   clear: vi.fn(),
+  stored: null as string | null,
   fns: {
     updateDisplayName: vi.fn(),
     signOut: vi.fn(),
@@ -20,6 +21,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock("../lib/session", () => ({
   useSessionToken: () => m.token,
+  getSessionToken: () => m.stored,
   clearSessionToken: () => m.clear(),
 }));
 vi.mock("convex/react", async () => {
@@ -50,6 +52,7 @@ describe("SettingsPage", () => {
     Object.values(m.fns).forEach((f) => f.mockReset().mockResolvedValue(null));
     m.clear.mockReset();
     m.token = "tok";
+    m.stored = "tok";
     m.me = { displayName: "أبو علي", maskedPhone: "+971 •• ••• 4567" };
     m.list = [
       {
@@ -176,5 +179,24 @@ describe("SettingsPage", () => {
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("تعذّر الاتصال");
     expect(m.clear).not.toHaveBeenCalled();
+  });
+
+  it("clears a stored token the server no longer knows, and shows signed out", () => {
+    m.me = null;
+    m.list = [];
+    renderPage();
+    expect(m.clear).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/لا يوجد حساب مسجّل/)).toBeInTheDocument();
+  });
+
+  it("shows the trimmed name after saving", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const input = screen.getByLabelText("اسمك");
+    await user.clear(input);
+    await user.type(input, "  أم سلمى  ");
+    await user.click(screen.getByRole("button", { name: "احفظ الاسم" }));
+    await screen.findByText("تمّ حفظ الاسم");
+    expect(input).toHaveValue("أم سلمى");
   });
 });

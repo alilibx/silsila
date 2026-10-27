@@ -28,11 +28,11 @@ export const ar = {
   },
   schedules: {
     daily: "يومية",
-    every3days: "كل ثلاثة أيام",
+    every3days: "كل ٣ أيام",
     weekly: "أسبوعية",
     biweekly: "كل أسبوعين",
     monthly: "شهرية",
-    none: "بلا موعد محدد",
+    none: "بدون موعد",
   } satisfies Record<Schedule, string>,
   khatma: {
     invited: (inviter: string) => `دعاك ${inviter} إلى هذه الختمة.`,
@@ -196,7 +196,6 @@ export const ar = {
       rate_limited:
         "أنشأتَ ختمات كثيرة اليوم. جرّب غداً بإذن الله، أو استخدم إحدى ختماتك.",
       maintenance: "سلسلة في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
-      not_signed_in: "سجّل دخولك أولاً ثم أنشئ الختمة.",
       network: commonErrors.network,
       generic: commonErrors.generic,
     },

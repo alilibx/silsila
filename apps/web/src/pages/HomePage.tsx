@@ -8,6 +8,7 @@ import { buttonClass } from "../components/Button";
 import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
 import { useSessionToken } from "../lib/session";
+import { useClearDeadToken } from "../lib/useClearDeadToken";
 
 const TOTAL = 30;
 
@@ -15,6 +16,8 @@ export function HomePage() {
   const sessionToken = useSessionToken();
   const me = useQuery(api.sessions.me, { sessionToken });
   const mine = useQuery(api.khatmas.mine, { sessionToken });
+  // A stored token the server answers as signed out is dead; clearing it makes this page signed out.
+  useClearDeadToken(sessionToken, me === null);
 
   if (me === undefined || mine === undefined) {
     return (

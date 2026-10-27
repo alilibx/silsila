@@ -7,9 +7,15 @@ const m = vi.hoisted(() => ({
   me: undefined as unknown,
   mine: undefined as unknown,
   token: undefined as string | undefined,
+  stored: null as string | null,
+  clear: vi.fn(),
 }));
 
-vi.mock("../lib/session", () => ({ useSessionToken: () => m.token }));
+vi.mock("../lib/session", () => ({
+  useSessionToken: () => m.token,
+  getSessionToken: () => m.stored,
+  clearSessionToken: () => m.clear(),
+}));
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
@@ -40,6 +46,8 @@ const card = (over: object = {}) => ({
 describe("HomePage", () => {
   beforeEach(() => {
     m.token = "tok";
+    m.stored = "tok";
+    m.clear.mockReset();
     m.me = { displayName: "أبو علي", maskedPhone: "x" };
     m.mine = [];
   });
@@ -105,5 +113,27 @@ describe("HomePage", () => {
     ).toHaveAttribute("href", "/new");
     expect(screen.queryByRole("link", { name: "إعداداتي" })).toBeNull();
     expect(screen.queryByText(/السلام عليكم، /)).toBeNull();
+  });
+
+  it("clears a stored token the server no longer knows, and shows signed out", () => {
+    m.me = null;
+    renderHome();
+    expect(m.clear).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/سلسلة تجمع أحبابك/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "إعداداتي" })).toBeNull();
+  });
+
+  it("does not clear a token that was replaced meanwhile", () => {
+    m.me = null;
+    m.stored = "newer";
+    renderHome();
+    expect(m.clear).not.toHaveBeenCalled();
+  });
+
+  it("does not clear anything while loading or when signed in", () => {
+    m.me = undefined;
+    m.mine = undefined;
+    renderHome();
+    expect(m.clear).not.toHaveBeenCalled();
   });
 });

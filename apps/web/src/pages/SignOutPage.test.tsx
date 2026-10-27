@@ -130,4 +130,38 @@ describe("SignOutPage", () => {
       await screen.findByText("سجّلنا خروجك من كل الأجهزة."),
     ).toBeVisible();
   });
+
+  it("keeps the token in the address bar after a network failure, so a reload retries", async () => {
+    window.history.replaceState(null, "", "/signout?t=alert1");
+    m.signOut.mockRejectedValueOnce(new Error("offline"));
+    const first = renderAt("/signout?t=alert1");
+    await screen.findByRole("alert");
+    expect(window.location.search).toBe("?t=alert1");
+    first.unmount();
+    m.signOut.mockResolvedValueOnce({ ok: true, keptCurrent: false });
+    renderAt("/signout?t=alert1");
+    expect(
+      await screen.findByText("سجّلنا خروجك من كل الأجهزة."),
+    ).toBeVisible();
+    expect(m.signOut).toHaveBeenCalledTimes(2);
+    expect(window.location.search).toBe("");
+  });
+
+  it("keeps the token in the address bar while the call is in flight", async () => {
+    window.history.replaceState(null, "", "/signout?t=alert1");
+    m.signOut.mockReturnValueOnce(new Promise(() => {}));
+    const first = renderAt("/signout?t=alert1");
+    await Promise.resolve();
+    expect(window.location.search).toBe("?t=alert1");
+    expect(screen.queryByText("هذا الرابط لم يعد صالحاً.")).toBeNull();
+    first.unmount();
+    m.signOut.mockResolvedValueOnce({ ok: true, keptCurrent: true });
+    renderAt("/signout?t=alert1");
+    expect(
+      await screen.findByText(
+        "سجّلنا خروج الأجهزة الأخرى. هذا الجهاز ما زال مسجّلاً.",
+      ),
+    ).toBeVisible();
+    expect(window.location.search).toBe("");
+  });
 });
