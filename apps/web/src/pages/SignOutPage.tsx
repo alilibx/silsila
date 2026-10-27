@@ -6,9 +6,14 @@ import { Button, buttonClass } from "../components/Button";
 import { t } from "../i18n/ar";
 import { clearSessionToken, getSessionToken } from "../lib/session";
 
-type Outcome = "kept" | "all" | "invalid";
+/**
+ * kept: the caller's own session (the real owner's) survived. all: every session of the owner is
+ * gone, this device's included if it was one. owner: this device is signed in as someone else
+ * (a shared phone), so it stays signed in and the message names nobody.
+ */
+type Outcome = "kept" | "all" | "owner" | "invalid";
 
-const OUTCOMES: readonly Outcome[] = ["kept", "all", "invalid"];
+const OUTCOMES: readonly Outcome[] = ["kept", "all", "owner", "invalid"];
 const PREFIX = "silsila.signout.";
 const LAST_KEY = `${PREFIX}last`;
 
@@ -61,9 +66,10 @@ function lastKey(): string | null {
 }
 
 /**
- * The "not me" link from a sign-in alert. The alert token is single use, so the server is asked
- * once per token and the answer is remembered for this tab: a reload, or StrictMode's second
- * effect, must not turn "done" into "link no longer valid".
+ * The "not me" link from a sign-in alert. Nothing happens until the person confirms, so an
+ * accidental tap or a link preview cannot sign anyone out. The alert token is single use, so the
+ * server is asked once per token and the answer is remembered for this tab: a reload or a double
+ * tap must not turn "done" into "link no longer valid".
  */
 export function SignOutPage() {
   const [search] = useSearchParams();
@@ -75,6 +81,7 @@ export function SignOutPage() {
     token ? readOutcome(key) : (readOutcome(lastKey()) ?? "invalid"),
   );
   const [failed, setFailed] = useState(false);
+  const [running, setRunning] = useState(false);
   const signOutOthers = useMutation(api.sessions.signOutOthersByAlertToken);
   const started = useRef(false);
 
@@ -84,38 +91,38 @@ export function SignOutPage() {
     if (outcome !== null) stripToken();
   }, [outcome]);
 
+  /** Runs on the confirm (or retry) tap only; `started` makes a double tap send once. */
   async function run(alertToken: string, storeKey: string) {
+    if (started.current) return;
     started.current = true;
     setFailed(false);
+    setRunning(true);
     try {
-      const result = await signOutOthers({
-        alertToken,
-        sessionToken: getSessionToken() ?? undefined,
-      });
+      const sessionToken = getSessionToken() ?? undefined;
+      const result = await signOutOthers({ alertToken, sessionToken });
       let next: Outcome = "invalid";
       if (result.ok) {
-        next = result.keptCurrent ? "kept" : "all";
-        if (!result.keptCurrent) clearSessionToken();
+        // Only forget the local token when it was one of those signed out.
+        if (result.callerAffected) clearSessionToken();
+        next = result.keptCurrent
+          ? "kept"
+          : result.callerAffected || sessionToken === undefined
+            ? "all"
+            : "owner";
       }
       saveOutcome(storeKey, next);
       setOutcome(next);
     } catch {
       started.current = false;
       setFailed(true);
+    } finally {
+      setRunning(false);
     }
   }
 
-  useEffect(() => {
-    if (token === null || key === null || outcome !== null || started.current) {
-      return;
-    }
-    void run(token, key);
-    // Fires once per token on mount; `started` guards StrictMode's second effect.
-  }, []);
-
   return (
     <main
-      aria-busy={outcome === null && !failed}
+      aria-busy={running}
       className="mx-auto flex max-w-xl flex-col gap-6 p-5 pt-16 text-center"
     >
       {outcome !== null ? (
@@ -136,8 +143,21 @@ export function SignOutPage() {
             </Button>
           )}
         </>
-      ) : (
+      ) : running ? (
         <p className="text-xl text-ink-soft">{t.common.loading}</p>
+      ) : (
+        token &&
+        key && (
+          <>
+            <h1 className="font-display text-3xl leading-snug text-green-deep">
+              {t.signOut.confirmTitle}
+            </h1>
+            <p className="text-lg leading-relaxed">{t.signOut.confirmBody}</p>
+            <Button onClick={() => void run(token, key)}>
+              {t.signOut.confirm}
+            </Button>
+          </>
+        )
       )}
       <Link to="/" className={buttonClass("ghost", "text-green")}>
         {t.common.home}

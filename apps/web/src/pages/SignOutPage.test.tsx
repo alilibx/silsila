@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n/ar";
 import { SignOutPage } from "./SignOutPage";
 
 const m = vi.hoisted(() => ({
@@ -25,6 +27,18 @@ function renderAt(url: string, strict = false) {
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
 }
 
+/** Taps "yes, sign out" on the confirm step. */
+async function confirm() {
+  await userEvent.click(
+    screen.getByRole("button", { name: t.signOut.confirm }),
+  );
+}
+
+const ALL = "سجّلنا خروجك من كل الأجهزة.";
+const KEPT = "سجّلنا خروج الأجهزة الأخرى. هذا الجهاز ما زال مسجّلاً.";
+const OWNER = "سجّلنا خروج كل أجهزة صاحب الرقم.";
+const INVALID = "هذا الرابط لم يعد صالحاً.";
+
 describe("SignOutPage", () => {
   beforeEach(() => {
     m.signOut.mockReset();
@@ -33,28 +47,47 @@ describe("SignOutPage", () => {
     sessionStorage.clear();
   });
 
+  it("asks first: explains, and calls the server only on the confirm tap", async () => {
+    m.signOut.mockResolvedValue({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: false,
+    });
+    renderAt("/signout?t=alert1");
+    expect(screen.getByText(t.signOut.confirmBody)).toBeVisible();
+    expect(m.signOut).not.toHaveBeenCalled();
+    await confirm();
+    expect(await screen.findByText(ALL)).toBeVisible();
+    expect(m.signOut).toHaveBeenCalledTimes(1);
+  });
+
   it("reports an invalid link", async () => {
     m.signOut.mockResolvedValue({ ok: false });
     renderAt("/signout?t=bad");
-    expect(await screen.findByText("هذا الرابط لم يعد صالحاً.")).toBeVisible();
+    await confirm();
+    expect(await screen.findByText(INVALID)).toBeVisible();
     expect(m.clear).not.toHaveBeenCalled();
   });
 
-  it("reports an invalid link without calling the server when there is no token", () => {
+  it("reports an invalid link without asking or calling the server when there is no token", () => {
     renderAt("/signout");
-    expect(screen.getByText("هذا الرابط لم يعد صالحاً.")).toBeVisible();
+    expect(screen.getByText(INVALID)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: t.signOut.confirm }),
+    ).toBeNull();
     expect(m.signOut).not.toHaveBeenCalled();
   });
 
   it("keeps this device signed in when its session survived", async () => {
     m.local = "local-session";
-    m.signOut.mockResolvedValue({ ok: true, keptCurrent: true });
+    m.signOut.mockResolvedValue({
+      ok: true,
+      keptCurrent: true,
+      callerAffected: false,
+    });
     renderAt("/signout?t=alert1");
-    expect(
-      await screen.findByText(
-        "سجّلنا خروج الأجهزة الأخرى. هذا الجهاز ما زال مسجّلاً.",
-      ),
-    ).toBeVisible();
+    await confirm();
+    expect(await screen.findByText(KEPT)).toBeVisible();
     expect(m.signOut).toHaveBeenCalledWith({
       alertToken: "alert1",
       sessionToken: "local-session",
@@ -62,22 +95,54 @@ describe("SignOutPage", () => {
     expect(m.clear).not.toHaveBeenCalled();
   });
 
-  it("signs out everywhere and clears the local token otherwise", async () => {
+  it("clears the local token only when this device was one of those signed out", async () => {
     m.local = "local-session";
-    m.signOut.mockResolvedValue({ ok: true, keptCurrent: false });
+    m.signOut.mockResolvedValue({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: true,
+    });
     renderAt("/signout?t=alert1");
-    expect(
-      await screen.findByText("سجّلنا خروجك من كل الأجهزة."),
-    ).toBeVisible();
+    await confirm();
+    expect(await screen.findByText(ALL)).toBeVisible();
     expect(m.clear).toHaveBeenCalledTimes(1);
   });
 
-  it("calls the server once even when StrictMode runs the effect twice", async () => {
-    m.signOut.mockResolvedValue({ ok: true, keptCurrent: false });
+  it("someone else's session on a shared phone stays, with a neutral message", async () => {
+    m.local = "someone-elses-session";
+    m.signOut.mockResolvedValue({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: false,
+    });
+    renderAt("/signout?t=alert1");
+    await confirm();
+    expect(await screen.findByText(OWNER)).toBeVisible();
+    expect(m.clear).not.toHaveBeenCalled();
+  });
+
+  it("with no session here (e.g. WhatsApp's own browser) it tells the owner all devices are out", async () => {
+    m.signOut.mockResolvedValue({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: false,
+    });
+    renderAt("/signout?t=alert1");
+    await confirm();
+    expect(await screen.findByText(ALL)).toBeVisible();
+    expect(m.clear).not.toHaveBeenCalled();
+  });
+
+  it("calls the server once under StrictMode, even on a double tap", async () => {
+    let resolve: (v: unknown) => void = () => {};
+    m.signOut.mockReturnValue(new Promise((r) => (resolve = r)));
     renderAt("/signout?t=alert1", true);
-    expect(
-      await screen.findByText("سجّلنا خروجك من كل الأجهزة."),
-    ).toBeVisible();
+    expect(m.signOut).not.toHaveBeenCalled();
+    const button = screen.getByRole("button", { name: t.signOut.confirm });
+    await userEvent.click(button);
+    await userEvent.click(button);
+    resolve({ ok: true, keptCurrent: false, callerAffected: false });
+    expect(await screen.findByText(ALL)).toBeVisible();
     expect(m.signOut).toHaveBeenCalledTimes(1);
     expect(m.signOut).toHaveBeenCalledWith({
       alertToken: "alert1",
@@ -86,14 +151,24 @@ describe("SignOutPage", () => {
   });
 
   it("shows the same result after a reload (token stripped, outcome remembered)", async () => {
-    m.signOut.mockResolvedValue({ ok: true, keptCurrent: false });
+    m.signOut.mockResolvedValue({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: false,
+    });
     const first = renderAt("/signout?t=alert1");
-    await screen.findByText("سجّلنا خروجك من كل الأجهزة.");
+    await confirm();
+    await screen.findByText(ALL);
     first.unmount();
-    renderAt("/signout");
-    expect(screen.getByText("سجّلنا خروجك من كل الأجهزة.")).toBeVisible();
-    // And re-opening the same link does not spend the token again.
+    const second = renderAt("/signout");
+    expect(screen.getByText(ALL)).toBeVisible();
+    second.unmount();
+    // Re-opening the same link shows the outcome without asking or spending the token again.
     renderAt("/signout?t=alert1");
+    expect(screen.getByText(ALL)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: t.signOut.confirm }),
+    ).toBeNull();
     expect(m.signOut).toHaveBeenCalledTimes(1);
   });
 
@@ -101,17 +176,28 @@ describe("SignOutPage", () => {
     window.history.replaceState({ idx: 3 }, "", "/signout?t=secret-alert");
     m.signOut.mockResolvedValue({ ok: false });
     renderAt("/signout?t=secret-alert");
-    await screen.findByText("هذا الرابط لم يعد صالحاً.");
+    await confirm();
+    await screen.findByText(INVALID);
     expect(window.location.search).toBe("");
     expect(window.history.state).toEqual({ idx: 3 });
     const stored = JSON.stringify(Object.entries(sessionStorage));
     expect(stored).not.toContain("secret-alert");
   });
 
-  it("offers a way home", async () => {
+  it("keeps the token in the address bar until the person confirms", () => {
+    window.history.replaceState(null, "", "/signout?t=alert1");
+    renderAt("/signout?t=alert1");
+    expect(window.location.search).toBe("?t=alert1");
+  });
+
+  it("offers a way home, on the confirm step too", async () => {
     m.signOut.mockResolvedValue({ ok: false });
     renderAt("/signout?t=x");
-    await screen.findByText("هذا الرابط لم يعد صالحاً.");
+    expect(
+      screen.getByRole("link", { name: "الصفحة الرئيسية" }),
+    ).toHaveAttribute("href", "/");
+    await confirm();
+    await screen.findByText(INVALID);
     expect(
       screen.getByRole("link", { name: "الصفحة الرئيسية" }),
     ).toHaveAttribute("href", "/");
@@ -119,30 +205,37 @@ describe("SignOutPage", () => {
 
   it("explains a network failure and lets the user retry", async () => {
     m.signOut.mockRejectedValueOnce(new Error("offline"));
-    m.signOut.mockResolvedValueOnce({ ok: true, keptCurrent: false });
+    m.signOut.mockResolvedValueOnce({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: false,
+    });
     renderAt("/signout?t=alert1");
+    await confirm();
     const retry = await screen.findByRole("button", {
       name: "حاول مرة أخرى",
     });
     expect(screen.getByRole("alert")).toHaveTextContent("تعذّر الاتصال");
-    retry.click();
-    expect(
-      await screen.findByText("سجّلنا خروجك من كل الأجهزة."),
-    ).toBeVisible();
+    await userEvent.click(retry);
+    expect(await screen.findByText(ALL)).toBeVisible();
   });
 
-  it("keeps the token in the address bar after a network failure, so a reload retries", async () => {
+  it("keeps the token in the address bar after a network failure, so a reload can try again", async () => {
     window.history.replaceState(null, "", "/signout?t=alert1");
     m.signOut.mockRejectedValueOnce(new Error("offline"));
     const first = renderAt("/signout?t=alert1");
+    await confirm();
     await screen.findByRole("alert");
     expect(window.location.search).toBe("?t=alert1");
     first.unmount();
-    m.signOut.mockResolvedValueOnce({ ok: true, keptCurrent: false });
+    m.signOut.mockResolvedValueOnce({
+      ok: true,
+      keptCurrent: false,
+      callerAffected: false,
+    });
     renderAt("/signout?t=alert1");
-    expect(
-      await screen.findByText("سجّلنا خروجك من كل الأجهزة."),
-    ).toBeVisible();
+    await confirm();
+    expect(await screen.findByText(ALL)).toBeVisible();
     expect(m.signOut).toHaveBeenCalledTimes(2);
     expect(window.location.search).toBe("");
   });
@@ -151,17 +244,19 @@ describe("SignOutPage", () => {
     window.history.replaceState(null, "", "/signout?t=alert1");
     m.signOut.mockReturnValueOnce(new Promise(() => {}));
     const first = renderAt("/signout?t=alert1");
-    await Promise.resolve();
+    await confirm();
     expect(window.location.search).toBe("?t=alert1");
-    expect(screen.queryByText("هذا الرابط لم يعد صالحاً.")).toBeNull();
+    expect(screen.queryByText(INVALID)).toBeNull();
     first.unmount();
-    m.signOut.mockResolvedValueOnce({ ok: true, keptCurrent: true });
+    m.local = "local-session";
+    m.signOut.mockResolvedValueOnce({
+      ok: true,
+      keptCurrent: true,
+      callerAffected: false,
+    });
     renderAt("/signout?t=alert1");
-    expect(
-      await screen.findByText(
-        "سجّلنا خروج الأجهزة الأخرى. هذا الجهاز ما زال مسجّلاً.",
-      ),
-    ).toBeVisible();
+    await confirm();
+    expect(await screen.findByText(KEPT)).toBeVisible();
     expect(window.location.search).toBe("");
   });
 });
