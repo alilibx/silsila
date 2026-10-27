@@ -51,3 +51,21 @@ export function heldAssignment(
     ) ?? null
   );
 }
+
+/** Per-juz state from a round's assignment rows: done beats reading beats open. */
+export function juzStates(
+  assignments: readonly Doc<"assignments">[],
+): Map<number, { state: "reading" | "done"; assignment: Doc<"assignments"> }> {
+  const byJuz = new Map<
+    number,
+    { state: "reading" | "done"; assignment: Doc<"assignments"> }
+  >();
+  for (const a of assignments) {
+    if (byJuz.get(a.juz)?.state === "done") continue;
+    if (a.finishedAt !== null)
+      byJuz.set(a.juz, { state: "done", assignment: a });
+    else if (a.releasedAt === null)
+      byJuz.set(a.juz, { state: "reading", assignment: a });
+  }
+  return byJuz;
+}

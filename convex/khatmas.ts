@@ -10,17 +10,23 @@ import {
 } from "./_generated/server";
 import { randomToken } from "./lib/crypto";
 import { JUZ } from "./lib/juz";
+import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { SCHEDULES, type Schedule } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
 import { resolveSession, sessionQuery } from "./lib/session";
 import { cleanKhatmaName } from "./lib/text";
-import { insertRound, heldAssignment, roundAssignments } from "./rounds";
+import { suggestJuz } from "./pool";
+import {
+  heldAssignment,
+  insertRound,
+  juzStates,
+  roundAssignments,
+} from "./rounds";
 
 const JUZ_COUNT = 30;
 const DAY_MS = 86_400_000;
-/** `randomToken(9)` is 12 base64url characters; `randomToken(8)` is 11. */
-const INVITE_CODE_RE = /^[A-Za-z0-9_-]{12}$/;
+/** `randomToken(8)` is 11 base64url characters. */
 const SHARE_TOKEN_RE = /^[A-Za-z0-9_-]{11}$/;
 /** Attempts at drawing an unused invite code; a collision is ~1e-20 likely. */
 const INVITE_CODE_ATTEMPTS = 3;
@@ -67,18 +73,6 @@ export type KhatmaView = {
 // ---------------------------------------------------------------------------
 // Shared helpers
 
-/** The khatma behind an invite code, or `null` (malformed codes never reach the index). */
-export async function khatmaByInviteCode(
-  ctx: QueryCtx,
-  inviteCode: string,
-): Promise<Doc<"khatmas"> | null> {
-  if (!INVITE_CODE_RE.test(inviteCode)) return null;
-  return await ctx.db
-    .query("khatmas")
-    .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
-    .first();
-}
-
 /** The person's ACTIVE membership of a khatma; blocked members count as non-members. */
 export async function activeMembership(
   ctx: QueryCtx,
@@ -92,24 +86,6 @@ export async function activeMembership(
     )
     .first();
   return member?.status === "active" ? member : null;
-}
-
-/** Per-juz state from a round's assignment rows: done beats reading beats open. */
-function juzStates(
-  assignments: readonly Doc<"assignments">[],
-): Map<number, { state: "reading" | "done"; assignment: Doc<"assignments"> }> {
-  const byJuz = new Map<
-    number,
-    { state: "reading" | "done"; assignment: Doc<"assignments"> }
-  >();
-  for (const a of assignments) {
-    if (byJuz.get(a.juz)?.state === "done") continue;
-    if (a.finishedAt !== null)
-      byJuz.set(a.juz, { state: "done", assignment: a });
-    else if (a.releasedAt === null)
-      byJuz.set(a.juz, { state: "reading", assignment: a });
-  }
-  return byJuz;
 }
 
 /**
@@ -295,10 +271,14 @@ export const view = sessionQuery({
 
     const held = me && personId ? heldAssignment(assignments, personId) : null;
     const holding = held?.juz ?? null;
-    // Until suggestJuz (Task 7) lands: the lowest open juz' for anyone not already holding one.
+    // Blocked members get no suggestion; viewers and non-members do (the UI
+    // leads them into verification).
+    const blocked =
+      personId !== null &&
+      members.some((m) => m.personId === personId && m.status === "blocked");
     const suggestion =
-      holding === null
-        ? (tiles.find((tile) => tile.state === "open")?.juz ?? null)
+      holding === null && !blocked
+        ? await suggestJuz(ctx, khatma._id, personId)
         : null;
 
     let inviterName: string | null = null;
