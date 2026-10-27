@@ -5,7 +5,8 @@ import { blockExternal, randomPhone, verifyInSheet } from "./support";
 const KHATMA_NAME = "ختمة الأسرة";
 
 // The core loop at phone size: A starts a khatma, takes and finishes a juz', takes another;
-// B follows A's invite, verifies, and takes one. B must see A's name on a "reading" tile only.
+// B follows A's invite, verifies (surviving a tab reload mid-way), and takes one. B must see
+// A's name on a "reading" tile only.
 test("core loop: create, take, finish, invite, join", async ({
   page,
   browser,
@@ -42,6 +43,11 @@ test("core loop: create, take, finish, invite, join", async ({
   // --- Person A: take the suggested juz', finish it ------------------------------------------
   await page.getByRole("button", { name: t.card.take }).click();
   const takeSheet = page.getByRole("dialog");
+  // On a shared phone the sheet says whose account takes the juz'.
+  await expect(takeSheet).toContainText(t.take.as(aName));
+  await expect(
+    takeSheet.getByRole("button", { name: t.take.notYou(aName) }),
+  ).toBeVisible();
   await takeSheet.getByRole("button", { name: t.take.confirm }).click();
   await expect(page.getByText(t.card.held)).toBeVisible();
   const mine = page.getByRole("button", { name: new RegExp(t.tile.mine) });
@@ -75,8 +81,18 @@ test("core loop: create, take, finish, invite, join", async ({
     await expect(b.getByRole("note")).toContainText(t.khatma.invited(aName));
 
     // Signed out: tapping take opens verification, then the take sheet for the same juz'.
+    // The tab reloads while B is in WhatsApp (phones discard background tabs); the sheet
+    // comes back on its own and carries on.
     await b.getByRole("button", { name: t.card.take }).click();
-    await verifyInSheet(b, bName, randomPhone());
+    await verifyInSheet(b, bName, randomPhone(), async () => {
+      await b.reload();
+      await expect(
+        b.getByRole("dialog", { name: t.verify.beforeTake }),
+      ).toBeVisible();
+      await expect(
+        b.getByRole("heading", { name: t.verify.waitingTitle }),
+      ).toBeVisible();
+    });
     await b
       .getByRole("dialog")
       .getByRole("button", { name: t.take.confirm })

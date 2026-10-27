@@ -43,11 +43,13 @@ export async function blockExternal(context: BrowserContext): Promise<void> {
 /**
  * Runs the open verification sheet to the end as a new number: types the name, reads the
  * ready-made message from the "open WhatsApp" link, sends it as `phone`, and confirms.
+ * `whileInWhatsApp` runs between reading the message and sending it, e.g. to reload the tab.
  */
 export async function verifyInSheet(
   page: Page,
   displayName: string,
   phone: string,
+  whileInWhatsApp?: () => Promise<void>,
 ): Promise<void> {
   const sheet = page.getByRole("dialog");
   await sheet.getByLabel(t.verify.nameLabel).fill(displayName);
@@ -60,6 +62,7 @@ export async function verifyInSheet(
   const message = new URL(href ?? "").searchParams.get("text");
   expect(message).toMatch(/[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{2}/);
 
+  await whileInWhatsApp?.();
   await simulateIncoming(phone, message ?? "");
 
   await expect(
