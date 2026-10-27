@@ -67,6 +67,7 @@ describe("KhatmaPage invite and remind", () => {
     m.view = member({
       me: {
         signedIn: false,
+        displayName: null,
         isMember: false,
         holding: null,
         suggestion: null,

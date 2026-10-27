@@ -63,6 +63,8 @@ export type KhatmaView = {
   tiles: TileView[];
   me: {
     signedIn: boolean;
+    /** The signed-in viewer's own name (null when signed out). */
+    displayName: string | null;
     isMember: boolean;
     holding: number | null;
     suggestion: number | null;
@@ -303,6 +305,7 @@ export const view = sessionQuery({
       tiles,
       me: {
         signedIn: ctx.person !== null,
+        displayName: ctx.person?.displayName ?? null,
         isMember,
         holding,
         suggestion,

@@ -153,6 +153,7 @@ describe("KhatmaPage", () => {
         inviterName: "أحمد",
         me: {
           signedIn: false,
+          displayName: null,
           isMember: false,
           holding: null,
           suggestion: 1,
@@ -197,6 +198,7 @@ describe("KhatmaPage", () => {
       makeView({
         me: {
           signedIn: false,
+          displayName: null,
           isMember: false,
           holding: null,
           suggestion: 3,
@@ -281,6 +283,7 @@ describe("KhatmaPage", () => {
         makeView({
           me: {
             signedIn: true,
+            displayName: "علي",
             isMember: true,
             holding: null,
             suggestion: 3,

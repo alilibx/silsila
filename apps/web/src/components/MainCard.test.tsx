@@ -15,6 +15,7 @@ describe("MainCard", () => {
     const view = makeView({
       me: {
         signedIn: true,
+        displayName: "علي",
         isMember: true,
         holding: null,
         suggestion: 19,
@@ -32,6 +33,7 @@ describe("MainCard", () => {
     const view = makeView({
       me: {
         signedIn: true,
+        displayName: "علي",
         isMember: true,
         holding: null,
         suggestion: 19,
@@ -49,6 +51,7 @@ describe("MainCard", () => {
       tiles: makeTiles({ 14: { state: "reading", isMine: true } }),
       me: {
         signedIn: true,
+        displayName: "علي",
         isMember: true,
         holding: 14,
         suggestion: null,

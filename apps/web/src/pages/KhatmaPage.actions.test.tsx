@@ -51,6 +51,7 @@ const tree = () => (
 
 const signedIn = (over: Partial<KhatmaView["me"]> = {}): KhatmaView["me"] => ({
   signedIn: true,
+  displayName: "علي",
   isMember: true,
   holding: null,
   suggestion: 3,
@@ -319,6 +320,7 @@ describe("take after verification", () => {
     makeView({
       me: {
         signedIn: false,
+        displayName: null,
         isMember: false,
         holding: null,
         suggestion: 3,

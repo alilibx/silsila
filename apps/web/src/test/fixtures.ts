@@ -29,6 +29,7 @@ export function makeView(overrides: Partial<KhatmaView> = {}): KhatmaView {
     tiles: makeTiles(),
     me: {
       signedIn: true,
+      displayName: "علي",
       isMember: true,
       holding: null,
       suggestion: null,

@@ -176,6 +176,7 @@ test("create returns an invite code and makes the creator a member", async () =>
   expect(view.lastCompleted).toBeNull();
   expect(view.me).toEqual({
     signedIn: true,
+    displayName: "علي",
     isMember: true,
     holding: null,
     suggestion: 1,
@@ -281,6 +282,10 @@ test("viewers see states but no names", async () => {
   }
   expect((await viewAs(t, code, null)).me.signedIn).toBe(false);
   expect((await viewAs(t, code, outsider)).me.signedIn).toBe(true);
+  // signed-in viewers see their own name (so a shared phone shows whose
+  // account takes the juz'); signed-out viewers see none
+  expect((await viewAs(t, code, null)).me.displayName).toBeNull();
+  expect((await viewAs(t, code, outsider)).me.displayName).toBe("غريب");
 });
 
 test("members see reader names on reading tiles only", async () => {
