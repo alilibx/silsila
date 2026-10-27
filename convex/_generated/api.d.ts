@@ -9,6 +9,8 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as dev from "../dev.js";
+import type * as http from "../http.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_juz from "../lib/juz.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
@@ -19,6 +21,8 @@ import type * as lib_text from "../lib/text.js";
 import type * as maintenance from "../maintenance.js";
 import type * as people from "../people.js";
 import type * as sessions from "../sessions.js";
+import type * as verification from "../verification.js";
+import type * as whatsapp from "../whatsapp.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +32,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  dev: typeof dev;
+  http: typeof http;
   "lib/crypto": typeof lib_crypto;
   "lib/juz": typeof lib_juz;
   "lib/rateLimit": typeof lib_rateLimit;
@@ -38,6 +44,8 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   people: typeof people;
   sessions: typeof sessions;
+  verification: typeof verification;
+  whatsapp: typeof whatsapp;
 }>;
 
 /**

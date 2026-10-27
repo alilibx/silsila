@@ -1,5 +1,10 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, mutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  mutation,
+  type MutationCtx,
+} from "./_generated/server";
 import { sha256Hex } from "./lib/crypto";
 import {
   requirePerson,
@@ -9,6 +14,24 @@ import {
 } from "./lib/session";
 import { maskPhone } from "./lib/text";
 
+/** Inserts a session row; callers pass hashes, never raw tokens. */
+export async function insertSession(
+  ctx: MutationCtx,
+  args: {
+    personId: Id<"people">;
+    tokenHash: string;
+    alertTokenHash: string;
+    deviceLabel: string;
+  },
+): Promise<Id<"sessions">> {
+  const now = Date.now();
+  return await ctx.db.insert("sessions", {
+    ...args,
+    createdAt: now,
+    lastUsedAt: now,
+  });
+}
+
 export const create = internalMutation({
   args: {
     personId: v.id("people"),
@@ -16,14 +39,7 @@ export const create = internalMutation({
     alertTokenHash: v.string(),
     deviceLabel: v.string(),
   },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    return await ctx.db.insert("sessions", {
-      ...args,
-      createdAt: now,
-      lastUsedAt: now,
-    });
-  },
+  handler: (ctx, args) => insertSession(ctx, args),
 });
 
 export const me = sessionQuery({
