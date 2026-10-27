@@ -103,8 +103,10 @@ export function KhatmaPage() {
       {loaded && sheet?.kind === "take" && (
         <TakeSheet
           juz={sheet.juz}
+          takerName={loaded.me.displayName}
           busy={busy}
           onConfirm={() => void actions.confirmTake(sheet.juz)}
+          onSwitchAccount={() => void actions.switchAccount(sheet.juz)}
           onClose={actions.closeSheet}
         />
       )}

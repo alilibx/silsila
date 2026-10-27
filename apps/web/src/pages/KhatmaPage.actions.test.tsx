@@ -14,13 +14,18 @@ const m = vi.hoisted(() => ({
   undoFinish: vi.fn(),
   release: vi.fn(),
   markCelebrated: vi.fn(),
+  signOut: vi.fn(),
+  cleared: vi.fn(),
   token: undefined as string | undefined,
 }));
 
 vi.mock("../lib/session", () => ({
   useSessionToken: () => m.token,
   getSessionToken: () => m.token ?? null,
-  clearSessionToken: () => {},
+  clearSessionToken: () => {
+    m.cleared();
+    m.token = undefined;
+  },
 }));
 vi.mock("../features/verify/VerifySheet", () => ({
   VerifySheet: (props: {
@@ -43,7 +48,12 @@ vi.mock("convex/react", async () => {
     useQuery: (...args: unknown[]) => m.query(...args),
     useMutation: (ref: never) => {
       const name = getFunctionName(ref).split(":")[1] as
-        "take" | "finish" | "undoFinish" | "release" | "markCelebrated";
+        | "take"
+        | "finish"
+        | "undoFinish"
+        | "release"
+        | "markCelebrated"
+        | "signOut";
       return m[name];
     },
   };
@@ -108,6 +118,8 @@ beforeEach(() => {
     m.undoFinish,
     m.release,
     m.markCelebrated,
+    m.signOut,
+    m.cleared,
   ]) {
     fn.mockReset();
   }
@@ -238,6 +250,76 @@ describe("take", () => {
     expect(m.take).toHaveBeenCalledTimes(1);
     await act(async () => finish({ ok: true }));
     expect(toast()).toHaveTextContent("لك الآن");
+  });
+});
+
+describe("whose account takes the juz' (shared phone)", () => {
+  const signedOutView = () =>
+    makeView({
+      me: {
+        signedIn: false,
+        displayName: null,
+        isMember: false,
+        holding: null,
+        suggestion: 3,
+        celebrateRound: null,
+      },
+    });
+
+  it("the take sheet names the signed-in account", async () => {
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    const sheet = screen.getByRole("dialog", { name: "الجزء ٣" });
+    expect(sheet).toHaveTextContent(t.take.as("علي"));
+    expect(
+      within(sheet).getByRole("button", { name: t.take.notYou("علي") }),
+    ).toBeInTheDocument();
+  });
+
+  it("'not you?' signs out, forgets the token, verifies, then offers the same juz' to the new account", async () => {
+    m.signOut.mockResolvedValue(null);
+    const { user, show } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
+    await user.click(
+      screen.getByRole("button", { name: t.take.notYou("علي") }),
+    );
+    expect(m.signOut).toHaveBeenCalledWith({ sessionToken: "tok" });
+    expect(m.cleared).toHaveBeenCalledTimes(1);
+    expect(m.take).not.toHaveBeenCalled();
+    const verify = screen.getByRole("dialog", { name: t.verify.beforeTake });
+    expect(JSON.parse(verify.dataset.intent ?? "null")).toEqual({
+      kind: "take",
+      inviteCode: "CODE",
+      juz: 9,
+    });
+    expect(screen.queryByRole("dialog", { name: "الجزء ٩" })).toBeNull();
+
+    show(signedOutView()); // the view reloads without a token
+    await user.click(screen.getByRole("button", { name: "verified" }));
+    m.token = "sara";
+    show(makeView({ me: signedIn({ displayName: "سارة", suggestion: 1 }) }));
+    const sheet = screen.getByRole("dialog", { name: "الجزء ٩" });
+    expect(sheet).toHaveTextContent(t.take.as("سارة"));
+    await user.click(
+      within(sheet).getByRole("button", { name: t.take.confirm }),
+    );
+    expect(m.take).toHaveBeenCalledWith({
+      sessionToken: "sara",
+      inviteCode: "CODE",
+      juz: 9,
+    });
+  });
+
+  it("a failed sign-out keeps the account and the sheet, with the network toast", async () => {
+    m.signOut.mockRejectedValue(new Error("offline"));
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    await user.click(
+      screen.getByRole("button", { name: t.take.notYou("علي") }),
+    );
+    expect(m.cleared).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "الجزء ٣" })).toBeInTheDocument();
+    expect(toast()).toHaveTextContent(t.errors.network);
   });
 });
 

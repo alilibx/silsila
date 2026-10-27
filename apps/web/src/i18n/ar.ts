@@ -139,6 +139,8 @@ export const ar = {
   take: {
     confirm: "نعم، هذا جزئي",
     notNow: "ليس الآن",
+    as: (name: string) => `تأخذه باسم ${name}`,
+    notYou: (name: string) => `لستَ ${name}؟`,
   },
   release: {
     title: "لا بأس، جزاك الله خيراً",

@@ -6,13 +6,24 @@ import { Sheet } from "./Sheet";
 
 type Props = {
   juz: number;
+  /** The signed-in account's name, shown so a shared phone never takes under the wrong name. */
+  takerName: string | null;
   busy: boolean;
   onConfirm: () => void;
+  /** Signs this account out and verifies someone else for the same juz'. */
+  onSwitchAccount: () => void;
   onClose: () => void;
 };
 
-/** Confirms taking one juz': its number, name and first surah. */
-export function TakeSheet({ juz, busy, onConfirm, onClose }: Props) {
+/** Confirms taking one juz': its number, name and first surah, and whose account takes it. */
+export function TakeSheet({
+  juz,
+  takerName,
+  busy,
+  onConfirm,
+  onSwitchAccount,
+  onClose,
+}: Props) {
   const info = JUZ.find((j) => j.number === juz);
   const number = toArabicDigits(juz);
   return (
@@ -30,6 +41,19 @@ export function TakeSheet({ juz, busy, onConfirm, onClose }: Props) {
           </>
         )}
       </div>
+      {takerName && (
+        <div className="mt-3 text-center">
+          <p className="font-medium">{t.take.as(takerName)}</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onSwitchAccount}
+            className="min-h-14 rounded-ui px-4 font-medium text-green underline underline-offset-4"
+          >
+            {t.take.notYou(takerName)}
+          </button>
+        </div>
+      )}
       <div className="mt-5 grid gap-3">
         <Button onClick={onConfirm} disabled={busy}>
           {t.take.confirm}

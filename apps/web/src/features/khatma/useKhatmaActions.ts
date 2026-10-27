@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { UNDO_WINDOW_MS, type ToastData } from "../../components/Toast";
 import { pendingIntent } from "../verify/progress";
 import { t } from "../../i18n/ar";
-import { useSessionToken } from "../../lib/session";
+import { clearSessionToken, useSessionToken } from "../../lib/session";
 
 type Failure<R> = R extends { ok: false; reason: infer Reason }
   ? Reason
@@ -93,6 +93,7 @@ export function useKhatmaActions(
   const undoMutation = useMutation(api.pool.undoFinish);
   const releaseMutation = useMutation(api.pool.release);
   const celebratedMutation = useMutation(api.khatmas.markCelebrated);
+  const signOutMutation = useMutation(api.sessions.signOut);
 
   // After verification the view reloads under the new token. Wait for it, and never offer a
   // second juz' to someone who already holds one.
@@ -180,6 +181,22 @@ export function useKhatmaActions(
   };
   const cancelVerify = () => setPendingJuz(null);
 
+  /**
+   * "Not you?" on a shared phone: sign this account out (here and on the server), then verify
+   * whoever is holding the phone for the same juz'; the usual take-after-verification flow
+   * offers it once the view reloads under their session.
+   */
+  async function switchAccount(juz: number) {
+    const signedOut = await run(async () => {
+      await signOutMutation({ sessionToken });
+      return true;
+    });
+    if (!signedOut) return;
+    clearSessionToken();
+    setSheet(null);
+    setPendingJuz(juz);
+  }
+
   async function confirmTake(juz: number) {
     const result = await run(() => takeMutation({ ...args, juz }));
     if (!result) return;
@@ -231,6 +248,7 @@ export function useKhatmaActions(
     cancelVerify,
     take,
     confirmTake,
+    switchAccount,
     finish,
     undo,
     confirmRelease,
