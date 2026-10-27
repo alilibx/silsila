@@ -96,7 +96,7 @@ test("alert link keeps the owner's own session and removes the rest", async () =
     alertToken: "al_2",
     sessionToken: "tok_1",
   });
-  expect(res).toEqual({ ok: true, keptCurrent: true });
+  expect(res).toEqual({ ok: true, keptCurrent: true, callerAffected: false });
   expect(await sessionIds(t, personId)).toEqual([s1]);
   // another person's sessions are untouched
   expect(await sessionIds(t, other)).toEqual([otherSession]);
@@ -110,7 +110,7 @@ test("alert link without a session removes every session of that person", async 
   const res = await t.mutation(api.sessions.signOutOthersByAlertToken, {
     alertToken: "al_2",
   });
-  expect(res).toEqual({ ok: true, keptCurrent: false });
+  expect(res).toEqual({ ok: true, keptCurrent: false, callerAffected: false });
   expect(await sessionIds(t, personId)).toEqual([]);
 });
 
@@ -123,7 +123,7 @@ test("alert link removes everything when the caller is the alerted session", asy
     alertToken: "al_2",
     sessionToken: "tok_2",
   });
-  expect(res).toEqual({ ok: true, keptCurrent: false });
+  expect(res).toEqual({ ok: true, keptCurrent: false, callerAffected: true });
   expect(await sessionIds(t, personId)).toEqual([]);
 });
 
@@ -140,7 +140,7 @@ test("alert link ignores a session token from another person or an unknown one",
       alertToken: "al_2",
       sessionToken: "tok_o",
     }),
-  ).toEqual({ ok: true, keptCurrent: false });
+  ).toEqual({ ok: true, keptCurrent: false, callerAffected: false });
   expect(await sessionIds(t, personId)).toEqual([]);
   expect(await sessionIds(t, other)).toEqual([otherSession]);
 
@@ -151,7 +151,7 @@ test("alert link ignores a session token from another person or an unknown one",
       alertToken: "al_3",
       sessionToken: "nope",
     }),
-  ).toEqual({ ok: true, keptCurrent: false });
+  ).toEqual({ ok: true, keptCurrent: false, callerAffected: false });
   expect(await sessionIds(t, p3)).toEqual([]);
 });
 

@@ -65,6 +65,8 @@ export const signOut = sessionMutation({
  * the alerted person, except the caller's own when that is a different session
  * of the same person (so the real owner stays signed in). Opened with no
  * session (e.g. WhatsApp's in-app browser) it signs out all of them.
+ * `callerAffected` is true when the caller's own session was one of those
+ * removed, so the page knows whether to forget its local token.
  */
 export const signOutOthersByAlertToken = mutation({
   args: { alertToken: v.string(), sessionToken: v.optional(v.string()) },
@@ -78,13 +80,11 @@ export const signOutOthersByAlertToken = mutation({
       .first();
     if (!alerted) return { ok: false as const };
 
-    const caller = await resolveSession(ctx, args.sessionToken);
+    const { session: caller } = await resolveSession(ctx, args.sessionToken);
+    const callerIsAlertedPerson =
+      caller !== null && caller.personId === alerted.personId;
     const keep =
-      caller.session &&
-      caller.session.personId === alerted.personId &&
-      caller.session._id !== alerted._id
-        ? caller.session._id
-        : null;
+      callerIsAlertedPerson && caller._id !== alerted._id ? caller._id : null;
 
     const sessions = await ctx.db
       .query("sessions")
@@ -93,7 +93,11 @@ export const signOutOthersByAlertToken = mutation({
     for (const s of sessions) {
       if (s._id !== keep) await ctx.db.delete(s._id);
     }
-    return { ok: true as const, keptCurrent: keep !== null };
+    return {
+      ok: true as const,
+      keptCurrent: keep !== null,
+      callerAffected: callerIsAlertedPerson && keep === null,
+    };
   },
 });
 
