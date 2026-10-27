@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@convex/*": ["../convex/*"]
+    }
+  },
+  "include": ["./**/*.ts", "../playwright.config.ts"]
+}

@@ -30,4 +30,11 @@ The celebration duas (Quran 2:127 and 2:201) are copied verbatim from the Tanzil
 
 The cloud Convex project (region EU West, Ireland) is created at deploy time; no cloud deployment exists yet, so there is no dev deployment name to record here.
 
-Tests run with Vitest: `convex/**` in the `edge-runtime` environment (required by `convex-test`), `apps/web/**` in `jsdom`. CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, and test on Node 22 for every pull request.
+## Development / e2e
+
+- `pnpm dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. In dev (`SILSILA_ENV=dev`) a WhatsApp message can be simulated with `pnpm exec convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
+- `pnpm e2e` runs the Playwright smoke test (Chromium, 390×844) against a local backend and Vite server that it starts and stops itself, with no cloud project and no real WhatsApp. It plays two people through verifying, creating a khatma, taking, finishing, and joining by invite. Stop `pnpm dev` first (the ports must be free), and run `pnpm exec playwright install chromium` once. State lives in `.convex/local`, shared with `pnpm dev`.
+
+Deployment (Convex production, Vercel, WhatsApp) is described in [docs/deploy.md](docs/deploy.md).
+
+Tests run with Vitest: `convex/**` in the `edge-runtime` environment (required by `convex-test`), `apps/web/**` in `jsdom`. CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, and test on Node 22 for every pull request. On a push to `main` it also deploys the Convex functions (`deploy` job, needs the `CONVEX_DEPLOY_KEY` secret; skipped while it is unset).

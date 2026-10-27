@@ -11,14 +11,17 @@
     "dev": "run-p dev:convex dev:web",
     "dev:convex": "convex dev",
     "dev:web": "pnpm --if-present --filter ./apps/web dev",
-    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web",
+    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p e2e",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.20.5",
     "convex": "^1.48.0",
     "convex-helpers": "^0.1.129",
     "convex-test": "^0.0.65",
