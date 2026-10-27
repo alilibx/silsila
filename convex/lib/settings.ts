@@ -34,6 +34,6 @@ export async function getSetting<K extends SettingKey>(
   const row = await ctx.db
     .query("settings")
     .withIndex("by_key", (q) => q.eq("key", key))
-    .unique();
+    .first();
   return row === null ? SETTING_DEFAULTS[key] : (row.value as SettingValue<K>);
 }

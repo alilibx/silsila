@@ -8,8 +8,12 @@ const DAY_MS = 24 * HOUR_MS;
 /** Max rows deleted per table per run, keeping each mutation well under Convex limits. */
 const BATCH = 500;
 
-/** Retention: IPs and phone numbers at most 24 hours (spec 9); WhatsApp dedupe ids 7 days. */
-const RATE_LIMIT_TTL_MS = DAY_MS;
+/**
+ * Retention: rate-limit rows (which may be IP-keyed) are purged as soon as their
+ * window has expired (`expiresAt < now`), so an IP is held at most as long as its
+ * window (spec 9: at most 24 hours). Phone numbers in verifications 24 hours;
+ * WhatsApp dedupe ids 7 days.
+ */
 const INBOUND_TTL_MS = 7 * DAY_MS;
 const VERIFICATION_TTL_MS = DAY_MS;
 
@@ -29,9 +33,7 @@ export const purge = internalMutation({
 
     const rateLimits = await ctx.db
       .query("rateLimits")
-      .withIndex("by_windowStart", (q) =>
-        q.lt("windowStart", now - RATE_LIMIT_TTL_MS),
-      )
+      .withIndex("by_expiresAt", (q) => q.lt("expiresAt", now))
       .take(BATCH + 1);
     const inbound = await ctx.db
       .query("inboundMessages")

@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
+import { checkRateLimit } from "./lib/rateLimit";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -28,19 +29,9 @@ function verification(createdAt: number, code: string) {
   };
 }
 
-test("purge deletes old rows and keeps recent ones", async () => {
+test("purge deletes old messages and verifications and keeps recent ones", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
-    await ctx.db.insert("rateLimits", {
-      key: "old",
-      windowStart: NOW - 25 * HOUR,
-      count: 1,
-    });
-    await ctx.db.insert("rateLimits", {
-      key: "new",
-      windowStart: NOW - HOUR,
-      count: 1,
-    });
     await ctx.db.insert("inboundMessages", {
       waMessageId: "old",
       receivedAt: NOW - 8 * 24 * HOUR,
@@ -60,9 +51,6 @@ test("purge deletes old rows and keeps recent ones", async () => {
   await t.mutation(internal.maintenance.purge, {});
 
   await t.run(async (ctx) => {
-    expect(
-      (await ctx.db.query("rateLimits").collect()).map((r) => r.key),
-    ).toEqual(["new"]);
     // inbound messages are kept for 7 days: only the 8-day-old one goes
     expect(
       (await ctx.db.query("inboundMessages").collect())
@@ -77,6 +65,66 @@ test("purge deletes old rows and keeps recent ones", async () => {
   });
 });
 
+test("purge removes expired rate-limit windows and keeps live ones", async () => {
+  const MIN = 60_000;
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    // 10-minute window that expired ~50 minutes ago (started 1h ago)
+    await ctx.db.insert("rateLimits", {
+      key: "ip:expired10min",
+      windowStart: NOW - HOUR,
+      expiresAt: NOW - HOUR + 10 * MIN,
+      count: 3,
+    });
+    // still-open 10-minute window
+    await ctx.db.insert("rateLimits", {
+      key: "ip:live10min",
+      windowStart: NOW - 5 * MIN,
+      expiresAt: NOW + 5 * MIN,
+      count: 1,
+    });
+    // 24h window opened 20h ago (createsPerPersonPerDay style): still live
+    await ctx.db.insert("rateLimits", {
+      key: "person:live24h",
+      windowStart: NOW - 20 * HOUR,
+      expiresAt: NOW + 4 * HOUR,
+      count: 4,
+    });
+    // boundary: expiresAt === now is kept (purge uses expiresAt < now)...
+    await ctx.db.insert("rateLimits", {
+      key: "at-boundary",
+      windowStart: NOW - MIN,
+      expiresAt: NOW,
+      count: 1,
+    });
+    // ...and one millisecond earlier is purged
+    await ctx.db.insert("rateLimits", {
+      key: "just-expired",
+      windowStart: NOW - MIN,
+      expiresAt: NOW - 1,
+      count: 1,
+    });
+  });
+
+  await t.mutation(internal.maintenance.purge, {});
+
+  await t.run(async (ctx) => {
+    expect(
+      (await ctx.db.query("rateLimits").collect()).map((r) => r.key).sort(),
+    ).toEqual(["at-boundary", "ip:live10min", "person:live24h"]);
+  });
+});
+
+test("rate-limit rows record expiresAt = windowStart + windowMs", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await checkRateLimit(ctx, "k", 1, 600_000);
+    const [row] = await ctx.db.query("rateLimits").collect();
+    expect(row?.windowStart).toBe(NOW);
+    expect(row?.expiresAt).toBe(NOW + 600_000);
+  });
+});
+
 test("purge is bounded per run and reschedules itself while a backlog remains", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
@@ -84,6 +132,7 @@ test("purge is bounded per run and reschedules itself while a backlog remains", 
       await ctx.db.insert("rateLimits", {
         key: `k${i}`,
         windowStart: NOW - 30 * HOUR,
+        expiresAt: NOW - 29 * HOUR,
         count: 1,
       });
     }
@@ -107,6 +156,7 @@ test("purge does not reschedule when nothing is left over", async () => {
     await ctx.db.insert("rateLimits", {
       key: "old",
       windowStart: NOW - 30 * HOUR,
+      expiresAt: NOW - 29 * HOUR,
       count: 1,
     });
   });

@@ -19,11 +19,20 @@ export async function checkRateLimit(
     .withIndex("by_key", (q) => q.eq("key", key))
     .first();
   if (row === null) {
-    await ctx.db.insert("rateLimits", { key, windowStart: now, count: 1 });
+    await ctx.db.insert("rateLimits", {
+      key,
+      windowStart: now,
+      expiresAt: now + windowMs,
+      count: 1,
+    });
     return true;
   }
   if (now - row.windowStart >= windowMs) {
-    await ctx.db.patch(row._id, { windowStart: now, count: 1 });
+    await ctx.db.patch(row._id, {
+      windowStart: now,
+      expiresAt: now + windowMs,
+      count: 1,
+    });
     return true;
   }
   if (row.count >= limit) return false;

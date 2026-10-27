@@ -41,6 +41,10 @@ test("window resets after windowMs", async () => {
   vi.setSystemTime(1_000_000 + 60_000);
   expect(await hit()).toBe(true);
   expect(await hit()).toBe(false);
+  // the reset also moves expiresAt forward
+  const row = await t.run(async (ctx) => ctx.db.query("rateLimits").first());
+  expect(row?.windowStart).toBe(1_060_000);
+  expect(row?.expiresAt).toBe(1_120_000);
 });
 
 test("refused hits are not counted", async () => {

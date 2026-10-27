@@ -3,9 +3,10 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-crons.daily(
-  "purge old rate limits, messages, and verifications",
-  { hourUTC: 3, minuteUTC: 0 },
+// Hourly so short-lived (possibly IP-keyed) rate-limit windows don't linger.
+crons.hourly(
+  "purge expired rate limits, old messages, and verifications",
+  { minuteUTC: 0 },
   internal.maintenance.purge,
 );
 

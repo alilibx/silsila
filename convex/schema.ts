@@ -122,8 +122,10 @@ export default defineSchema({
   rateLimits: defineTable({
     key: v.string(),
     windowStart: v.number(),
+    /** windowStart + windowMs; expired windows carry no information and are purged. */
+    expiresAt: v.number(),
     count: v.number(),
   })
     .index("by_key", ["key"])
-    .index("by_windowStart", ["windowStart"]),
+    .index("by_expiresAt", ["expiresAt"]),
 });

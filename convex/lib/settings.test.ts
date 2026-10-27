@@ -67,3 +67,20 @@ test("getSetting return types are widened per key", async () => {
     >();
   });
 });
+
+test("duplicate key rows do not break getSetting", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("settings", {
+      key: "maxMembers",
+      value: 40,
+      updatedAt: 0,
+    });
+    await ctx.db.insert("settings", {
+      key: "maxMembers",
+      value: 50,
+      updatedAt: 1,
+    });
+    expect([40, 50]).toContain(await getSetting(ctx, "maxMembers"));
+  });
+});
