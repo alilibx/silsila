@@ -14,6 +14,7 @@ import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as khatmas from "../khatmas.js";
 import type * as lib_crypto from "../lib/crypto.js";
+import type * as lib_digits from "../lib/digits.js";
 import type * as lib_juz from "../lib/juz.js";
 import type * as lib_khatma from "../lib/khatma.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   khatmas: typeof khatmas;
   "lib/crypto": typeof lib_crypto;
+  "lib/digits": typeof lib_digits;
   "lib/juz": typeof lib_juz;
   "lib/khatma": typeof lib_khatma;
   "lib/rateLimit": typeof lib_rateLimit;

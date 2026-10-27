@@ -15,6 +15,11 @@ const variants: Record<Variant, string> = {
     "min-h-14 border-2 border-line bg-transparent text-ink-soft text-base font-medium",
 };
 
+/** The button look, for links that must read as buttons. */
+export function buttonClass(variant: Variant = "primary", extra = ""): string {
+  return `${base} ${variants[variant]} ${extra}`.trim();
+}
+
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant };
 
 export function Button({
@@ -24,10 +29,6 @@ export function Button({
   ...rest
 }: Props) {
   return (
-    <button
-      type={type}
-      className={`${base} ${variants[variant]} ${className}`}
-      {...rest}
-    />
+    <button type={type} className={buttonClass(variant, className)} {...rest} />
   );
 }

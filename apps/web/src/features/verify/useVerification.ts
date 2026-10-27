@@ -1,0 +1,309 @@
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { normalizeDigits } from "@convex/lib/digits";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { t } from "../../i18n/ar";
+import { deviceLabel } from "../../lib/format";
+import {
+  getClientKey,
+  getSessionToken,
+  setSessionToken,
+} from "../../lib/session";
+import { waLink } from "../../lib/whatsapp";
+import {
+  clearProgress,
+  loadProgress,
+  saveProgress,
+  type Progress,
+} from "./progress";
+
+export type Step =
+  "name" | "waiting" | "confirm" | "pin" | "devices" | "done" | "error";
+
+type ErrorCode = keyof typeof t.verify.errors;
+type Phase = null | "pin" | "devices" | "done" | "error";
+type Busy = null | "start" | "claim" | "pin" | "notMe" | "signOut";
+
+/** Verification codes and PINs both live 10 minutes. */
+const TTL_MS = 10 * 60_000;
+const PIN_LENGTH = 6;
+/** Errors a fresh attempt cannot fix. */
+const NO_RETRY: ReadonlySet<ErrorCode> = new Set(["whatsapp_not_configured"]);
+
+const START_ERRORS: ReadonlySet<string> = new Set([
+  "invalid_name",
+  "rate_limited",
+  "maintenance",
+  "whatsapp_not_configured",
+]);
+
+type StartResponse = {
+  verificationId: string;
+  secret: string;
+  waNumber: string;
+  message: string;
+};
+
+function timeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * Opens a blank tab inside the click, before any await, so the popup blocker allows it.
+ * Callers point it at WhatsApp after the fetch, or close it on failure.
+ */
+function openBlankWindow(): Window | null {
+  try {
+    const win = window.open("about:blank", "_blank");
+    if (win) win.opener = null;
+    return win;
+  } catch {
+    return null;
+  }
+}
+
+export function useVerification() {
+  const [saved, setSaved] = useState<Progress | null>(loadProgress);
+  const [phase, setPhase] = useState<Phase>(null);
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [opened, setOpened] = useState(false);
+  const busyRef = useRef(false);
+
+  const live = useQuery(
+    api.verification.status,
+    saved
+      ? {
+          verificationId: saved.verificationId as Id<"verifications">,
+          secret: saved.secret,
+        }
+      : "skip",
+  );
+  const claim = useAction(api.verification.claim);
+  const confirmPin = useAction(api.verification.confirmPin);
+  const reject = useMutation(api.verification.reject);
+  const signOutOthersMutation = useMutation(api.sessions.signOutOthers);
+
+  // Where the flow is, and the error that explains an error step, when the status decides it.
+  let step: Step;
+  let statusError: ErrorCode | null = null;
+  if (phase === "done" || phase === "devices" || phase === "error") {
+    step = phase;
+  } else if (!saved) {
+    step = "name";
+  } else if (live === undefined) {
+    step = phase === "pin" ? "pin" : "waiting";
+  } else if (live.status === "expired" || live.status === "rejected") {
+    step = "error";
+    statusError = live.status;
+  } else if (live.status === "claimed") {
+    // Our own claim flips this just before it returns; keep the step until it does.
+    if (busy === "pin") step = "pin";
+    else if (busy === "claim") step = "confirm";
+    else if (getSessionToken() !== null) step = "done";
+    else {
+      step = "error";
+      statusError = "expired";
+    }
+  } else if (phase === "pin" || live.status === "needs_pin") {
+    step = "pin";
+  } else {
+    step = live.status === "matched" ? "confirm" : "waiting";
+  }
+
+  // Progress only matters while a verification is open.
+  useEffect(() => {
+    if (step === "error" || step === "devices" || step === "done") {
+      clearProgress();
+    }
+  }, [step]);
+
+  const code = statusError ?? errorCode;
+  const error = code ? t.verify.errors[code] : null;
+
+  function fail(next: ErrorCode): void {
+    setErrorCode(next);
+    setPhase("error");
+  }
+
+  /** Runs one server call at a time; a thrown call is a network failure. */
+  async function run(kind: Exclude<Busy, null>, work: () => Promise<void>) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(kind);
+    try {
+      await work();
+    } catch {
+      fail("network");
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  }
+
+  function finish(token: string, otherSessions: number): void {
+    setSessionToken(token);
+    clearProgress();
+    setErrorCode(null);
+    setPhase(otherSessions > 0 ? "devices" : "done");
+  }
+
+  async function start(name: string): Promise<void> {
+    if (busyRef.current) return;
+    const displayName = name.trim();
+    if (!displayName) {
+      setErrorCode("nameRequired");
+      return;
+    }
+    const win = openBlankWindow();
+    const closeBlank = () => {
+      if (win && !win.closed) win.close();
+    };
+    await run("start", async () => {
+      setErrorCode(null);
+      let res: Response;
+      try {
+        res = await fetch(
+          `${import.meta.env.VITE_CONVEX_SITE_URL}/api/verification/start`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ displayName, clientKey: getClientKey() }),
+          },
+        );
+      } catch {
+        closeBlank();
+        return fail("network");
+      }
+      const body = (await res.json().catch(() => null)) as
+        (Partial<StartResponse> & { error?: string }) | null;
+      if (
+        !res.ok ||
+        !body ||
+        typeof body.verificationId !== "string" ||
+        typeof body.secret !== "string" ||
+        typeof body.waNumber !== "string" ||
+        typeof body.message !== "string"
+      ) {
+        closeBlank();
+        const reason = body?.error ?? "";
+        if (reason === "invalid_name") return setErrorCode("invalid_name");
+        return fail(
+          START_ERRORS.has(reason) ? (reason as ErrorCode) : "generic",
+        );
+      }
+      const waUrl = waLink(body.waNumber, body.message);
+      if (win && !win.closed) {
+        win.location.href = waUrl;
+        setOpened(true);
+      }
+      const progress: Progress = {
+        verificationId: body.verificationId,
+        secret: body.secret,
+        displayName,
+        expiresAt: Date.now() + TTL_MS,
+        waUrl,
+      };
+      saveProgress(progress);
+      setSaved(progress);
+      setPhase(null);
+    });
+  }
+
+  async function confirm(): Promise<void> {
+    if (!saved) return;
+    await run("claim", async () => {
+      const res = await claim({
+        verificationId: saved.verificationId as Id<"verifications">,
+        secret: saved.secret,
+        deviceLabel: deviceLabel(navigator.userAgent),
+        timeZone: timeZone(),
+      });
+      if ("sessionToken" in res) return finish(res.sessionToken, 0);
+      if (res.error === "needs_pin") {
+        setErrorCode(null);
+        return setPhase("pin");
+      }
+      fail("expired");
+    });
+  }
+
+  async function notMe(): Promise<void> {
+    if (!saved) return;
+    await run("notMe", async () => {
+      await reject({
+        verificationId: saved.verificationId as Id<"verifications">,
+        secret: saved.secret,
+      });
+      fail("rejected");
+    });
+  }
+
+  async function submitPin(raw: string): Promise<void> {
+    const pin = normalizeDigits(raw).replace(/\D/gu, "");
+    if (!saved || pin.length !== PIN_LENGTH) return;
+    await run("pin", async () => {
+      const res = await confirmPin({
+        verificationId: saved.verificationId as Id<"verifications">,
+        secret: saved.secret,
+        pin,
+        deviceLabel: deviceLabel(navigator.userAgent),
+        timeZone: timeZone(),
+      });
+      if ("sessionToken" in res) {
+        return finish(res.sessionToken, res.otherSessions);
+      }
+      if (res.error === "wrong_pin") return setErrorCode("wrong_pin");
+      fail(res.error);
+    });
+  }
+
+  async function signOutOthers(): Promise<void> {
+    await run("signOut", async () => {
+      await signOutOthersMutation({
+        sessionToken: getSessionToken() ?? undefined,
+      });
+      setPhase("done");
+    });
+  }
+
+  function continueFromDevices(): void {
+    setPhase("done");
+  }
+
+  function reopenWhatsApp(): void {
+    if (!saved?.waUrl) return;
+    window.open(saved.waUrl, "_blank", "noopener");
+    setOpened(true);
+  }
+
+  /** Back to the name step, forgetting the current attempt. */
+  function reset(): void {
+    clearProgress();
+    setSaved(null);
+    setPhase(null);
+    setErrorCode(null);
+    setBusy(null);
+    setOpened(false);
+  }
+
+  return {
+    step,
+    maskedPhone: live?.maskedPhone ?? null,
+    error,
+    canRetry: step === "error" && code !== null && !NO_RETRY.has(code),
+    busy: busy !== null,
+    displayName: saved?.displayName ?? "",
+    waUrl: saved?.waUrl ?? null,
+    opened,
+    start,
+    confirm,
+    notMe,
+    submitPin,
+    signOutOthers,
+    continueFromDevices,
+    reopenWhatsApp,
+    reset,
+  };
+}

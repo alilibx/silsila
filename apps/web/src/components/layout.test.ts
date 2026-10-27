@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const SRC = join(__dirname, "..");
-const DIRS = ["components", "pages"];
+const DIRS = ["components", "pages", "features/verify"];
 const PHYSICAL = /\b(ml|mr|pl|pr|left|right)-|text-left|text-right/;
 
 function sources(): string[] {

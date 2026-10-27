@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KhatmaView } from "@convex/khatmas";
@@ -10,6 +11,18 @@ const useQuery = vi.fn();
 const useSessionToken = vi.fn<() => string | undefined>();
 vi.mock("../lib/session", () => ({
   useSessionToken: () => useSessionToken(),
+}));
+vi.mock("../features/verify/VerifySheet", () => ({
+  VerifySheet: (props: {
+    title: string;
+    onVerified: () => void;
+    onClose: () => void;
+  }) => (
+    <div role="dialog" aria-label={props.title}>
+      <button onClick={props.onVerified}>verified</button>
+      <button onClick={props.onClose}>close</button>
+    </div>
+  ),
 }));
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQuery(...args),
@@ -165,6 +178,81 @@ describe("KhatmaPage", () => {
       useQuery.mockReturnValue(makeView({ inviterName: "أحمد" }));
       renderAt("/j/CODE?from=SHARE1");
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("take while signed out", () => {
+    const signedOutView = () =>
+      makeView({
+        me: {
+          signedIn: false,
+          isMember: false,
+          holding: null,
+          suggestion: 3,
+          celebrateRound: null,
+        },
+      });
+
+    it("opens the verify sheet from the suggestion button", async () => {
+      useQuery.mockReturnValue(signedOutView());
+      renderAt("/j/CODE");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+      expect(
+        screen.getByRole("dialog", { name: "قبل أن تأخذ جزءاً" }),
+      ).toBeInTheDocument();
+    });
+
+    it("opens the verify sheet from an open tile", async () => {
+      useQuery.mockReturnValue(signedOutView());
+      renderAt("/j/CODE");
+      await userEvent.click(screen.getByRole("button", { name: /^الجزء ٥،/ }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("closes the sheet when verified or dismissed", async () => {
+      useQuery.mockReturnValue(signedOutView());
+      renderAt("/j/CODE");
+      await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+      await userEvent.click(screen.getByRole("button", { name: "close" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+      await userEvent.click(screen.getByRole("button", { name: "verified" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("keeps the sheet mounted while the page reloads for the new session", async () => {
+      useQuery.mockReturnValue(signedOutView());
+      const { rerender } = renderAt("/j/CODE");
+      await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+      useQuery.mockReturnValue(undefined);
+      rerender(
+        <MemoryRouter initialEntries={["/j/CODE"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole("status")).toHaveTextContent("جارٍ التحميل");
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("does not open the sheet while signed in", async () => {
+      useSessionToken.mockReturnValue("tok");
+      useQuery.mockReturnValue(
+        makeView({
+          me: {
+            signedIn: true,
+            isMember: true,
+            holding: null,
+            suggestion: 3,
+            celebrateRound: null,
+          },
+        }),
+      );
+      renderAt("/j/CODE");
+      await userEvent.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
   });
 });
