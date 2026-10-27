@@ -14,3 +14,13 @@ describe("schedule labels", () => {
     ]);
   });
 });
+
+describe("separators next to numbers", () => {
+  // "·" beside Eastern Arabic digits reads as the digit zero (٠).
+  it("never put a middle dot beside a number", () => {
+    expect(t.home.yours("١٤", "ربما")).toBe("جزؤك: الجزء ١٤ «ربما»");
+    expect(t.celebration.subtitle("ختمة العائلة", "١٢")).toBe(
+      "الحمد لله، ختمة العائلة، الختمة ١٢",
+    );
+  });
+});

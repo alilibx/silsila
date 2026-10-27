@@ -27,7 +27,7 @@ describe("CelebrationPage", () => {
       screen.getByRole("heading", { level: 1, name: "ختمنا القرآن معاً" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("الحمد لله · ختمة العائلة · الختمة ١٢"),
+      screen.getByText("الحمد لله، ختمة العائلة، الختمة ١٢"),
     ).toBeInTheDocument();
     expect(screen.getByText("شارك فيها ٧ من أحبابك")).toBeInTheDocument();
   });

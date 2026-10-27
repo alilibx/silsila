@@ -175,7 +175,7 @@ export const ar = {
     startNewPlain: "ابدأ ختمة جديدة",
     settings: "إعداداتي",
     doneOf: (done: string, total: string) => `${done} من ${total} تمّت`,
-    yours: (n: string, name: string) => `جزؤك: ${n} · ${name}`,
+    yours: (n: string, name: string) => `جزؤك: الجزء ${n} «${name}»`,
     loadError: commonErrors.network,
   },
   create: {
@@ -259,7 +259,7 @@ export const ar = {
   celebration: {
     title: "ختمنا القرآن معاً",
     subtitle: (name: string, round: string) =>
-      `الحمد لله · ${name} · الختمة ${round}`,
+      `الحمد لله، ${name}، الختمة ${round}`,
     participants: (n: string) => `شارك فيها ${n} من أحبابك`,
     share: "شارك الفرحة على واتساب",
     shareMessage: (round: string) =>

@@ -72,7 +72,8 @@ describe("HomePage", () => {
     expect(first).toHaveTextContent("ختمة العائلة");
     expect(first).toHaveTextContent("١٢ من ٣٠ تمّت");
     expect(first).toHaveTextContent("أسبوعية");
-    expect(first).toHaveTextContent(/جزؤك: ١٤ · /);
+    expect(first).toHaveTextContent("جزؤك: الجزء ١٤ «ربما»");
+    expect(first).not.toHaveTextContent("·");
     const bar = within(first).getByRole("progressbar");
     expect(bar).toHaveAttribute("aria-valuenow", "12");
     expect(bar).toHaveAttribute("aria-valuemax", "30");
