@@ -271,17 +271,24 @@ test("startInternal rate-limits per client and per IP", async () => {
       clientKey,
       ip,
     });
+  // one client key gets 5 starts per 10 minutes, whatever the IP
   for (let i = 0; i < 5; i++) {
+    expect(await go("k-same", `192.0.2.${i}`)).not.toHaveProperty("error");
+  }
+  expect(await go("k-same", "192.0.2.99")).toEqual({ error: "rate_limited" });
+  // a family on one Wi-Fi (or carrier NAT): many people share an IP
+  for (let i = 0; i < 30; i++) {
     expect(await go(`k${i}`, "198.51.100.1")).not.toHaveProperty("error");
   }
-  // a fresh client key from the same IP is still limited
+  // the 31st start from that IP is limited, even with a fresh client key
   expect(await go("k-new", "198.51.100.1")).toEqual({ error: "rate_limited" });
   // another IP is fine
   expect(await go("k-new", "198.51.100.2")).not.toHaveProperty("error");
   // no IP: only the client key counts
   expect(await go("k-other", null)).not.toHaveProperty("error");
   // the window resets after 10 minutes
-  vi.setSystemTime(NOW + TEN_MIN);
+  // (fake timers tick, so a few windows opened at NOW + 1ms; step past them all)
+  vi.setSystemTime(NOW + TEN_MIN + 1_000);
   expect(await go("k-new2", "198.51.100.1")).not.toHaveProperty("error");
 });
 
