@@ -133,16 +133,6 @@ export const take = sessionMutation({
       MINUTE_MS,
     );
     if (!poolOk) return soft("rate_limited");
-    if (!member) {
-      const joinOk = await checkRateLimit(
-        ctx,
-        `join:${khatma._id}`,
-        await getSetting(ctx, "newMembersPerKhatmaPerHour"),
-        HOUR_MS,
-      );
-      if (!joinOk) return soft("rate_limited");
-    }
-
     const mine = await ctx.db
       .query("assignments")
       .withIndex("by_round", (q) => q.eq("roundId", round._id))
@@ -170,6 +160,14 @@ export const take = sessionMutation({
       if (activeCount >= (await getSetting(ctx, "maxMembers"))) {
         return soft("khatma_full");
       }
+      // Only a take that really creates a membership spends a join slot.
+      const joinOk = await checkRateLimit(
+        ctx,
+        `join:${khatma._id}`,
+        await getSetting(ctx, "newMembersPerKhatmaPerHour"),
+        HOUR_MS,
+      );
+      if (!joinOk) return soft("rate_limited");
       memberId = await ctx.db.insert("members", {
         khatmaId: khatma._id,
         personId: person._id,

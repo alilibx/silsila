@@ -481,7 +481,76 @@ test("the 11th pool action in a minute is rate_limited", async () => {
   });
 });
 
-test("new memberships are limited to 30 per khatma per hour", async () => {
+async function joinCount(t: T, khatmaId: Id<"khatmas">) {
+  return await t.run(async (ctx) => {
+    const row = await ctx.db
+      .query("rateLimits")
+      .withIndex("by_key", (q) => q.eq("key", `join:${khatmaId}`))
+      .first();
+    return row?.count ?? 0;
+  });
+}
+
+test("the 31st real join in an hour is rate_limited; existing members are unaffected", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  for (let i = 0; i < 30; i++) {
+    const person = await signedIn(t, `P${i}`);
+    expect(await take(t, code, person, 1)).toEqual({ ok: true });
+    // free juz 1 again so the next newcomer can take it
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("assignments").collect();
+      for (const row of rows) {
+        if (row.finishedAt === null && row.releasedAt === null) {
+          await ctx.db.patch(row._id, { releasedAt: NOW });
+        }
+      }
+    });
+  }
+  expect(await joinCount(t, khatma._id)).toBe(30);
+  const late = await signedIn(t, "late");
+  expect(await take(t, code, late, 1)).toEqual({
+    ok: false,
+    reason: "rate_limited",
+  });
+  expect((await viewAs(t, code, late)).me.isMember).toBe(false);
+  // an existing member is not affected
+  expect(await take(t, code, ali, 1)).toEqual({ ok: true });
+  // an hour later the window has reset
+  vi.setSystemTime(NOW + 3_600_001);
+  expect(await take(t, code, late, 2)).toEqual({ ok: true });
+});
+
+test("a non-member's taken attempt does not consume a join slot", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  expect(await take(t, code, ali, 14)).toEqual({ ok: true });
+  const bob = await signedIn(t, "B");
+  expect(await take(t, code, bob, 14)).toEqual({ ok: false, reason: "taken" });
+  expect(await joinCount(t, khatma._id)).toBe(0);
+  expect(await take(t, code, bob, 15)).toEqual({ ok: true });
+  expect(await joinCount(t, khatma._id)).toBe(1);
+});
+
+test("a non-member's khatma_full attempt does not consume a join slot", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  await fillMembers(t, khatma._id, 59);
+  const bob = await signedIn(t, "B");
+  expect(await take(t, code, bob, 1)).toEqual({
+    ok: false,
+    reason: "khatma_full",
+  });
+  expect(await joinCount(t, khatma._id)).toBe(0);
+});
+
+test("a join over the hourly limit is rate_limited and creates nothing", async () => {
   const t = convexTest(schema, modules);
   const ali = await signedIn(t, "A");
   const code = await createKhatma(t, ali);
@@ -499,6 +568,8 @@ test("new memberships are limited to 30 per khatma per hour", async () => {
     ok: false,
     reason: "rate_limited",
   });
+  expect((await viewAs(t, code, bob)).me.isMember).toBe(false);
+  expect(await joinCount(t, khatma._id)).toBe(30);
   // existing members are not affected
   expect(await take(t, code, ali, 1)).toEqual({ ok: true });
 });
