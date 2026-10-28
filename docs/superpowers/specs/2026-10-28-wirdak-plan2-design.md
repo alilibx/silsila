@@ -91,6 +91,8 @@ The grace clock only runs from 07:00 to 22:00 in the reader's time zone. That wa
      > الجزء ١٢ متاح لمن يساعد. هل تأخذه أو ترسل الدعوة؟
 
      with "خذ الجزء" and "أرسل الدعوة". If the organizer is the reader, they get no alert **[builder's call]**.
+
+     The same alert goes out whenever a juz' goes back to the pool for any reason, including "I can't finish it" (3.4). That way the alert never reveals why it opened, even to an organizer who remembers whose name was on the tile (Ali, after review).
    - Any member can take it, from the grid, the suggestion, or the alert.
    - The reader isn't notified at that moment **[builder's call: a push saying "your juz' was opened" adds pressure and changes nothing they can do]**.
 5. **The reader can still finish it.** Until someone else takes it, the reader still holds it. Their main card still shows juz' 12 with "أتممت القراءة" and "لا أستطيع إكماله", plus one quiet line: "يمكن لغيرك أن يساعد فيه الآن، ويمكنك إتمامه إن شئت." If they finish, it counts as done, like any finish, and counts toward their pace. "ما زلت أقرأ" isn't offered once the juz' has opened, even if they never used it. Taking it back would put their name back on the tile, which would show everyone that their time ran out **[builder's call]**. To the reader alone, the tile still shows as theirs, so tapping it doesn't offer to take it.
@@ -101,7 +103,7 @@ The grace clock only runs from 07:00 to 22:00 in the reader's time zone. That wa
 
 ### 3.4 Rules around it
 
-- **"I can't finish it" works as in plan 1** at any point, including after the juz' opened for help. It returns the juz' to the pool, and nobody is told. No thank-you note follows, since they chose to step back.
+- **"I can't finish it" works as in plan 1** at any point, including after the juz' opened for help. It returns the juz' to the pool, and nobody is told who released it. The organizer gets the same nameless "open for help" alert as for any juz' that goes back to the pool (3.3 step 4). That replaces v1 spec 3.6's "nobody is notified", so the alert gives no reason away (Ali, after review). No thank-you note follows, since the reader chose to step back.
 - **One juz' at a time still holds.** A reader whose juz' opened for help is still holding it, so they can't take a second one until they finish it, release it, or someone else takes it **[builder's call]**.
 - **Races.** If the reader taps "finished" while someone else takes the juz', whichever reaches the server first wins. If the taker wins, the reader sees the thank-you instead of "تقبّل الله منك". If the reader wins, the taker sees the existing "someone just took it" message and the next suggestion.
 - **Undo.** Undoing a finish (plan 1's 10-second window) puts the hold back exactly as it was, including its grace end, whether it was extended, and whether it was open for help.
@@ -192,7 +194,7 @@ Every message in this plan reaches the person in two ways:
   > نرسل لك تذكيراً لطيفاً، ونخبرك حين نختم معاً.
 
   If they decline, Wirdak doesn't ask again on its own. They can turn push on later from their settings page.
-- **iPhone.** Push works only after the site is added to the home screen, on iOS 16.4 or later (v1 spec 6). After an iPhone user's first take, show simple illustrated steps for that instead of the permission prompt. This needs real app icons (8.3).
+- **iPhone.** Push works only after the site is added to the home screen, on iOS 16.4 or later (v1 spec 6). After an iPhone user's first take, show simple illustrated steps for that instead of the permission prompt. This needs real app icons (8.3), and it needs the sign-in carried over to the home-screen app (5.4).
 - **Per khatma.** One switch on the khatma page, "إشعارات هذه الختمة". It's on by default and stored on the membership.
   - Off stops all pushes from that khatma, including "almost up".
   - In-app notes still appear. The reader just won't be called back to the app, and the grace rules still run **[builder's call: one switch is simpler than separate switches for nudges and alerts]**.
@@ -206,7 +208,7 @@ Every message in this plan reaches the person in two ways:
 | When | Who gets it | Message (gist; exact Arabic is the builder's within this tone) | Counts as a nudge |
 |---|---|---|---|
 | A quarter of the grace period left | The reader | "Juz' 12's time is almost up. Need more time?" (3.3) | No |
-| The juz' opened for help | The organizer, unless they're the reader | "Juz' 12 is open for help. Take it or share the invite?" | No |
+| A juz' went back to the pool: its time ran out, or its reader tapped "I can't finish it" (not when the organizer removed its reader) | The organizer, unless they're the reader | "Juz' 12 is open for help. Take it or share the invite?" The wording is the same whatever the reason. | No |
 | Someone else took the reader's open-for-help juz' | The original reader | "Someone is completing juz' 12. May Allah reward you both." | No |
 | Held for 1.5x their pace | The reader | "Juz' 12 is waiting for you, may Allah make it easy." | Yes |
 | The round is behind | The fastest free members first | "The khatma needs 6 more ajza' by Friday. Take one?" | Yes |
@@ -214,7 +216,25 @@ Every message in this plan reaches the person in two ways:
 | Organizer role handed to you | The new organizer | "You now organize this khatma." | No |
 | Organizer role moved after 30 days away | The old organizer | A private, kind note (6.3) | No |
 
-**Batching [builder's call]:** if more than one juz' in a khatma opens for help within the same hour, the organizer gets one alert listing them ("الأجزاء ١٢ و١٥ متاحة لمن يساعد").
+**Batching [builder's call]:** if more than one juz' in a khatma goes back to the pool within the same hour, the organizer gets one alert listing them ("الأجزاء ١٢ و١٥ متاحة لمن يساعد").
+
+### 5.4 Carrying the sign-in to the iPhone home-screen app (Ali, after review)
+
+iOS gives a site added to the home screen its own storage, separate from Safari. The session token lives in `localStorage`, so without help the home-screen app opens signed out. The person would then have to verify again, and an existing number needs the 6-digit WhatsApp code. That's too much for the 80-year-old this app is for, and push only works inside the home-screen app. So Wirdak carries the sign-in over:
+
+1. Just before showing the "add to home screen" steps, the signed-in Safari page asks the server for a **hand-off token**. It's random (generated in an action, like every other secret), stored only as a hash, tied to the current person and session, single use, and valid for 30 minutes.
+2. The address the home-screen app opens on first launch carries that token, for example `/handoff?t=…`. The builder confirms on a real iPhone which way iOS picks the launch address: from the manifest's `start_url` (which then needs a per-person manifest) or from the page that was open. The builder picks whichever works and documents it.
+3. On first launch, the home-screen app trades the token for a **new session** for the same person. The device shows in the signed-in devices list as "iPhone · الشاشة الرئيسية". The token is then used up, and the app removes it from the address bar. Then the app asks for push permission (5.2).
+4. **Fallbacks:**
+   - A used or expired token on a later launch does nothing if the app already has a session.
+   - Without a session, the person verifies through WhatsApp as usual, and the push prompt follows sign-in.
+   - Android and desktop don't need any of this.
+5. **No WhatsApp "new sign-in" alert for a hand-off** **[builder's call]**. The token can only come from a session already signed in on the same phone, seconds earlier, and an alert there would only confuse the person. The new session still shows in the devices list, and "sign out all other devices" still covers it.
+6. **Security:**
+   - The token never appears in logs.
+   - The site already sends `Referrer-Policy: no-referrer`.
+   - The exchange is rate-limited.
+   - Signing out the session that created the token also invalidates the token.
 
 ## 6. Organizer controls
 
@@ -233,7 +253,7 @@ From v1 spec 5.4, plus the grace period:
   > إن احتاج القارئ وقتاً أطول يستطيع طلبه مرة واحدة، وبعدها يمكن لغيره أن يساعد.
 - **Reset the invite link** if it leaks. It gets a new invite code, and every member's personal sharing token is replaced, so all old links stop working. They show plan 1's "this link no longer works" page. The confirmation tells the organizer to share the new link with the group.
 - **Remove a member:**
-  - Their held juz', if any, returns to the pool, with no thank-you or other message about the juz'.
+  - Their held juz', if any, returns to the pool, with no thank-you or other message about the juz'. The organizer gets no "open for help" alert for it, since they did it themselves.
   - Their phone number is blocked from rejoining this khatma until the organizer unblocks it.
   - The member list shows names only: no phone numbers, no reading data, no pace, no order by activity. It's sorted by join date.
   - A removed person who opens the khatma sees plan 1's blocked state, and the khatma drops off their home page.
@@ -326,6 +346,7 @@ Additions to plan 1's schema; the builder owns the real one.
 - **Person:** last seen at. The time zone already exists.
 - **Assignment:** the grace period it started with, grace end (waking time already converted to an exact time), whether it was extended, when it opened for help (or null). The existing `releasedBySystem` is set when someone takes over an open-for-help juz'.
 - **Push subscription:** person, session, endpoint, keys, created at.
+- **Hand-off token:** token hash, person, the session that created it, created at, expires at, used at.
 - **Note (in-app message):** person, khatma, kind, juz' numbers if any, created at, due at (for quiet hours), dismissed or cleared at.
 - **Nudge log** (or a field on the member): last nudge time, for the daily cap.
 
@@ -356,6 +377,8 @@ Production isn't deployed yet (ARQ-254), so schema changes need no data migratio
 13. After an invite reset, old invite links and old sharing tokens show "this link no longer works", and the link preview for them is generic.
 14. A removed member's held juz' is open, they can't rejoin, and they can after being unblocked.
 15. The member list and every organizer query return no phone numbers and no reading data.
+16. "I can't finish it" and a timed-out juz' produce the same organizer alert, word for word.
+17. A hand-off token works once, fails after 30 minutes, fails after the session that created it signs out, and never creates a session for anyone other than its person.
 
 ## 13. Left to the builder
 
@@ -366,3 +389,8 @@ Production isn't deployed yet (ARQ-254), so schema changes need no data migratio
 - Vercel middleware versus a function for previews, and the cache headers (7).
 - Schema names and shapes (10).
 - Whether to rename `creatorPersonId` (6).
+
+## 14. Decisions Ali made after review (2026-10-28)
+
+1. The organizer's "open for help" alert goes out for every juz' that goes back to the pool, including "I can't finish it", so the alert never reveals why (3.3, 3.4, 5.3).
+2. The sign-in is carried over to the iPhone home-screen app with a single-use hand-off token, instead of asking people to verify again (5.4).
