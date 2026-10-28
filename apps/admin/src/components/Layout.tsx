@@ -8,6 +8,7 @@ import { useAdminToken } from "../lib/adminSession";
 const NAV = [
   { to: "/", label: t.nav.home },
   { to: "/help", label: t.nav.help },
+  { to: "/search", label: t.nav.search },
   { to: "/settings", label: t.nav.settings },
   { to: "/audit", label: t.nav.audit },
   { to: "/admins", label: t.nav.admins },

@@ -97,7 +97,11 @@ export const get = adminQuery({
           }
         : null,
       khatma: khatma
-        ? { name: khatma.name, inviteCode: khatma.inviteCode }
+        ? {
+            khatmaId: khatma._id,
+            name: khatma.name,
+            inviteCode: khatma.inviteCode,
+          }
         : null,
       messages: await Promise.all(
         (await messagesOf(ctx, r)).map(async (m) => ({

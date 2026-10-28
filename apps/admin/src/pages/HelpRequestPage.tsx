@@ -9,9 +9,6 @@ import { Link, useParams } from "react-router";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 
-const SITE_URL = (
-  import.meta.env.VITE_SITE_URL ?? "https://wirdak.app"
-).replace(/\/+$/, "");
 const CONTEXT_FIELDS = [
   "path",
   "appVersion",
@@ -110,14 +107,13 @@ export function HelpRequestPage() {
           <dd>
             {request.person ? (
               <>
-                <span>{request.person.displayName}</span>{" "}
-                <a
-                  href={`tel:${request.person.phone}`}
-                  dir="ltr"
+                <Link
+                  to={`/people/${request.person.personId}`}
                   className="text-green underline"
                 >
-                  {request.person.phone}
-                </a>
+                  {request.person.displayName}
+                </Link>{" "}
+                <span dir="ltr">{request.person.phone}</span>
               </>
             ) : (
               t.help.visitor
@@ -126,14 +122,12 @@ export function HelpRequestPage() {
           <dt className="text-ink-soft">{t.help.khatma}</dt>
           <dd>
             {request.khatma ? (
-              <a
-                href={`${SITE_URL}/j/${request.khatma.inviteCode}`}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                to={`/khatmas/${request.khatma.khatmaId}`}
                 className="text-green underline"
               >
                 {request.khatma.name ?? request.khatma.inviteCode}
-              </a>
+              </Link>
             ) : (
               t.help.noKhatma
             )}
