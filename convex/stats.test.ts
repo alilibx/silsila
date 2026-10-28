@@ -328,7 +328,7 @@ test("the morning summary goes out once, at the summary hour", async () => {
   expect(pushes).toHaveLength(1);
   expect(pushes[0]).toMatchObject({ kind: "summary" });
   expect(pushes[0]?.body).toBe(
-    "أمس: ١٢ ختمة جديدة · ١٤٠ عضواً جديداً · ٢١٤ جزءاً · ٣ ختمة مكتملة · طلبات مساعدة مفتوحة: ٠",
+    "أمس: ختمات جديدة ١٢ · أعضاء جدد ١٤٠ · أجزاء مقروءة ٢١٤ · ختمات مكتملة ٣ · طلبات مساعدة مفتوحة ٠",
   );
 
   vi.setSystemTime(dayStart(D) + 9 * HOUR + 5 * 60_000);
@@ -387,6 +387,9 @@ test("milestones crossed together are pushed one per run, none lost", async () =
       .map((s) => `${s.metric}:${s.value}`)
       .sort();
   expect(await sent()).toEqual(["khatmas:10"]);
+  expect((await scheduledPushes(t))[0]?.body).toBe(
+    "🎉 وصلنا ١٠ ختمات\n١٥٠ عضواً · ٠ ختمة مكتملة",
+  );
   vi.setSystemTime(Date.now() + 2 * 60_000);
   await t.mutation(internal.stats.checkMilestones, {});
   expect(await scheduledPushes(t)).toHaveLength(2);
@@ -419,4 +422,42 @@ test("the nightly rollup stores yesterday's active khatma count", async () => {
   vi.setSystemTime(noon(D + 1));
   await t.mutation(internal.stats.rollupYesterday, {});
   expect((await rows(t)).find((r) => r.day === D)?.activeKhatmas).toBe(1);
+});
+
+// ---------------------------------------------------------------------------
+// PR review fixes
+
+test("an empty deployment's backfill turns milestones on, and the nightly run starts the rows", async () => {
+  const t = convexTest(schema, modules);
+  vi.setSystemTime(noon(D));
+  await t.action(internal.stats.backfill, {});
+  expect(
+    await t.run((ctx) =>
+      ctx.db
+        .query("counters")
+        .withIndex("by_key", (q) => q.eq("key", "stats:backfilledAt"))
+        .first(),
+    ),
+  ).not.toBeNull();
+  vi.setSystemTime(noon(D + 1));
+  await t.mutation(internal.stats.rollupYesterday, {});
+  expect((await rows(t)).map((r) => r.day)).toEqual([D]);
+});
+
+test("a rerun keeps a stored sign-in count when only one of the day's counters was purged", async () => {
+  const t = convexTest(schema, modules);
+  await seed(t);
+  await t.mutation(internal.stats.rollupDay, { day: D });
+  await t.run(async (ctx) => {
+    const c = await ctx.db
+      .query("counters")
+      .withIndex("by_key", (q) => q.eq("key", `signin:${D}:completed`))
+      .first();
+    await ctx.db.delete(c!._id);
+  });
+  await t.mutation(internal.stats.rollupDay, { day: D });
+  expect((await rows(t))[0]).toMatchObject({
+    signInsStarted: 4,
+    signInsCompleted: 3,
+  });
 });

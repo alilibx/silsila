@@ -108,7 +108,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
           value={
             o.daysPerRoundMedian === null
               ? t.stats.none
-              : t.stats.days(formatDecimal(o.daysPerRoundMedian))
+              : t.stats.days(o.daysPerRoundMedian)
           }
           detail={t.stats.medianHint}
         />

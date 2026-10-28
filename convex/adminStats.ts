@@ -38,6 +38,13 @@ function median(values: number[]): number | null {
 
 const oneDecimal = (n: number) => Math.round(n * 10) / 10;
 
+/**
+ * Sign-ins are counted on the day they finish and starts on the day they
+ * begin, so one crossing midnight can push a day past 100%.
+ */
+const successRate = (completed: number, started: number) =>
+  Math.min(1, completed / started);
+
 async function hasActiveMember(
   ctx: QueryCtx,
   khatmaId: Id<"khatmas">,
@@ -108,8 +115,8 @@ export const overview = adminQuery({
       .collect();
     const stall = await stalled(ctx, now);
 
-    const started = sum(week, "signInsStarted") + live.signInsStarted;
-    const signedIn = sum(week, "signInsCompleted") + live.signInsCompleted;
+    const started = sum(lastSix, "signInsStarted") + live.signInsStarted;
+    const signedIn = sum(lastSix, "signInsCompleted") + live.signInsCompleted;
     const medianDays = median(
       completed.map((r) => ((r.completedAt ?? now) - r.startedAt) / DAY_MS),
     );
@@ -125,7 +132,7 @@ export const overview = adminQuery({
       stalledKhatmas: stall.count,
       stalledCapped: stall.capped,
       daysPerRoundMedian: medianDays === null ? null : oneDecimal(medianDays),
-      signInSuccess7: started === 0 ? null : signedIn / started,
+      signInSuccess7: started === 0 ? null : successRate(signedIn, started),
     };
   },
 });
@@ -159,7 +166,7 @@ export const trend = adminQuery({
           args.metric === "signInRate"
             ? row.signInsStarted === 0
               ? null
-              : row.signInsCompleted / row.signInsStarted
+              : successRate(row.signInsCompleted, row.signInsStarted)
             : row[args.metric];
       }
       points.push({ day, value });

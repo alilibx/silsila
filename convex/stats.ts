@@ -8,6 +8,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { counted, type CountForms } from "./lib/arabicCount";
 import { toArabicDigits } from "./lib/digits";
 import { milestonesFor, type MilestoneMetric } from "./lib/milestones";
 import { getSetting } from "./lib/settings";
@@ -117,13 +118,10 @@ async function writeDay(
   const counts = await dayCounts(ctx, day);
   const before = await rowBefore(ctx, day);
   const existing = await rowFor(ctx, day);
-  if (
-    counts.signInsStarted === 0 &&
-    counts.signInsCompleted === 0 &&
-    existing
-  ) {
-    counts.signInsStarted = existing.signInsStarted;
-    counts.signInsCompleted = existing.signInsCompleted;
+  // Counters only grow, so a zero under a stored count means it was purged.
+  if (existing) {
+    counts.signInsStarted ||= existing.signInsStarted;
+    counts.signInsCompleted ||= existing.signInsCompleted;
   }
   let activeKhatmas = existing?.activeKhatmas;
   if (live) {
@@ -160,7 +158,8 @@ export const rollupDay = internalMutation({
 /**
  * Nightly at 00:10 Dubai: rolls up every day after the newest row through
  * yesterday, so a missed night never leaves a hole in the totals. An empty
- * table is the backfill's job.
+ * table is the backfill's job; after a backfill that found no data, rows
+ * start from the day it ran.
  */
 export const rollupYesterday = internalMutation({
   args: {},
@@ -170,10 +169,16 @@ export const rollupYesterday = internalMutation({
       .withIndex("by_day")
       .order("desc")
       .first();
-    if (!latest) return;
+    let from: number;
+    if (latest) from = latest.day + 1;
+    else {
+      const backfilledAt = await readCounter(ctx, BACKFILLED_AT);
+      if (backfilledAt === 0) return;
+      from = dubaiDay(backfilledAt);
+    }
     const yesterday = dubaiDay(Date.now()) - 1;
-    const last = Math.min(yesterday, latest.day + CATCH_UP_DAYS);
-    for (let day = latest.day + 1; day <= last; day++) {
+    const last = Math.min(yesterday, from - 1 + CATCH_UP_DAYS);
+    for (let day = from; day <= last; day++) {
       await writeDay(ctx, day, day === yesterday);
     }
     if (last < yesterday) {
@@ -203,10 +208,9 @@ export const backfill = internalAction({
   args: {},
   handler: async (ctx): Promise<{ days: number }> => {
     const first = await ctx.runQuery(internal.stats.firstDay, {});
-    if (first === null) return { days: 0 };
     const yesterday = dubaiDay(Date.now()) - 1;
     let days = 0;
-    for (let day = first; day <= yesterday; day++) {
+    for (let day = first ?? yesterday + 1; day <= yesterday; day++) {
       await ctx.runMutation(internal.stats.rollupDay, { day });
       days++;
     }
@@ -222,10 +226,14 @@ export const backfill = internalAction({
 const HOUR_MS = 3_600_000;
 const LAST_MILESTONE_PUSH = "milestone:lastPushAt";
 const METRICS: MilestoneMetric[] = ["khatmas", "members", "completed"];
-const NOUN: Record<MilestoneMetric, string> = {
-  khatmas: "ختمة",
-  members: "عضو",
-  completed: "ختمة مكتملة",
+const NOUN: Record<MilestoneMetric, CountForms> = {
+  khatmas: { few: "ختمات", many: "ختمة", other: "ختمة" },
+  members: { few: "أعضاء", many: "عضواً", other: "عضو" },
+  completed: {
+    few: "ختمات مكتملة",
+    many: "ختمة مكتملة",
+    other: "ختمة مكتملة",
+  },
 };
 
 const n = (value: number) => toArabicDigits(value);
@@ -300,11 +308,11 @@ export const checkMilestones = internalMutation({
       await mark(ctx, metric, fresh);
       await setCounter(ctx, LAST_MILESTONE_PUSH, now);
       const others = METRICS.filter((m) => m !== metric)
-        .map((m) => `${n(current[m])} ${NOUN[m]}`)
+        .map((m) => counted(current[m], NOUN[m]))
         .join(" · ");
       await ctx.scheduler.runAfter(0, internal.pushNode.deliverToAdmins, {
         kind: "milestone",
-        body: `🎉 وصلنا ${n(top)} ${NOUN[metric]}\n${others}`,
+        body: `🎉 وصلنا ${counted(top, NOUN[metric])}\n${others}`,
         tag: `milestone-${metric}-${top}`,
       });
       return;
@@ -351,7 +359,8 @@ export const morningSummary = internalMutation({
     ).length;
     await ctx.scheduler.runAfter(0, internal.pushNode.deliverToAdmins, {
       kind: "summary",
-      body: `أمس: ${n(yesterday.newKhatmas)} ختمة جديدة · ${n(yesterday.newMembers)} عضواً جديداً · ${n(yesterday.ajzaFinished)} جزءاً · ${n(yesterday.roundsCompleted)} ختمة مكتملة · طلبات مساعدة مفتوحة: ${n(openHelp)}`,
+      // Label first, so no noun has to agree with its number.
+      body: `أمس: ختمات جديدة ${n(yesterday.newKhatmas)} · أعضاء جدد ${n(yesterday.newMembers)} · أجزاء مقروءة ${n(yesterday.ajzaFinished)} · ختمات مكتملة ${n(yesterday.roundsCompleted)} · طلبات مساعدة مفتوحة ${n(openHelp)}`,
       tag: `summary-${today}`,
     });
   },

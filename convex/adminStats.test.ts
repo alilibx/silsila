@@ -295,3 +295,25 @@ test("only admins can read stats", async () => {
     t.query(api.adminStats.overview, { adminToken: "member" }),
   ).rejects.toThrow(/not_admin/);
 });
+
+test("sign-in success covers today and the six days before it", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  await day(t, TODAY - 7, { signInsStarted: 10, signInsCompleted: 0 });
+  await day(t, TODAY - 1, { signInsStarted: 4, signInsCompleted: 3 });
+  expect((await overview(t)).signInSuccess7).toBe(0.75);
+});
+
+test("sign-in success never reads above 100%", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  // A code started before midnight and completed after it.
+  await day(t, TODAY - 1, { signInsStarted: 2, signInsCompleted: 3 });
+  expect((await overview(t)).signInSuccess7).toBe(1);
+  const rate = await t.query(api.adminStats.trend, {
+    adminToken: "admin",
+    metric: "signInRate",
+    days: 7,
+  });
+  expect(rate.at(-1)?.value).toBe(1);
+});

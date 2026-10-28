@@ -1,4 +1,6 @@
+import { counted } from "@convex/lib/arabicCount";
 import { toArabicDigits } from "@convex/lib/digits";
+import { formatCount, formatDecimal } from "../lib/formatNumber";
 import type { AuditAction } from "@convex/lib/audit";
 import type { SettingGroup } from "@convex/lib/settingSpecs";
 import type { SettingKey } from "@convex/lib/settings";
@@ -251,7 +253,12 @@ export const ar = {
     signIn: "نجاح التحقق عبر واتساب",
     signInHint: "من بدأ التحقق في آخر ٧ أيام وأكمله",
     none: "—",
-    days: (n: string) => `${n} يوماً`,
+    days: (n: number) =>
+      counted(
+        n,
+        { few: "أيام", many: "يوماً", other: "يوم" },
+        formatDecimal(n),
+      ),
     percent: (n: string) => `${n}٪`,
     periods: { 7: "٧ أيام", 30: "٣٠ يوماً", 365: "سنة" },
     period: "المدة",
@@ -277,7 +284,8 @@ export const ar = {
     noAccount: "لا يوجد حساب بهذا الرقم.",
     invalidPhone: "اكتب الرقم مع رمز الدولة، مثل +971501234567.",
     blocked: "هذا الرقم محظور.",
-    members: (n: string) => `${n} عضو`,
+    members: (n: number) =>
+      counted(n, { few: "أعضاء", many: "عضواً", other: "عضو" }, formatCount(n)),
     unnamed: "ختمة بلا اسم",
     organizer: "المنظّم",
     schedule: "الجدول",

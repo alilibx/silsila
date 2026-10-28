@@ -7,7 +7,6 @@ import { Link, useNavigate } from "react-router";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
-import { formatCount } from "../lib/formatNumber";
 import { opsError, withNote } from "../lib/opsError";
 
 type KhatmaHit = {
@@ -106,7 +105,7 @@ export function SearchPage() {
                     {k.name ?? t.lookup.unnamed}
                   </span>{" "}
                   <span className="text-sm text-ink-soft">
-                    {t.lookup.members(formatCount(k.members))}
+                    {t.lookup.members(k.members)}
                   </span>
                 </Link>
               </li>
