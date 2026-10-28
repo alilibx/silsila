@@ -32,7 +32,7 @@ The cloud Convex project (region EU West, Ireland) is created at deploy time; no
 
 ## Development / e2e
 
-- `pnpm dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. In dev (`WIRDAK_ENV=dev`) a WhatsApp message can be simulated with `pnpm exec convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
+- `pnpm dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. Mark the local backend as dev once with `pnpm exec convex env set WIRDAK_ENV dev` (a backend set up before the rename has the old `SILSILA_ENV`, which no longer counts; remove it with `pnpm exec convex env remove SILSILA_ENV`). In dev (`WIRDAK_ENV=dev`) a WhatsApp message can be simulated with `pnpm exec convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
 - `pnpm e2e` runs the Playwright smoke test (Chromium, 390×844) against a local backend and Vite server that it starts and stops itself, with no cloud project and no real WhatsApp. It plays two people through verifying, creating a khatma, taking, finishing, and joining by invite. Stop `pnpm dev` first (the ports must be free), and run `pnpm exec playwright install chromium` once. State lives in `.convex/local`, shared with `pnpm dev`.
 
 Deployment (Convex production, Vercel, WhatsApp) is described in [docs/deploy.md](docs/deploy.md).

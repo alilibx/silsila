@@ -2,6 +2,7 @@ import type { Schedule } from "@convex/lib/schedule";
 
 /** Copy every feature shares for failures it cannot explain more precisely. */
 const commonErrors = {
+  maintenance: "وِردك في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
   network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
   generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
 } as const;
@@ -117,7 +118,7 @@ export const ar = {
       nameRequired: "اكتب اسمك ليعرفك أحبابك.",
       invalid_name: "لم نستطع قبول هذا الاسم. اكتب اسماً قصيراً بحروف عادية.",
       rate_limited: "حاولتَ مرات كثيرة. انتظر قليلاً ثم حاول مرة أخرى.",
-      maintenance: "وِردك في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+      maintenance: commonErrors.maintenance,
       whatsapp_not_configured:
         "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه.",
       network: commonErrors.network,
@@ -162,7 +163,7 @@ export const ar = {
       shared: {
         blocked:
           "لا نستطيع تنفيذ ذلك الآن. تواصل مع صاحب الختمة إن احتجت مساعدة.",
-        maintenance: "وِردك في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+        maintenance: commonErrors.maintenance,
         rate_limited: "ضغطتَ مرات كثيرة. انتظر قليلاً ثم حاول مرة أخرى.",
       },
       take: {
@@ -208,7 +209,7 @@ export const ar = {
     errors: {
       rate_limited:
         "أنشأتَ ختمات كثيرة اليوم. جرّب غداً بإذن الله، أو استخدم إحدى ختماتك.",
-      maintenance: "وِردك في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+      maintenance: commonErrors.maintenance,
       network: commonErrors.network,
       generic: commonErrors.generic,
     },
