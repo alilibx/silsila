@@ -44,6 +44,7 @@ export const ar = {
     invited: (inviter: string) => `دعاك ${inviter} إلى هذه الختمة.`,
     invitedAnon: "دُعيتَ إلى هذه الختمة.",
     verifyHint: "تصفّحها بحرية، وعندما تأخذ جزءاً نتحقق من رقمك عبر واتساب.",
+    // The invite preview (lib/og.ts) repeats this wording; change both together.
     untitled: (date: string) => `ختمة ${date}`,
     round: (n: string) => `الختمة ${n}`,
     target: (date: string) => `الهدف: ${date}`,

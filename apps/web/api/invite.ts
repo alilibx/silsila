@@ -1,4 +1,4 @@
-import { injectOg, previewTags, type PreviewData } from "../src/lib/og";
+import { injectOg, previewTags, type PreviewData } from "../src/lib/og.js";
 
 /**
  * Serves `/j/:code` (see vercel.json): the SPA shell with Open Graph tags that

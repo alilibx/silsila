@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { formatDate } from "./format";
 import { injectOg, previewTags } from "./og";
 
 const PAGE = "https://wirdak.app/j/x";
@@ -35,7 +34,16 @@ describe("previewTags", () => {
       { name: null, createdAt, done: 3, round: 1, inviterName: null },
       PAGE,
     );
-    expect(tags.title).toBe(`ختمة ${formatDate(createdAt)} · وِردك`);
+    expect(tags.title).toBe("ختمة ٣٠ أكتوبر · وِردك");
+  });
+
+  it("dates an unnamed khatma in Dubai, not UTC", () => {
+    const lateUtc = Date.UTC(2026, 9, 30, 21, 0); // already 31 Oct in Dubai
+    const tags = previewTags(
+      { name: null, createdAt: lateUtc, done: 0, round: 1, inviterName: null },
+      PAGE,
+    );
+    expect(tags.title).toBe("ختمة ٣١ أكتوبر · وِردك");
   });
 
   it("gives generic tags for null", () => {

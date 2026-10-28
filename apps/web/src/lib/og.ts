@@ -1,6 +1,15 @@
-// Relative, not `@convex/…`: the Vercel function in api/invite.ts bundles this without Vite's alias.
-import { toArabicDigits } from "../../../../convex/lib/digits";
-import { formatDate } from "./format";
+// This file is part of the Vercel function api/invite.ts, which Vercel compiles
+// file by file without bundling: no Vite aliases (`@convex/…`), no extensionless
+// imports, and nothing from the app (`format.ts`, `i18n/ar.ts`). Keep it that way;
+// invite.node.test.ts loads the compiled closure in plain Node.
+import { toArabicDigits } from "../../../../convex/lib/digits.js";
+
+// A fixed zone: the function runs in UTC on Vercel, which would shift the day.
+const dateFormat = new Intl.DateTimeFormat("ar", {
+  day: "numeric",
+  month: "long",
+  timeZone: "Asia/Dubai",
+});
 
 /** What `GET /api/preview` returns; mirrors `PreviewData` in convex/preview.ts. */
 export type PreviewData = {
@@ -41,7 +50,9 @@ export function previewTags(p: PreviewData | null, pageUrl: string): OgTags {
       url: pageUrl,
     };
   }
-  const name = p.name ?? `ختمة ${formatDate(p.createdAt)}`;
+  // Same wording as `t.khatma.untitled` in i18n/ar.ts; change both together.
+  const name =
+    p.name ?? `ختمة ${toArabicDigits(dateFormat.format(p.createdAt))}`;
   const progress = `تمّ ${toArabicDigits(p.done)} من ٣٠ جزءاً · الختمة ${toArabicDigits(p.round)}`;
   return {
     title: `${name} · ${BRAND}`,
