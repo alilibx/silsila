@@ -151,6 +151,11 @@ describe("SettingsPage", () => {
     ];
   });
 
+  it("signed in: no top link home, the bottom bar has it", () => {
+    renderPage();
+    expect(screen.queryByRole("link", { name: "الصفحة الرئيسية" })).toBeNull();
+  });
+
   it("shows the masked number left-to-right", () => {
     renderPage();
     const number = screen.getByText("+971 •• ••• 4567");

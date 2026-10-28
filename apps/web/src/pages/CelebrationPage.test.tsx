@@ -1,6 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import {
+  BottomBarProvider,
+  useBottomBarHidden,
+} from "../features/nav/bottomBarUi";
 import { makeTiles } from "../test/fixtures";
 import { CelebrationPage } from "./CelebrationPage";
 
@@ -20,7 +24,28 @@ function setup(over: Partial<Parameters<typeof CelebrationPage>[0]> = {}) {
   return { onContinue };
 }
 
+function BarProbe() {
+  return <p>{useBottomBarHidden() ? "bar hidden" : "bar shown"}</p>;
+}
+
 describe("CelebrationPage", () => {
+  it("hides the bottom bar while it shows", () => {
+    render(
+      <BottomBarProvider>
+        <BarProbe />
+        <CelebrationPage
+          title="ختمة العائلة"
+          round={12}
+          participants={7}
+          tiles={makeTiles()}
+          busy={false}
+          onContinue={vi.fn()}
+        />
+      </BottomBarProvider>,
+    );
+    expect(screen.getByText("bar hidden")).toBeInTheDocument();
+  });
+
   it("shows the heading, the subtitle and the participant count in Eastern Arabic digits", () => {
     setup();
     expect(

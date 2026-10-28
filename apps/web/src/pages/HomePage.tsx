@@ -63,16 +63,8 @@ function HomeContent({
 }) {
   return (
     <main className="mx-auto max-w-xl p-5">
-      <header className="mb-3.5 flex items-center justify-between gap-3">
+      <header className="mb-3.5">
         <span className="font-display text-2xl text-green">{t.app.name}</span>
-        {me && (
-          <Link
-            to="/settings"
-            className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
-          >
-            {t.home.settings}
-          </Link>
-        )}
       </header>
 
       <HelpReplyCard />

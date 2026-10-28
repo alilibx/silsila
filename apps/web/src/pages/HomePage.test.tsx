@@ -151,16 +151,13 @@ describe("HomePage", () => {
     expect(without).not.toHaveTextContent("رسالة جديدة");
   });
 
-  it("links to create and settings", () => {
+  it("links to create, and leaves settings to the bottom bar", () => {
     m.mine = [card()];
     renderHome();
     expect(
       screen.getByRole("link", { name: "＋ ابدأ ختمة جديدة" }),
     ).toHaveAttribute("href", "/new");
-    expect(screen.getByRole("link", { name: "إعداداتي" })).toHaveAttribute(
-      "href",
-      "/settings",
-    );
+    expect(screen.queryByRole("link", { name: "إعداداتي" })).toBeNull();
   });
 
   it("signed in with no khatmas: a kind empty state plus the create button", () => {
