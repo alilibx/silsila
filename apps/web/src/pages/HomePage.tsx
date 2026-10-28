@@ -14,8 +14,8 @@ import { useSessionToken } from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
 
 export function HomePage() {
-  // Someone who left for WhatsApp mid-take or mid-create and came back here (an old link, the
-  // home-screen icon) goes back to the page that finishes it. Only when the app opened here
+  // Someone who left for WhatsApp mid-take or mid-create and came back here (an older reply's
+  // link, typing the address) goes back to the page that finishes it. Only when the app opened here
   // ("default" is the first history entry's key): choosing home in the app stays home.
   const opened = useLocation().key === "default";
   const [resumePath] = useState(() => (opened ? pendingResumePath() : null));
