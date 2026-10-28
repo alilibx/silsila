@@ -129,8 +129,8 @@
 
 **Files:**
 - Create: `convex/stats.ts`
-- Modify: `convex/crons.ts`
-- Test: `convex/stats.test.ts`
+- Modify: `convex/crons.ts`, `convex/maintenance.ts` (purge old sign-in counters)
+- Test: `convex/stats.test.ts`, extend `convex/maintenance.test.ts`
 
 **Interfaces:**
 - **`dayCounts(ctx: QueryCtx, day: number)`**, an internal helper. It returns `{ ajzaFinished, newMembers, newKhatmas, roundsCompleted, signInsStarted, signInsCompleted }` for `[dayStart(day), dayStart(day + 1))`:
@@ -141,9 +141,8 @@
 - **`rollupDay`** (`internalMutation`, args `{ day: number }`):
   - It upserts the `dailyStats` row for `day`.
   - Totals are the previous day's row's totals plus this day's counts, or this day's counts alone when there's no previous row.
-  - Running it again for the same day gives the same row.
-  - Afterwards it deletes that day's sign-in counters.
-- **`rollupYesterday`** (`internalMutation`) calls `rollupDay` for `dubaiDay(now) - 1`. The cron runs it daily at 20:10 UTC, which is 00:10 Dubai.
+  - Running it again for the same day gives the same row. So it never deletes the counters it reads. `maintenance.purge` deletes sign-in counters whose day is more than 7 days old.
+- **`rollupYesterday`** (`internalMutation`) catches up: it rolls up every day after the newest `dailyStats` row, through yesterday, in order. A missed run (an outage, a failed cron) is filled in the next night, and totals never skip a day. With no rows at all it does nothing, because that's the backfill's job. It does at most 31 days per run and reschedules itself for the rest. The cron runs it daily at 20:10 UTC, which is 00:10 Dubai.
 - **`backfill`** (`internalAction`, no args, run once from the command line with `bun run convex run stats:backfill`):
   - It finds the first day: the Dubai day of the oldest `people` or `khatmas` row.
   - It runs `rollupDay` for each day up to yesterday, one mutation per day, in order.
@@ -154,7 +153,8 @@
   - **One day.** Seed two finishes, one person, and one khatma on day D, plus a finish on D+1. `rollupDay(D)` writes counts 2/1/1, totals `totalMembers 1, totalKhatmas 1`, and a completed-rounds total from the seeded rounds.
   - **Gaps and totals (Review Focus 1).** `rollupDay(D+1)` carries the totals forward. A day with nothing still writes a row with zero counts and the same totals.
   - **Reruns (Review Focus 2).** `rollupDay(D)` twice gives one row, with the same totals.
-  - **Counters.** Counters are deleted after their day rolls up.
+  - **Counters.** `rollupDay(D)` run twice keeps the same sign-in counts. `purge` deletes sign-in counters older than 7 days and keeps newer ones.
+  - **Catch-up.** With rows through D-3, and the clock at D+1, `rollupYesterday` writes D-2, D-1 and D, and D's totals include all three days' counts.
   - **Backfill.** It writes one row per day from the first day to yesterday, and the last row's totals equal the seeded totals.
 - [ ] **Step 2: Run them and see them fail.**
 - [ ] **Step 3: Implement.** Regenerate `api.d.ts`.
@@ -188,13 +188,13 @@
 
   - `members` is the latest `dailyStats.totalMembers` plus today's live `newMembers` (Review Focus 3: zero totals without rows).
   - `activeKhatmas` is the number of distinct `khatmaId`s in `rounds.by_lastFinishedAt` with `lastFinishedAt > now - 14d`.
-  - `activeKhatmasWeekAgo` is the same count for the window ending 7 days ago, or null when there's nothing to compare.
+  - `activeKhatmasWeekAgo` is the number of distinct `khatmaId`s among assignments finished in `[now - 21d, now - 7d)`, through `assignments.by_finishedAt`. `rounds.lastFinishedAt` keeps only the latest finish, so it can't answer for a past window. It's null when there are no `dailyStats` rows older than 7 days, meaning nothing to compare yet.
   - `stalledKhatmas`: open rounds, read through `by_open_lastFinishedAt` with `eq("completedAt", null).lt("lastFinishedAt", now - 14d)`, taking at most 500. A null `lastFinishedAt` sorts first, so those rounds are filtered by `startedAt < now - 14d`. Only current rounds count (`khatma.currentRoundId === round._id`), and only khatmas with at least one active member.
 - **`trend`** (`adminQuery`, args `{ metric: "ajzaFinished" | "newMembers" | "newKhatmas" | "roundsCompleted" | "signInRate", days: 7 | 30 | 365 }`) → `Array<{ day: number; value: number | null }>`. It returns one entry per day, oldest first, ending yesterday, with null for a day that has no row. `signInRate` is completed ÷ started for that day, or null when nothing started.
 
 - [ ] **Step 1: Write the failing tests:**
   - **Empty start (Review Focus 3).** Without any `dailyStats`, `overview` returns zeros and nulls, and doesn't throw.
-  - **Active.** A khatma finished in 3 days ago counts as active. One finished in 20 days ago doesn't.
+  - **Active.** A khatma finished in 3 days ago counts as active. One finished in 20 days ago doesn't. A khatma that finished both 10 days ago and 1 day ago counts in both `activeKhatmas` and `activeKhatmasWeekAgo`.
   - **Stalled.** These count as stalled:
     - an open round whose last finish was 15 days ago
     - an open round with no finish, started 15 days ago
