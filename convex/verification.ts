@@ -143,6 +143,7 @@ function insertPerson(
     displayName: doc.displayName,
     verifiedAt: Date.now(),
     timeZone,
+    lastSeenAt: Date.now(),
   });
 }
 

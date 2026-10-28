@@ -9,6 +9,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { randomToken } from "./lib/crypto";
+import { isValidGrace, graceValidator, type Grace } from "./lib/grace";
 import { JUZ, JUZ_COUNT } from "./lib/juz";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
@@ -38,11 +39,20 @@ export type TileView = {
   isMine: boolean;
 };
 
+/** What the reader of a juz' sees about their own hold; never shown to others. */
+export type HoldView = {
+  openForHelp: boolean;
+  canExtend: boolean;
+  paceDays: number | null;
+};
+
 export type KhatmaView = {
   khatmaId: Id<"khatmas">;
   name: string | null;
   createdAt: number;
   schedule: Schedule;
+  grace: Grace;
+  isOrganizer: boolean;
   roundNumber: number;
   targetEndAt: number | null;
   completedRounds: number;
@@ -55,7 +65,10 @@ export type KhatmaView = {
     /** The signed-in viewer's own name (null when signed out). */
     displayName: string | null;
     isMember: boolean;
+    /** The viewer's notification switch; null for non-members. */
+    notificationsOn: boolean | null;
     holding: number | null;
+    hold: HoldView | null;
     suggestion: number | null;
     celebrateRound: number | null;
   };
@@ -145,6 +158,8 @@ export const insertKhatma = internalMutation({
     personId: v.id("people"),
     name: v.union(v.string(), v.null()),
     schedule: scheduleValidator,
+    /** Missing means the schedule's default grace. */
+    grace: v.optional(graceValidator),
     inviteCode: v.string(),
     shareToken: v.string(),
   },
@@ -173,6 +188,8 @@ export const insertKhatma = internalMutation({
     const khatmaId = await ctx.db.insert("khatmas", {
       name: args.name,
       schedule: args.schedule,
+      grace:
+        args.grace ?? (await getSetting(ctx, "graceDefaults"))[args.schedule],
       creatorPersonId: args.personId,
       inviteCode: args.inviteCode,
       completedRounds: 0,
@@ -185,7 +202,8 @@ export const insertKhatma = internalMutation({
       joinedAt: now,
       shareToken: args.shareToken,
       status: "active",
-      nudgesOn: true,
+      notificationsOn: true,
+      lastNudgeAt: null,
       lastCelebratedRound: 0,
     });
     return { inviteCode: args.inviteCode };
@@ -208,15 +226,20 @@ export const create = action({
     sessionToken: v.optional(v.string()),
     name: v.union(v.string(), v.null()),
     schedule: scheduleValidator,
+    grace: v.optional(graceValidator),
   },
   handler: async (ctx, args): Promise<{ inviteCode: string }> => {
     const personId = await requirePersonId(ctx, args.sessionToken);
+    if (args.grace && !isValidGrace(args.grace)) {
+      throw new ConvexError({ code: "invalid_grace" });
+    }
     const name = cleanKhatmaName(args.name);
     for (let attempt = 0; attempt < INVITE_CODE_ATTEMPTS; attempt++) {
       const created = await ctx.runMutation(internal.khatmas.insertKhatma, {
         personId,
         name,
         schedule: args.schedule,
+        grace: args.grace,
         inviteCode: randomToken(9),
         shareToken: randomToken(8),
       });
@@ -285,6 +308,8 @@ export const view = sessionQuery({
       name: khatma.name,
       createdAt: khatma.createdAt,
       schedule: khatma.schedule,
+      grace: khatma.grace,
+      isOrganizer: personId !== null && khatma.creatorPersonId === personId,
       roundNumber: round.number,
       targetEndAt: round.targetEndAt,
       completedRounds: khatma.completedRounds,
@@ -296,7 +321,13 @@ export const view = sessionQuery({
         signedIn: ctx.person !== null,
         displayName: ctx.person?.displayName ?? null,
         isMember,
+        notificationsOn: me?.notificationsOn ?? null,
         holding,
+        // filled in by the grace tasks; a placeholder until then
+        hold:
+          holding === null
+            ? null
+            : { openForHelp: false, canExtend: false, paceDays: null },
         suggestion,
         celebrateRound:
           me && me.lastCelebratedRound < khatma.completedRounds
@@ -344,6 +375,24 @@ export const markCelebrated = sessionMutation({
     await ctx.db.patch(member._id, {
       lastCelebratedRound: khatma.completedRounds,
     });
+    return { ok: true };
+  },
+});
+
+/**
+ * Turns notifications (pushes and nudges) on or off for the caller in one
+ * khatma. Never throws: signed-out callers, unknown codes, non-members, and
+ * blocked members get `{ ok: false }`.
+ */
+export const setNotifications = sessionMutation({
+  args: { inviteCode: v.string(), on: v.boolean() },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    if (!ctx.person) return { ok: false };
+    const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
+    if (!khatma) return { ok: false };
+    const member = await activeMembership(ctx, khatma._id, ctx.person._id);
+    if (!member) return { ok: false };
+    await ctx.db.patch(member._id, { notificationsOn: args.on });
     return { ok: true };
   },
 });

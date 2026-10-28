@@ -32,6 +32,7 @@ async function signedIn(t: T, displayName: string) {
       displayName,
       verifiedAt: 0,
       timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
     });
     await ctx.db.insert("sessions", {
       personId: id,

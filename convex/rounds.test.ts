@@ -32,6 +32,7 @@ async function signedIn(t: T, displayName: string) {
       displayName,
       verifiedAt: 0,
       timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
     });
     await ctx.db.insert("sessions", {
       personId: id,
@@ -84,7 +85,8 @@ async function join(
       personId: who.personId,
       joinedAt: Date.now(),
       status: opts.status ?? "active",
-      nudgesOn: true,
+      notificationsOn: true,
+      lastNudgeAt: null,
       lastCelebratedRound: 0,
       shareToken: opts.shareToken,
     }),
@@ -134,6 +136,13 @@ async function assign(
       finishedAt: state === "done" ? finishedAt : null,
       releasedAt: state === "released" ? NOW : null,
       releasedBySystem: false,
+      graceWakingMs: 0,
+      noticeAt: NOW,
+      graceEndsAt: NOW,
+      extended: false,
+      noticeSentAt: null,
+      openedForHelpAt: null,
+      remindedAt: null,
     });
   });
 }

@@ -166,7 +166,8 @@ export const take = sessionMutation({
       .collect();
     if (isTaken(sameJuz)) return soft("taken");
 
-    let memberId = member?._id;
+    // A "former" member (unblocked, not in the khatma) joins afresh below.
+    let memberId = member?.status === "active" ? member._id : undefined;
     if (!memberId) {
       const members = await ctx.db
         .query("members")
@@ -184,17 +185,27 @@ export const take = sessionMutation({
         HOUR_MS,
       );
       if (!joinOk) return soft("rate_limited");
-      memberId = await ctx.db.insert("members", {
-        khatmaId: khatma._id,
-        personId: person._id,
+      const fresh = {
         joinedAt: Date.now(),
-        status: "active",
-        nudgesOn: true,
+        status: "active" as const,
+        notificationsOn: true,
+        lastNudgeAt: null,
         // a newcomer never sees a celebration for rounds they didn't join
         lastCelebratedRound: khatma.completedRounds,
-      });
+      };
+      if (member) {
+        await ctx.db.patch(member._id, fresh);
+        memberId = member._id;
+      } else {
+        memberId = await ctx.db.insert("members", {
+          khatmaId: khatma._id,
+          personId: person._id,
+          ...fresh,
+        });
+      }
     }
 
+    const takenAt = Date.now();
     await ctx.db.insert("assignments", {
       khatmaId: khatma._id,
       roundId: round._id,
@@ -202,10 +213,18 @@ export const take = sessionMutation({
       juz: args.juz,
       memberId,
       personId: person._id,
-      takenAt: Date.now(),
+      takenAt,
       finishedAt: null,
       releasedAt: null,
       releasedBySystem: false,
+      // placeholders until the grace clock lands
+      graceWakingMs: 0,
+      noticeAt: takenAt,
+      graceEndsAt: takenAt,
+      extended: false,
+      noticeSentAt: null,
+      openedForHelpAt: null,
+      remindedAt: null,
     });
     return { ok: true };
   },

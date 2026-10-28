@@ -123,6 +123,7 @@ async function addPerson(t: T, phone = E164, displayName = "سعيد") {
       displayName,
       verifiedAt: 0,
       timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
     }),
   );
 }

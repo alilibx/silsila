@@ -30,6 +30,7 @@ export async function insertRound(
     targetEndAt: targetEndFor(khatma.schedule, startedAt),
     completedAt: null,
     lastFinishedAt: null,
+    behindInvitedAt: null,
   });
   await ctx.db.patch(khatmaId, { currentRoundId: roundId });
   return roundId;
