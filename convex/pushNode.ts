@@ -79,6 +79,21 @@ export const deliver = internalAction({
   },
 });
 
+/** A new help request or message, pushed to every listening admin (spec 7). */
+export const deliverToAdmins = internalAction({
+  args: {
+    requestId: v.id("helpRequests"),
+    kind: v.union(v.literal("request"), v.literal("message")),
+  },
+  handler: async (ctx, args) => {
+    const plan = await ctx.runQuery(internal.adminPush.deliveryPlan, args);
+    if (!plan) return;
+    await sendToSubscriptions(plan.subscriptions, plan.payload, (endpoints) =>
+      ctx.runMutation(internal.adminPush.removeGone, { endpoints }),
+    );
+  },
+});
+
 /** A team reply to a help request, as a push (plan 3 spec 3.4). */
 export const deliverHelpReply = internalAction({
   args: { messageId: v.id("helpMessages") },

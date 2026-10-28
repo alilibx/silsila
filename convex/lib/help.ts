@@ -1,4 +1,5 @@
 import { v, type Infer } from "convex/values";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { checkFile, VOICE_MAX_SECONDS } from "./helpFiles";
@@ -114,14 +115,16 @@ export function owns(request: Doc<"helpRequests">, owner: HelpOwner): boolean {
     : request.reporterHash === owner.reporterHash;
 }
 
-/**
- * Tells the admins about a new request or message (spec 7). Plan 3b Task 5
- * replaces this with the push.
- */
+/** Tells the admins about a new request or message, right away (spec 7). */
 export async function notifyAdmins(
-  ...args: [MutationCtx, Id<"helpRequests">, "request" | "message"]
+  ctx: MutationCtx,
+  requestId: Id<"helpRequests">,
+  kind: "request" | "message",
 ): Promise<void> {
-  void args;
+  await ctx.scheduler.runAfter(0, internal.pushNode.deliverToAdmins, {
+    requestId,
+    kind,
+  });
 }
 
 /** The khatma behind `inviteCode`, if the owner may name it: any visitor, or a member of it. */
