@@ -2,7 +2,19 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
-import { env, isDev, parseIncoming, siteUrl } from "./whatsapp";
+import {
+  env,
+  inboundSource,
+  isDev,
+  parseIncoming,
+  parseRelayed,
+  RELAY_MAX_SKEW_MS,
+  RELAY_SIGNATURE_HEADER,
+  RELAY_TIMESTAMP_HEADER,
+  relaySignature,
+  siteUrl,
+  takeIncoming,
+} from "./whatsapp";
 
 const http = httpRouter();
 
@@ -223,6 +235,52 @@ http.route({
       );
     }
     return new Response(null, { status: 200 });
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// POST /whatsapp/relay: production relaying a message it has no code for
+// (`relayIncoming` in whatsapp.ts). Open only on a deployment whose messages
+// come from the relay (staging), never on one Meta calls (production).
+
+/** A relayed message is at most 4096 characters plus a little JSON. */
+const MAX_RELAY_BODY = 20_000;
+
+http.route({
+  path: "/whatsapp/relay",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const secret = env("WHATSAPP_RELAY_SECRET");
+    if (inboundSource() !== "relay" || secret === undefined) {
+      return new Response(null, { status: 401 });
+    }
+    const timestamp = req.headers.get(RELAY_TIMESTAMP_HEADER) ?? "";
+    const signature = req.headers.get(RELAY_SIGNATURE_HEADER);
+    const raw = await readCappedText(req, MAX_RELAY_BODY);
+    if (raw === null) return new Response(null, { status: 413 });
+    if (
+      !/^\d{1,15}$/.test(timestamp) ||
+      Math.abs(Date.now() - Number(timestamp)) > RELAY_MAX_SKEW_MS ||
+      signature === null ||
+      !timingSafeEqual(signature, await relaySignature(secret, timestamp, raw))
+    ) {
+      return new Response(null, { status: 401 });
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = null;
+    }
+    const message = parseRelayed(payload);
+    if (message === null) return json(400, { error: "bad_request" }, {});
+    // Answered before the reply goes out, so production learns quickly that
+    // it must stay silent.
+    const outcome = await takeIncoming(ctx, message, (to, body) =>
+      ctx.scheduler.runAfter(0, internal.whatsapp.sendText, { to, body }),
+    );
+    return json(200, { handled: outcome === "taken" }, {});
   }),
 });
 

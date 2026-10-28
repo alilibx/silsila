@@ -62,7 +62,13 @@ Names only. Values never go in the repo.
 
 ### Convex deployments
 
-Set per deployment in the Convex dashboard (Settings, Environment Variables) or with `bun run convex env set --deployment manzilo:wirdak:<staging|production> NAME <value>`. Staging and production need the same names. `WIRDAK_ENV` is `staging` and `SITE_URL` is `https://stg.wirdak.app` on staging.
+Set per deployment in the Convex dashboard (Settings, Environment Variables) or with `bun run convex env set --deployment manzilo:wirdak:<staging|production> NAME <value>`. `WIRDAK_ENV` is `staging` and `SITE_URL` is `https://stg.wirdak.app` on staging.
+
+Staging and production share one WhatsApp number, so the WhatsApp names differ (see "WhatsApp on staging" below):
+
+- **Both:** `WHATSAPP_PUBLIC_NUMBER`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_GRAPH_VERSION`, `WHATSAPP_RELAY_SECRET` (the same value on both), and `SITE_URL` (each its own).
+- **Production only:** `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_RELAY_URL`.
+- **Never on staging:** `WHATSAPP_APP_SECRET` and `WHATSAPP_VERIFY_TOKEN`. A deployment that holds the app secret takes messages from Meta and refuses relays; one that holds only the relay secret takes relays and refuses Meta. Keeping the app secret off staging means staging access can't forge a Meta webhook call to production.
 
 | Name                       | What it is for                                                                                                          | How to rotate                                                                                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -71,15 +77,30 @@ Set per deployment in the Convex dashboard (Settings, Environment Variables) or 
 | `WHATSAPP_PUBLIC_NUMBER`   | The business number, digits only, that the `wa.me` link opens.                                                          | Not a secret. Change if the business number changes.                                                                                                            |
 | `WHATSAPP_PHONE_NUMBER_ID` | Meta's ID of that number, used to send replies and to ignore messages meant for other numbers.                          | Not a secret. Change only if the number is replaced in Meta.                                                                                                    |
 | `WHATSAPP_ACCESS_TOKEN`    | Long-lived system-user token that sends replies through the Graph API.                                                  | Create a new token in Meta Business Settings (system user), set it in Convex, confirm a real verification still gets a reply, then revoke the old token.        |
-| `WHATSAPP_APP_SECRET`      | Meta app secret. Verifies the `X-Hub-Signature-256` signature on every webhook call.                                    | Reset it in the Meta app (Settings, Basic), then set the new value in Convex straight away. Webhook calls fail the signature check in between, and Meta retries. |
-| `WHATSAPP_VERIFY_TOKEN`    | A string we choose. Meta sends it back during the webhook subscription handshake.                                       | Pick a new random string, set it in Convex, then save the webhook again in Meta with the same string (Meta repeats the handshake).                              |
+| `WHATSAPP_APP_SECRET`      | Production only. Meta app secret. Verifies the `X-Hub-Signature-256` signature on every webhook call.                   | Reset it in the Meta app (Settings, Basic), then set the new value in Convex straight away. Webhook calls fail the signature check in between, and Meta retries. |
+| `WHATSAPP_VERIFY_TOKEN`    | Production only. A string we choose. Meta sends it back during the webhook subscription handshake.                      | Pick a new random string, set it in Convex, then save the webhook again in Meta with the same string (Meta repeats the handshake).                              |
 | `WHATSAPP_GRAPH_VERSION`   | The Graph API version used in send URLs.                                                                                | Not a secret. Move to a newer supported version before the current one is retired, and check that sending still works.                                           |
+| `WHATSAPP_RELAY_URL`       | Production only. Staging's relay endpoint, `https://basic-mockingbird-167.eu-west-1.convex.site/whatsapp/relay`. Production relays a message it has no code for there. Unset, production relays nothing. Not a secret. Must be `https://`. | Change it if staging's Convex deployment changes. |
+| `WHATSAPP_RELAY_SECRET`    | Shared by production and staging, never equal to the Meta app secret. Signs each relay (`X-Wirdak-Relay-Signature`, HMAC-SHA256 over `X-Wirdak-Relay-Timestamp` and the body). Staging refuses a relay that is unsigned, signed with another secret, or more than 5 minutes old. Secret. | `openssl rand -hex 32`, then set the new value on staging and production one right after the other. Relays fail in between, and staging-started codes get production's "no code found" reply. |
 | `PREVIEW_SECRET`           | Shared secret the Vercel link-preview function sends in `X-Preview-Secret`. `GET /api/preview` answers 401 without it. Secret. Must equal the Vercel value. | Generate a new random string, set it in that environment's Convex deployment and in Vercel (same environment) to the same value, then redeploy Vercel. Previews fall back to the generic card in between. |
 | `VAPID_PUBLIC_KEY`         | Web Push (VAPID) public key. The browser subscribes with it (`api.push.publicKey` serves it to the web app) and the push services check it. Public. | Rotate the pair together, see "Web Push keys" below.                                                                                                              |
 | `VAPID_PRIVATE_KEY`        | The matching VAPID private key. Signs every push from `convex/pushNode.ts`. Secret.                                      | Rotate the pair together, see "Web Push keys" below.                                                                                                              |
 | `VAPID_SUBJECT`            | A contact for the push services, `mailto:you@example.com` or an `https://` URL. Sent with every push.                    | Not a secret. Change it if the contact changes.                                                                                                                   |
 
-Each deployment answers `whatsapp_not_configured` from `/api/verification/start` until all seven `WHATSAPP_*` / `SITE_URL` values are set. The site then shows "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه." and nobody can sign in. That is the expected state before ARQ-246 is finished.
+Each deployment answers `whatsapp_not_configured` from `/api/verification/start` until its values are set: the four sending `WHATSAPP_*` names and `SITE_URL`, plus either `WHATSAPP_APP_SECRET` and `WHATSAPP_VERIFY_TOKEN` (production) or `WHATSAPP_RELAY_SECRET` (staging). The site then shows "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه." and nobody can sign in.
+
+### WhatsApp on staging
+
+Meta sends every message for the business number to one webhook, production's. A code started on `stg.wirdak.app` lives only in staging's database, so production relays to staging:
+
+1. Production looks for the code among its own pending verifications. A match is answered by production, as before, and never relayed.
+2. No match, and the text holds something shaped like a code: production POSTs the message (`waMessageId`, `from`, `text`) to `WHATSAPP_RELAY_URL`, signed with `WHATSAPP_RELAY_SECRET`. Messages with no code shape ("hello") are never relayed.
+3. Staging checks the signature and timestamp, dedupes by `waMessageId`, applies its own per-phone limit, and matches the code. It answers `{"handled": true}` when it took the message (a match, a PIN for an existing staging account, a duplicate, or a rate-limited phone) and sends that reply itself, with its own `SITE_URL`. Otherwise it answers `{"handled": false}` and sends nothing.
+4. Production sends its "no code found" reply only when staging answered `false`, failed, or took more than 5 seconds.
+
+So each message gets one reply, from the environment the code belongs to. If staging takes a message but its answer is lost on the way back, the person can get both staging's reply and production's "no code found". The sign-in still works, because the page follows the verification's status, not the message.
+
+Staging holds `WHATSAPP_ACCESS_TOKEN`, so anyone with staging env access can send messages from the business number. It never holds the app secret, so they can't make production accept a forged inbound message.
 
 ### GitHub (repository `alilibx/wirdak`)
 
@@ -136,7 +157,11 @@ Done: the Convex deployments, their `WIRDAK_ENV` and `SITE_URL`, the deploy keys
 Left:
 
 1. **First production release.** Merge the release pull request that release-please opens after the next push to `main`. That tags `v0.1.0` and deploys `wirdak.app`.
-2. **WhatsApp setup (ARQ-246).** In the Meta app, set the webhook callback URL to `https://healthy-rabbit-33.eu-west-1.convex.site/whatsapp/webhook` and the verify token to the value of `WHATSAPP_VERIFY_TOKEN`, then subscribe to `messages`. Set the six `WHATSAPP_*` variables on the production deployment. Staging needs its own number (a Meta test number works) and webhook (`https://basic-mockingbird-167.eu-west-1.convex.site/whatsapp/webhook`) before anyone can sign in there.
+2. **WhatsApp setup (ARQ-246).** In the Meta app, set the webhook callback URL to `https://healthy-rabbit-33.eu-west-1.convex.site/whatsapp/webhook` and the verify token to the value of `WHATSAPP_VERIFY_TOKEN`, then subscribe to `messages`. Then set the variables (see "WhatsApp on staging"):
+   1. Generate the relay secret once: `openssl rand -hex 32`.
+   2. **Production:** the six Meta `WHATSAPP_*` variables, plus `WHATSAPP_RELAY_SECRET` (that value) and `WHATSAPP_RELAY_URL` = `https://basic-mockingbird-167.eu-west-1.convex.site/whatsapp/relay`.
+   3. **Staging:** `WHATSAPP_PUBLIC_NUMBER`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_GRAPH_VERSION` with production's values, and `WHATSAPP_RELAY_SECRET` (the same value). Do not set `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` or `WHATSAPP_RELAY_URL` on staging. Staging needs no webhook of its own in Meta.
+   4. Check it: start a sign-in on `stg.wirdak.app`, send the ready-made message, and confirm that exactly one reply arrives and that its link opens `stg.wirdak.app`. Then do the same on `wirdak.app`.
 3. **Real-phone test.** On a real phone open the production site, start a khatma, press the WhatsApp button, send the ready-made message, confirm "نعم، هذا رقمي", then create a khatma, take a juz', and finish it. Repeat with a second phone using the invite link.
 
 The admin panel (plan 3) will live at `admin.wirdak.app` as its own Vercel project.

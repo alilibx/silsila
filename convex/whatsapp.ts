@@ -1,7 +1,11 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation } from "./_generated/server";
-import { randomPin, sha256Hex } from "./lib/crypto";
+import {
+  internalAction,
+  internalMutation,
+  type ActionCtx,
+} from "./_generated/server";
+import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -10,19 +14,27 @@ import { randomPin, sha256Hex } from "./lib/crypto";
 // @types/node, so declare just what this module reads.
 declare const process: { env: Record<string, string | undefined> };
 
-/** Variables a production deployment needs before it can verify anyone. */
-const REQUIRED_ENV = [
+/** Variables every deployment needs to hand out codes and send replies. */
+const SEND_ENV = [
   "WHATSAPP_PUBLIC_NUMBER",
   "WHATSAPP_PHONE_NUMBER_ID",
   "WHATSAPP_ACCESS_TOKEN",
-  "WHATSAPP_APP_SECRET",
-  "WHATSAPP_VERIFY_TOKEN",
   "WHATSAPP_GRAPH_VERSION",
   "SITE_URL",
 ] as const;
 
-/** The required variables plus `PREVIEW_SECRET`, which only the link-preview endpoint reads. */
-type EnvName = (typeof REQUIRED_ENV)[number] | "PREVIEW_SECRET";
+/** What the Meta webhook needs (production, which Meta calls). */
+const META_ENV = ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN"] as const;
+
+type EnvName =
+  | (typeof SEND_ENV)[number]
+  | (typeof META_ENV)[number]
+  // Where production relays messages it has no code for, and the secret
+  // both sides sign and check those relays with.
+  | "WHATSAPP_RELAY_URL"
+  | "WHATSAPP_RELAY_SECRET"
+  // Only the link-preview endpoint reads this.
+  | "PREVIEW_SECRET";
 
 /** An environment variable, treating the empty string as unset. */
 export function env(name: EnvName): string | undefined {
@@ -38,8 +50,28 @@ export function isDev(): boolean {
   return process.env.WIRDAK_ENV === "dev";
 }
 
+/**
+ * Where this deployment's incoming messages come from: Meta's webhook when it
+ * holds the app secret (production), else production's relay when it holds
+ * only the relay secret (staging, which shares production's number). Never
+ * both, so a relay secret can't be used to inject messages into production.
+ */
+export function inboundSource(): "meta" | "relay" | null {
+  if (env("WHATSAPP_APP_SECRET") !== undefined) return "meta";
+  if (env("WHATSAPP_RELAY_SECRET") !== undefined) return "relay";
+  return null;
+}
+
 export function whatsappConfigured(): boolean {
-  return REQUIRED_ENV.every((name) => env(name) !== undefined);
+  if (!SEND_ENV.every((name) => env(name) !== undefined)) return false;
+  switch (inboundSource()) {
+    case "meta":
+      return META_ENV.every((name) => env(name) !== undefined);
+    case "relay":
+      return true;
+    case null:
+      return false;
+  }
 }
 
 /** `SITE_URL` without a trailing slash; dev falls back to the Vite dev server. */
@@ -147,6 +179,27 @@ export function parseIncoming(
   return out;
 }
 
+/** The message in a relay call (`relayIncoming` below), or `null` if malformed. */
+export function parseRelayed(payload: unknown): IncomingMessage | null {
+  if (
+    !isObject(payload) ||
+    typeof payload.waMessageId !== "string" ||
+    payload.waMessageId.length === 0 ||
+    payload.waMessageId.length > MAX_MESSAGE_ID ||
+    typeof payload.from !== "string" ||
+    !WA_PHONE.test(payload.from) ||
+    typeof payload.text !== "string" ||
+    payload.text.length > MAX_TEXT
+  ) {
+    return null;
+  }
+  return {
+    waMessageId: payload.waMessageId,
+    from: payload.from,
+    text: payload.text,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Outbound
 
@@ -221,6 +274,79 @@ export const sendText = internalAction({
 });
 
 // ---------------------------------------------------------------------------
+// Relay (production → staging)
+//
+// Staging shares production's number, so Meta delivers every message to
+// production. A message production has no pending code for is relayed to
+// staging, which answers whether one of its own codes took it. Staging then
+// sends its own reply (with its own `SITE_URL`); production replies only if
+// staging didn't take it.
+
+export const RELAY_TIMESTAMP_HEADER = "X-Wirdak-Relay-Timestamp";
+export const RELAY_SIGNATURE_HEADER = "X-Wirdak-Relay-Signature";
+/** Relays older or newer than this are refused (replays are deduped anyway). */
+export const RELAY_MAX_SKEW_MS = 5 * 60_000;
+const RELAY_TIMEOUT_MS = 5_000;
+
+/** `sha256=<hex>` of HMAC-SHA256(secret, `<timestamp>.<body>`). */
+export async function relaySignature(
+  secret: string,
+  timestamp: string,
+  body: string,
+): Promise<string> {
+  return `sha256=${await hmacSha256Hex(secret, `${timestamp}.${body}`)}`;
+}
+
+/**
+ * Relays a message to `WHATSAPP_RELAY_URL` and returns `true` only if the
+ * other deployment took it (and so sends the reply). Never throws: any
+ * failure returns `false`, so production still answers the person.
+ */
+export async function relayIncoming(
+  message: IncomingMessage,
+): Promise<boolean> {
+  const url = env("WHATSAPP_RELAY_URL");
+  const secret = env("WHATSAPP_RELAY_SECRET");
+  if (url === undefined || secret === undefined) return false;
+  // Only a deployment that Meta calls relays, so two can't relay in a loop.
+  if (inboundSource() !== "meta") return false;
+  if (!url.startsWith("https://") && !isDev()) {
+    console.error("whatsapp relay: WHATSAPP_RELAY_URL is not https");
+    return false;
+  }
+  const body = JSON.stringify(message);
+  const timestamp = String(Date.now());
+  const signature = await relaySignature(secret, timestamp, body);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        [RELAY_TIMESTAMP_HEADER]: timestamp,
+        [RELAY_SIGNATURE_HEADER]: signature,
+      },
+      body,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.error(`whatsapp relay failed: HTTP ${res.status}`);
+      return false;
+    }
+    const out: unknown = await res.json();
+    return isObject(out) && out.handled === true;
+  } catch (err) {
+    console.error(
+      `whatsapp relay failed: ${err instanceof Error ? err.name : "error"}`,
+    );
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Inbound handling
 
 /**
@@ -243,36 +369,53 @@ export const recordInbound = internalMutation({
   },
 });
 
+/**
+ * Dedupes and matches one message and sends the reply for a match. Returns
+ * `"taken"` when nothing more should be sent (a match, a duplicate, a bad
+ * sender, or a rate-limited phone), else whether the text could hold a code.
+ */
+export async function takeIncoming(
+  ctx: ActionCtx,
+  message: IncomingMessage,
+  send: (to: string, body: string) => Promise<unknown>,
+): Promise<"taken" | "no_code" | "unknown_code"> {
+  if (!WA_PHONE.test(message.from)) return "taken";
+  const fresh = await ctx.runMutation(internal.whatsapp.recordInbound, {
+    waMessageId: message.waMessageId,
+  });
+  if (!fresh) return "taken";
+
+  const phone = `+${message.from}`;
+  // Generated here (never in a mutation); used only if the number already
+  // has an account.
+  const pin = randomPin();
+  const result = await ctx.runMutation(internal.verification.matchIncoming, {
+    phone,
+    text: message.text,
+    pinHash: await sha256Hex(pin),
+  });
+  switch (result.kind) {
+    case "rate_limited":
+      return "taken";
+    case "no_match":
+      return result.codeShaped ? "unknown_code" : "no_code";
+    case "matched":
+      await send(phone, matchedReply(result.returnPath));
+      return "taken";
+    case "needs_pin":
+      await send(phone, pinReply(pin));
+      return "taken";
+  }
+}
+
+/** A message from Meta's webhook. */
 export const handleIncoming = internalAction({
   args: { waMessageId: v.string(), from: v.string(), text: v.string() },
   handler: async (ctx, args): Promise<void> => {
-    if (!WA_PHONE.test(args.from)) return;
-    const fresh = await ctx.runMutation(internal.whatsapp.recordInbound, {
-      waMessageId: args.waMessageId,
-    });
-    if (!fresh) return;
-
-    const phone = `+${args.from}`;
-    // Generated here (never in a mutation); used only if the number already
-    // has an account.
-    const pin = randomPin();
-    const result = await ctx.runMutation(internal.verification.matchIncoming, {
-      phone,
-      text: args.text,
-      pinHash: await sha256Hex(pin),
-    });
-    switch (result.kind) {
-      case "rate_limited":
-        return;
-      case "no_match":
-        await sendWhatsAppText(phone, NO_MATCH_REPLY);
-        return;
-      case "matched":
-        await sendWhatsAppText(phone, matchedReply(result.returnPath));
-        return;
-      case "needs_pin":
-        await sendWhatsAppText(phone, pinReply(pin));
-        return;
-    }
+    const outcome = await takeIncoming(ctx, args, sendWhatsAppText);
+    if (outcome === "taken") return;
+    // A code we don't have may have been started on staging.
+    if (outcome === "unknown_code" && (await relayIncoming(args))) return;
+    await sendWhatsAppText(`+${args.from}`, NO_MATCH_REPLY);
   },
 });
