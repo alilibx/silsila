@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  // Node-side files only: the Vite config. Browser code (tsconfig.json) never sees Node's globals.
+  "include": ["vite.config.ts"]
+}

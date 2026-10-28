@@ -35,6 +35,21 @@ export default defineConfig({
           setupFiles: ["apps/web/src/test/setup.ts"],
         },
       },
+      {
+        define: { __APP_VERSION__: JSON.stringify(appVersion) },
+        resolve: {
+          alias: {
+            "@convex": fileURLToPath(new URL("./convex", import.meta.url)),
+            "@web": fileURLToPath(new URL("./apps/web/src", import.meta.url)),
+          },
+        },
+        test: {
+          name: "admin",
+          environment: "jsdom",
+          include: ["apps/admin/**/*.test.{ts,tsx}"],
+          setupFiles: ["apps/admin/src/test/setup.ts"],
+        },
+      },
     ],
   },
 });
