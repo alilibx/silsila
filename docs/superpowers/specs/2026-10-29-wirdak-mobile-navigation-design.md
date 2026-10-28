@@ -3,7 +3,7 @@
 - **Date:** 2026-10-29
 - **Linear:** [ARQ-277](https://linear.app/manzilo/issue/ARQ-277), project Wirdak · وِردك
 - **Builds on:** `docs/superpowers/specs/2026-10-27-silsila-v1-design.md` (the "v1 spec", especially 5.3) and what shipped through v0.3.0
-- **Status:** draft, waiting for Ali's approval
+- **Status:** approved by Ali on 2026-10-29, including the builder's calls
 
 Items marked **[builder's call]** are decisions made while writing this up, not by Ali. Ali didn't decide them and can overturn any of them. Everything else is Ali's, from the brainstorm and the mockups he approved on 2026-10-29.
 
