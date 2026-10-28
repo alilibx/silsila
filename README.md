@@ -10,7 +10,7 @@ A shared Quran khatma for family, friends, and colleagues, simple enough for a 1
 
 Invite the people you love, take one juz' at a time, and when all 30 are done the group completes the khatma together and the next round begins.
 
-**Status:** the v1 core loop is built (create a khatma, verify through WhatsApp, invite, take, finish, undo, release, and celebrate). Not deployed yet; see [docs/deploy.md](docs/deploy.md).
+**Status:** the v1 core loop is built (create a khatma, verify through WhatsApp, invite, take, finish, undo, release, and celebrate). Staging runs at https://stg.wirdak.app (every push to `main`); production at https://wirdak.app ships from release tags. See [docs/deploy.md](docs/deploy.md).
 
 ## Development
 
@@ -28,7 +28,7 @@ pnpm test
 
 The celebration duas (Quran 2:127 and 2:201) are copied verbatim from the Tanzil Quran Text (Uthmani, Version 1.1) of the [Tanzil Project](https://tanzil.net), used under its licence, which asks for the source and a link.
 
-The cloud Convex project (region EU West, Ireland) is created at deploy time; no cloud deployment exists yet, so there is no dev deployment name to record here.
+The cloud Convex project is `manzilo:wirdak` (EU West, Ireland), with the deployments `staging` and `production`.
 
 ## Development / e2e
 
@@ -39,4 +39,4 @@ Deployment (Convex production, Vercel, WhatsApp) is described in [docs/deploy.md
 
 Sessions: after WhatsApp verification the backend issues a random session token, and the web app keeps it in `localStorage` (key `wirdak.session`), falling back to memory when storage is blocked. Spec 5.2 asks for this choice to be documented: an HttpOnly cookie is impractical because the site (Vercel) and the backend (Convex) are on different domains. Only the token's SHA-256 hash is stored on the server, and every device can be signed out from the settings page or from the WhatsApp sign-in alert.
 
-Tests run with Vitest: `convex/**` in the `edge-runtime` environment (required by `convex-test`), `apps/web/**` in `jsdom`. CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, test, and the web build on Node 22 for every pull request and push to `main`. It deploys nothing: Vercel's build runs `convex deploy` and then the web build, so both ship together (see [docs/deploy.md](docs/deploy.md)).
+Tests run with Vitest: `convex/**` in the `edge-runtime` environment (required by `convex-test`), `apps/web/**` in `jsdom`. CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, test, and the web build on Node 22 for every pull request. On `main`, `.github/workflows/main.yml` runs the same checks, deploys to staging, and lets release-please cut versioned releases that deploy to production (see [docs/deploy.md](docs/deploy.md)).

@@ -1,0 +1,80 @@
+name: Deploy
+
+# Ships one ref to one environment: `convex deploy` pushes the backend, then the web app is built
+# and uploaded to Vercel (see docs/deploy.md). Called by main.yml; run it by hand to redeploy or
+# roll back (production accepts release tags only).
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      ref:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        required: true
+      ref:
+        description: "Release tag for production (v1.2.3); any commit, branch, or tag for staging"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.environment == 'production' && 'https://wirdak.app' || 'https://stg.wirdak.app' }}
+    env:
+      TARGET: ${{ inputs.environment }}
+      REF: ${{ inputs.ref }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Production deploys release tags only
+        if: inputs.environment == 'production'
+        run: |
+          if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::production deploys a release tag such as v1.2.3, got '$REF'"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          # Fully qualified for production, so a branch named like a release tag cannot stand in.
+          ref: ${{ inputs.environment == 'production' && format('refs/tags/{0}', inputs.ref) || inputs.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # Secrets are passed only to the steps that need them, never to dependency install scripts.
+      - run: pnpm install --frozen-lockfile
+      - run: npm install --global vercel@56.3.2
+      - run: vercel pull --yes --environment="$TARGET"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      # Runs the buildCommand in apps/web/vercel.json: `convex deploy` first, then the Vite build.
+      - run: vercel build --target="$TARGET"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # Environment secret: each GitHub environment holds the key of its own Convex deployment.
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          # Staging is a production-type Convex deployment served from a non-production Vercel
+          # environment, which `convex deploy` refuses by default. Only staging turns that check off.
+          CONVEX_CHECK_BUILD_ENVIRONMENT: ${{ inputs.environment == 'staging' && 'disable' || 'enable' }}
+      - name: Deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url=$(vercel deploy --prebuilt --target="$TARGET")
+          echo "Deployed $REF to $TARGET: $url" >> "$GITHUB_STEP_SUMMARY"
