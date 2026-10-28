@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { auditActionValidator } from "./lib/audit";
 import { graceValidator } from "./lib/grace";
 import { scheduleValidator } from "./lib/schedule";
 
@@ -44,6 +45,10 @@ export default defineSchema({
     existingPersonId: v.optional(v.id("people")),
     /** The site path the sign-in started on; the WhatsApp reply links back to it. */
     returnPath: v.optional(v.string()),
+    /** Set for an admin panel sign-in; absent for the website. */
+    surface: v.optional(v.literal("admin")),
+    /** The allowlisted admin with this phone, for an admin sign-in that found one. */
+    adminId: v.optional(v.id("admins")),
     createdAt: v.number(),
     expiresAt: v.number(),
   })
@@ -179,6 +184,44 @@ export default defineSchema({
     value: v.any(),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+
+  admins: defineTable({
+    phone: v.string(), // E.164
+    /** null for the first admin, added from the command line. */
+    addedBy: v.union(v.id("admins"), v.null()),
+    addedAt: v.number(),
+  }).index("by_phone", ["phone"]),
+
+  adminSessions: defineTable({
+    adminId: v.id("admins"),
+    tokenHash: v.string(),
+    alertTokenHash: v.string(),
+    deviceLabel: v.string(),
+    createdAt: v.number(),
+    /** createdAt + 12 hours, however active the admin is. */
+    expiresAt: v.number(),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_alertTokenHash", ["alertTokenHash"])
+    .index("by_admin", ["adminId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  auditLog: defineTable({
+    /** null for changes made from the command line (the first admin). */
+    adminId: v.union(v.id("admins"), v.null()),
+    /** The actor's phone when the row was written, so it outlives the admin's removal. */
+    adminPhone: v.union(v.string(), v.null()),
+    action: auditActionValidator,
+    targetKind: v.union(v.literal("admin"), v.literal("setting")),
+    targetId: v.string(),
+    before: v.any(),
+    after: v.any(),
+    note: v.union(v.string(), v.null()),
+    at: v.number(),
+  })
+    .index("by_at", ["at"])
+    .index("by_admin_at", ["adminId", "at"])
+    .index("by_action_at", ["action", "at"]),
 
   rateLimits: defineTable({
     key: v.string(),

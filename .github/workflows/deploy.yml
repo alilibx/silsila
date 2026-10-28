@@ -84,3 +84,31 @@ jobs:
         run: |
           url=$(vercel deploy --prebuilt --target="$TARGET")
           echo "Deployed $REF to $TARGET: $url" >> "$GITHUB_STEP_SUMMARY"
+      # The admin panel (apps/admin): a second Vercel project, same commit. Its build doesn't run
+      # `convex deploy` (the website build above already pushed the functions) and gets no
+      # CONVEX_DEPLOY_KEY. It runs from the repo root like the website's steps, because Vercel
+      # applies the project's Root Directory (apps/admin) relative to where the CLI runs; the
+      # website's .vercel folder goes first so its settings don't leak into this build.
+      # Skipped until the repository variable exists (ARQ-274), so the website keeps deploying.
+      - name: Pull admin project settings
+        if: vars.VERCEL_ADMIN_PROJECT_ID != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_ADMIN_PROJECT_ID }}
+        run: |
+          rm -rf .vercel
+          vercel pull --yes --environment="$TARGET"
+      - name: Build admin
+        if: vars.VERCEL_ADMIN_PROJECT_ID != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_ADMIN_PROJECT_ID }}
+        run: vercel build --target="$TARGET"
+      - name: Deploy admin
+        if: vars.VERCEL_ADMIN_PROJECT_ID != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_ADMIN_PROJECT_ID }}
+        run: |
+          url=$(vercel deploy --prebuilt --target="$TARGET")
+          echo "Deployed admin $REF to $TARGET: $url" >> "$GITHUB_STEP_SUMMARY"

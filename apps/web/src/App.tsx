@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router";
 import { HandoffGate } from "./features/handoff/HandoffGate";
 import { useHandoffManifest } from "./features/handoff/useHandoffManifest";
+import { StatusBanners } from "./features/status/StatusBanners";
 import { useTouch } from "./lib/useTouch";
 import { CreatePage } from "./pages/CreatePage";
 import { HomePage } from "./pages/HomePage";
@@ -15,6 +16,7 @@ export function App() {
   useHandoffManifest();
   return (
     <HandoffGate>
+      <StatusBanners />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/new" element={<CreatePage />} />

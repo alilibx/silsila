@@ -51,6 +51,10 @@ export const SETTING_DEFAULTS = {
   handoffRedeemGlobalPerMinute: 60,
   maintenanceMode: false,
   announcement: null as string | null,
+  /** Shown in the maintenance banner; null uses the website's own copy. */
+  maintenanceMessage: null as string | null,
+  /** A release (`x.y.z`); older websites reload once to pick up the new one. */
+  minClientVersion: null as string | null,
 };
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

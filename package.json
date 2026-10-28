@@ -11,10 +11,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "run-p dev:convex dev:web",
+    "dev": "run-p dev:convex dev:web dev:admin",
     "dev:convex": "convex dev",
     "dev:web": "bun --cwd apps/web run dev",
-    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
+    "dev:admin": "bun --cwd apps/admin run dev",
+    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p apps/admin && tsc --noEmit -p apps/admin/tsconfig.node.json && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",

@@ -1,5 +1,14 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+const appVersion = (
+  JSON.parse(
+    readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  ) as {
+    version: string;
+  }
+).version;
 
 export default defineConfig({
   test: {
@@ -13,6 +22,7 @@ export default defineConfig({
         },
       },
       {
+        define: { __APP_VERSION__: JSON.stringify(appVersion) },
         resolve: {
           alias: {
             "@convex": fileURLToPath(new URL("./convex", import.meta.url)),
@@ -23,6 +33,21 @@ export default defineConfig({
           environment: "jsdom",
           include: ["apps/web/**/*.test.{ts,tsx}"],
           setupFiles: ["apps/web/src/test/setup.ts"],
+        },
+      },
+      {
+        define: { __APP_VERSION__: JSON.stringify(appVersion) },
+        resolve: {
+          alias: {
+            "@convex": fileURLToPath(new URL("./convex", import.meta.url)),
+            "@web": fileURLToPath(new URL("./apps/web/src", import.meta.url)),
+          },
+        },
+        test: {
+          name: "admin",
+          environment: "jsdom",
+          include: ["apps/admin/**/*.test.{ts,tsx}"],
+          setupFiles: ["apps/admin/src/test/setup.ts"],
         },
       },
     ],

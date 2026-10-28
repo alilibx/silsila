@@ -45,6 +45,11 @@ export function writeStored(key: string, value: string): void {
   write(key, value);
 }
 
+/** Removes a `wirdak.*` value from localStorage and memory. */
+export function removeStored(key: string): void {
+  remove(key);
+}
+
 // The `storage` event only fires in other tabs, so same-tab changes notify through this set.
 const listeners = new Set<() => void>();
 

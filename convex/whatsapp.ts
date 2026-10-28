@@ -34,7 +34,9 @@ type EnvName =
   | "WHATSAPP_RELAY_URL"
   | "WHATSAPP_RELAY_SECRET"
   // Only the link-preview endpoint reads this.
-  | "PREVIEW_SECRET";
+  | "PREVIEW_SECRET"
+  // The admin panel's origin (spec 4.2, 11).
+  | "ADMIN_SITE_URL";
 
 /** An environment variable, treating the empty string as unset. */
 export function env(name: EnvName): string | undefined {
@@ -91,6 +93,12 @@ export function siteUrl(): string {
   return url.replace(/\/+$/, "");
 }
 
+/** `ADMIN_SITE_URL` without a trailing slash; dev falls back to the admin Vite server. */
+export function adminSiteUrl(): string {
+  const url = env("ADMIN_SITE_URL") ?? (isDev() ? "http://localhost:5174" : "");
+  return url.replace(/\/+$/, "");
+}
+
 // ---------------------------------------------------------------------------
 // Message texts (sent verbatim)
 
@@ -113,6 +121,11 @@ export const matchedReply = (returnPath = "/") => {
 /** Says what the code is for, so a forwarded-link victim knows not to hand it over. */
 export const pinReply = (pin: string) =>
   `رمز الدخول إلى وِردك: ${pin}\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
+/** The code for an admin panel sign-in. No link: the admin page is already waiting for it. */
+export const adminPinReply = (pin: string) =>
+  `رمز الدخول إلى لوحة إدارة وِردك: ${pin}\nلا تعطه لأحد. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
+export const adminSignInAlert = (deviceLabel: string, alertToken: string) =>
+  `تسجيل دخول إلى لوحة إدارة وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لإنهاء كل جلسات الإدارة: ${adminSiteUrl()}/signout?t=${alertToken}`;
 export const signInAlert = (deviceLabel: string, alertToken: string) =>
   `تسجيل دخول جديد إلى وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: ${siteUrl()}/signout?t=${alertToken}`;
 /** Sent instead of `signInAlert` when the sign-in created the account. */
@@ -415,7 +428,7 @@ export async function takeIncoming(
       await send(phone, matchedReply(result.returnPath));
       return "taken";
     case "needs_pin":
-      await send(phone, pinReply(pin));
+      await send(phone, result.admin ? adminPinReply(pin) : pinReply(pin));
       return "taken";
   }
 }

@@ -286,3 +286,54 @@ test("a note past both cutoffs is deleted once, not twice", async () => {
   const row = await t.run((ctx) => ctx.db.get(id));
   expect(row).toBeNull();
 });
+
+test("purge deletes audit rows after two years and expired admin sessions", async () => {
+  const t = convexTest(schema, modules);
+  const now = Date.now();
+  const AUDIT_TTL_MS = 2 * 365 * 86_400_000;
+  const adminId = await t.run((ctx) =>
+    ctx.db.insert("admins", {
+      phone: "+971500000001",
+      addedBy: null,
+      addedAt: 0,
+    }),
+  );
+  const audit = (at: number) =>
+    t.run((ctx) =>
+      ctx.db.insert("auditLog", {
+        adminId,
+        adminPhone: "+971500000001",
+        action: "setting.set",
+        targetKind: "setting",
+        targetId: "maxMembers",
+        before: 60,
+        after: 40,
+        note: null,
+        at,
+      }),
+    );
+  const session = (expiresAt: number) =>
+    t.run((ctx) =>
+      ctx.db.insert("adminSessions", {
+        adminId,
+        tokenHash: `h${expiresAt}`,
+        alertTokenHash: `a${expiresAt}`,
+        deviceLabel: "iPhone",
+        createdAt: expiresAt - 1,
+        expiresAt,
+      }),
+    );
+  const oldAudit = await audit(now - AUDIT_TTL_MS - 60_000);
+  const keptAudit = await audit(now - AUDIT_TTL_MS + 60_000);
+  const expired = await session(now - 60_000);
+  const live = await session(now + 60_000);
+
+  await t.mutation(internal.maintenance.purge, {});
+
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(oldAudit)).toBeNull();
+    expect(await ctx.db.get(keptAudit)).not.toBeNull();
+    expect(await ctx.db.get(expired)).toBeNull();
+    expect(await ctx.db.get(live)).not.toBeNull();
+  });
+});
