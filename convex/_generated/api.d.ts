@@ -15,6 +15,8 @@ import type * as handoff from "../handoff.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as khatmas from "../khatmas.js";
+import type * as lib_adminSession from "../lib/adminSession.js";
+import type * as lib_audit from "../lib/audit.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_digits from "../lib/digits.js";
 import type * as lib_grace from "../lib/grace.js";
@@ -56,6 +58,8 @@ declare const fullApi: ApiFromModules<{
   hooks: typeof hooks;
   http: typeof http;
   khatmas: typeof khatmas;
+  "lib/adminSession": typeof lib_adminSession;
+  "lib/audit": typeof lib_audit;
   "lib/crypto": typeof lib_crypto;
   "lib/digits": typeof lib_digits;
   "lib/grace": typeof lib_grace;
