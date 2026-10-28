@@ -331,6 +331,35 @@ test("startInternal rate-limits per client and per IP", async () => {
   expect(await go("k-new2", "198.51.100.1")).not.toHaveProperty("error");
 });
 
+test("a client refused by its IP's limit keeps its own budget", async () => {
+  const t = convexTest(schema, modules);
+  const go = (clientKey: string, ip: string) =>
+    t.action(internal.verification.startInternal, {
+      displayName: "علي",
+      clientKey,
+      ip,
+    });
+  // a busy shared IP uses up its 30 starts
+  for (let i = 0; i < 30; i++) {
+    expect(await go(`k${i}`, "198.51.100.1")).not.toHaveProperty("error");
+  }
+  // five minutes later someone on that IP retries six times, refused each time
+  vi.setSystemTime(NOW + 5 * 60_000);
+  for (let i = 0; i < 6; i++) {
+    expect(await go("k-retry", "198.51.100.1")).toEqual({
+      error: "rate_limited",
+    });
+  }
+  // once the IP window resets, their own five starts are all still there
+  vi.setSystemTime(NOW + TEN_MIN + 1_000);
+  for (let i = 0; i < 5; i++) {
+    expect(await go("k-retry", "198.51.100.1")).not.toHaveProperty("error");
+  }
+  expect(await go("k-retry", "198.51.100.1")).toEqual({
+    error: "rate_limited",
+  });
+});
+
 test("new number: start → message → matched → claim → session", async () => {
   const t = convexTest(schema, modules);
   const v = await start(t, "أم أحمد");

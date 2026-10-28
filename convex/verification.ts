@@ -19,7 +19,12 @@ import {
   sha256Hex,
   timingSafeEqual,
 } from "./lib/crypto";
-import { checkRateLimit, checkShardedRateLimit } from "./lib/rateLimit";
+import {
+  checkRateLimit,
+  checkRateLimits,
+  shardedBucket,
+  type RateLimitBucket,
+} from "./lib/rateLimit";
 import { getSetting } from "./lib/settings";
 import { insertSession } from "./sessions";
 import { cleanDisplayName, maskPhone, normalizeDigits } from "./lib/text";
@@ -251,26 +256,27 @@ export const createPending = internalMutation({
     const clientKey = (
       await sha256Hex(args.clientKey.slice(0, MAX_CLIENT_KEY))
     ).slice(0, 32);
-    const allowed =
-      (await checkRateLimit(
-        ctx,
-        `verifyStart:client:${clientKey}`,
-        perClient,
-        TEN_MIN_MS,
-      )) &&
-      (args.ip === null ||
-        (await checkRateLimit(
-          ctx,
-          `verifyStart:ip:${args.ip}`,
-          await getSetting(ctx, "verifyStartPerIpPer10Min"),
-          TEN_MIN_MS,
-        ))) &&
-      (await checkShardedRateLimit(
-        ctx,
+    const buckets: RateLimitBucket[] = [
+      {
+        key: `verifyStart:client:${clientKey}`,
+        limit: perClient,
+        windowMs: TEN_MIN_MS,
+      },
+      shardedBucket(
         "verifyStart:global",
         await getSetting(ctx, "verifyGlobalPerMinute"),
         MINUTE_MS,
-      ));
+      ),
+    ];
+    if (args.ip !== null) {
+      buckets.push({
+        key: `verifyStart:ip:${args.ip}`,
+        limit: await getSetting(ctx, "verifyStartPerIpPer10Min"),
+        windowMs: TEN_MIN_MS,
+      });
+    }
+    // All or nothing: a start refused by one limit spends none of the others.
+    const allowed = await checkRateLimits(ctx, buckets);
     if (!allowed) return { error: "rate_limited" };
 
     let code: string | null = null;

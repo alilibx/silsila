@@ -1,7 +1,12 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import schema from "../schema";
-import { checkRateLimit, checkShardedRateLimit } from "./rateLimit";
+import {
+  checkRateLimit,
+  checkRateLimits,
+  checkShardedRateLimit,
+  shardedBucket,
+} from "./rateLimit";
 
 const modules = import.meta.glob("../**/*.ts");
 
@@ -96,5 +101,44 @@ test("sharded limiter spreads across shards 0..9", async () => {
     expect(rows.map((r) => r.key).sort()).toEqual(
       Array.from({ length: 10 }, (_, n) => `g:${n}`),
     );
+  });
+});
+
+test("checkRateLimits counts every bucket only when all of them allow", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const a = { key: "a", limit: 5, windowMs: 60_000 };
+    const b = { key: "b", limit: 1, windowMs: 60_000 };
+    expect(await checkRateLimits(ctx, [a, b])).toBe(true);
+    // b refuses, so a is not charged either
+    for (let i = 0; i < 3; i++) {
+      expect(await checkRateLimits(ctx, [a, b])).toBe(false);
+    }
+    const counts = Object.fromEntries(
+      (await ctx.db.query("rateLimits").collect()).map((r) => [r.key, r.count]),
+    );
+    expect(counts).toEqual({ a: 1, b: 1 });
+  });
+});
+
+test("checkRateLimits refuses a bucket with no allowance and writes nothing", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    expect(
+      await checkRateLimits(ctx, [
+        { key: "a", limit: 5, windowMs: 60_000 },
+        { key: "b", limit: 0, windowMs: 60_000 },
+      ]),
+    ).toBe(false);
+    expect(await ctx.db.query("rateLimits").collect()).toEqual([]);
+  });
+});
+
+test("shardedBucket picks one shard with ceil(limit/10) hits", () => {
+  vi.spyOn(Math, "random").mockReturnValue(0.42);
+  expect(shardedBucket("g", 25, 60_000)).toEqual({
+    key: "g:4",
+    limit: 3,
+    windowMs: 60_000,
   });
 });
