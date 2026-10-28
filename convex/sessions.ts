@@ -32,6 +32,28 @@ export async function insertSession(
   });
 }
 
+/**
+ * Deletes a session with everything that hangs off it: its push subscriptions
+ * (a signed-out device must stop receiving notes) and its hand-off tokens.
+ * Every path that ends a session goes through here.
+ */
+export async function deleteSession(
+  ctx: MutationCtx,
+  sessionId: Id<"sessions">,
+): Promise<void> {
+  const subscriptions = await ctx.db
+    .query("pushSubscriptions")
+    .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+    .collect();
+  for (const row of subscriptions) await ctx.db.delete(row._id);
+  const handoffs = await ctx.db
+    .query("handoffTokens")
+    .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+    .collect();
+  for (const row of handoffs) await ctx.db.delete(row._id);
+  await ctx.db.delete(sessionId);
+}
+
 export const create = internalMutation({
   args: {
     personId: v.id("people"),
@@ -56,7 +78,7 @@ export const me = sessionQuery({
 export const signOut = sessionMutation({
   args: {},
   handler: async (ctx) => {
-    if (ctx.session) await ctx.db.delete(ctx.session._id);
+    if (ctx.session) await deleteSession(ctx, ctx.session._id);
   },
 });
 
@@ -91,7 +113,7 @@ export const signOutOthersByAlertToken = mutation({
       .withIndex("by_person", (q) => q.eq("personId", alerted.personId))
       .collect();
     for (const s of sessions) {
-      if (s._id !== keep) await ctx.db.delete(s._id);
+      if (s._id !== keep) await deleteSession(ctx, s._id);
     }
     return {
       ok: true as const,
@@ -128,7 +150,7 @@ export const signOutOthers = sessionMutation({
       .withIndex("by_person", (q) => q.eq("personId", person._id))
       .collect();
     for (const s of sessions) {
-      if (s._id !== ctx.session?._id) await ctx.db.delete(s._id);
+      if (s._id !== ctx.session?._id) await deleteSession(ctx, s._id);
     }
   },
 });
@@ -141,6 +163,6 @@ export const signOutOne = sessionMutation({
     if (!target || target.personId !== person._id) {
       throw new ConvexError({ code: "not_found" });
     }
-    await ctx.db.delete(target._id);
+    await deleteSession(ctx, target._id);
   },
 });

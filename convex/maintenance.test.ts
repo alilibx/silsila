@@ -166,3 +166,70 @@ test("purge does not reschedule when nothing is left over", async () => {
   );
   expect(scheduled).toHaveLength(0);
 });
+
+test("purge deletes notes older than 30 days and hand-off tokens older than a day", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "علي",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: NOW,
+    });
+    const sessionId = await ctx.db.insert("sessions", {
+      personId,
+      tokenHash: "t",
+      alertTokenHash: "a",
+      deviceLabel: "x",
+      createdAt: NOW,
+      lastUsedAt: NOW,
+    });
+    const khatmaId = await ctx.db.insert("khatmas", {
+      name: null,
+      schedule: "weekly",
+      grace: { value: 2, unit: "days" },
+      creatorPersonId: personId,
+      inviteCode: "invite000001",
+      completedRounds: 0,
+      createdAt: NOW,
+    });
+    const note = (createdAt: number) =>
+      ctx.db.insert("notes", {
+        personId,
+        khatmaId,
+        kind: "completed",
+        juz: [],
+        count: null,
+        until: null,
+        assignmentId: null,
+        roundNumber: null,
+        createdAt,
+        pushedAt: null,
+        clearedAt: null,
+      });
+    const token = (tokenHash: string, createdAt: number) =>
+      ctx.db.insert("handoffTokens", {
+        tokenHash,
+        personId,
+        sessionId,
+        createdAt,
+        expiresAt: createdAt + 1800_000,
+        usedAt: null,
+      });
+    return {
+      oldNote: await note(NOW - 31 * 24 * HOUR),
+      newNote: await note(NOW - 29 * 24 * HOUR),
+      oldToken: await token("old", NOW - 25 * HOUR),
+      newToken: await token("new", NOW - 23 * HOUR),
+    };
+  });
+
+  await t.mutation(internal.maintenance.purge, {});
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(ids.oldNote)).toBeNull();
+    expect(await ctx.db.get(ids.newNote)).not.toBeNull();
+    expect(await ctx.db.get(ids.oldToken)).toBeNull();
+    expect(await ctx.db.get(ids.newToken)).not.toBeNull();
+  });
+});

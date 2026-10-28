@@ -519,6 +519,7 @@ test("mine lists active memberships newest first with progress", async () => {
       schedule: "none",
       done: 0,
       holding: null,
+      hasNote: false,
     },
     {
       inviteCode: first,
@@ -527,8 +528,46 @@ test("mine lists active memberships newest first with progress", async () => {
       schedule: "weekly",
       done: 2,
       holding: 6,
+      hasNote: false,
     },
   ]);
+});
+
+test("mine shows hasNote while an uncleared note waits in that khatma", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const first = await createKhatma(t, ali);
+  vi.setSystemTime(NOW + 1000);
+  const second = await createKhatma(t, ali);
+  const khatma1 = await khatmaByCode(t, first);
+  const khatma2 = await khatmaByCode(t, second);
+
+  const noteId = await t.run((ctx) =>
+    ctx.db.insert("notes", {
+      personId: ali.personId,
+      khatmaId: khatma1._id,
+      kind: "completed",
+      juz: [],
+      count: null,
+      until: null,
+      assignmentId: null,
+      roundNumber: null,
+      createdAt: NOW,
+      pushedAt: null,
+      clearedAt: null,
+    }),
+  );
+  const flags = async () =>
+    Object.fromEntries(
+      (await t.query(api.khatmas.mine, { sessionToken: ali.token })).map(
+        (m) => [m.inviteCode, m.hasNote],
+      ),
+    );
+  expect(await flags()).toEqual({ [first]: true, [second]: false });
+
+  await t.run((ctx) => ctx.db.patch(noteId, { clearedAt: NOW }));
+  expect(await flags()).toEqual({ [first]: false, [second]: false });
+  expect(khatma2._id).toBeDefined();
 });
 
 test("ensureShareToken returns the existing token or creates one for members", async () => {

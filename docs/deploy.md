@@ -37,8 +37,28 @@ Set in the Convex dashboard (Settings, Environment Variables) or with `pnpm exec
 | `WHATSAPP_APP_SECRET`      | Meta app secret. Verifies the `X-Hub-Signature-256` signature on every webhook call.                                    | Reset it in the Meta app (Settings, Basic), then set the new value in Convex straight away. Webhook calls fail the signature check in between, and Meta retries. |
 | `WHATSAPP_VERIFY_TOKEN`    | A string we choose. Meta sends it back during the webhook subscription handshake.                                       | Pick a new random string, set it in Convex, then save the webhook again in Meta with the same string (Meta repeats the handshake).                              |
 | `WHATSAPP_GRAPH_VERSION`   | The Graph API version used in send URLs.                                                                                | Not a secret. Move to a newer supported version before the current one is retired, and check that sending still works.                                           |
+| `VAPID_PUBLIC_KEY`         | Web Push (VAPID) public key. The browser subscribes with it (`api.push.publicKey` serves it to the web app) and the push services check it. Public. | Rotate the pair together, see "Web Push keys" below.                                                                                                              |
+| `VAPID_PRIVATE_KEY`        | The matching VAPID private key. Signs every push from `convex/pushNode.ts`. Secret.                                      | Rotate the pair together, see "Web Push keys" below.                                                                                                              |
+| `VAPID_SUBJECT`            | A contact for the push services, `mailto:you@example.com` or an `https://` URL. Sent with every push.                    | Not a secret. Change it if the contact changes.                                                                                                                   |
 
 Production answers `whatsapp_not_configured` from `/api/verification/start` until all seven `WHATSAPP_*` / `SITE_URL` values are set. The site then shows "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه." and nobody can sign in. That is the expected state before ARQ-246 is finished.
+
+### Web Push keys
+
+Until all three `VAPID_*` values are set, nothing is pushed: `pushNode.deliver` logs `push skipped (no VAPID)` and returns, and `api.push.publicKey` returns `null`. In-app notes still appear.
+
+Generate a key pair once per deployment (dev and production get different pairs):
+
+```sh
+npx web-push generate-vapid-keys
+pnpm exec convex env set --prod VAPID_PUBLIC_KEY <public key>
+pnpm exec convex env set --prod VAPID_PRIVATE_KEY <private key>
+pnpm exec convex env set --prod VAPID_SUBJECT mailto:<contact address>
+```
+
+Leave out `--prod` for the dev deployment. Never commit the private key.
+
+Rotating: generate a new pair and set both values. A subscription is bound to the public key it was created with, so rotating invalidates every stored subscription: the push services reject pushes to them (usually with 403). Browsers subscribe again with the new key on their next visit to the app (Task 9 of plan 2 builds that), and the stored row for the same endpoint is replaced, so nobody gets pushes until they have opened Wirdak once. Only rotate if the private key leaked.
 
 ### Vercel project `wirdak-web`
 
@@ -75,7 +95,7 @@ The per-IP limit on `/api/verification/start` relies on `ctx.meta.getRequestMeta
 
 ## Data retention
 
-Client IP addresses exist only inside the `verifyStart:ip:<address>` rate-limit keys. Each key lives only for its 10-minute window, and an hourly cron (`convex/crons.ts`, `maintenance:purge`) deletes expired windows, so an address is kept for at most about 70 minutes after its last request. The same job deletes phone numbers from verifications after 24 hours and WhatsApp message IDs after 7 days.
+Client IP addresses exist only inside the `verifyStart:ip:<address>` rate-limit keys. Each key lives only for its 10-minute window, and an hourly cron (`convex/crons.ts`, `maintenance:purge`) deletes expired windows, so an address is kept for at most about 70 minutes after its last request. The same job deletes phone numbers from verifications after 24 hours, WhatsApp message IDs after 7 days, in-app notes after 30 days, and hand-off tokens after 1 day. Signing a device out also deletes that session's push subscriptions.
 
 ## Follow-ups
 

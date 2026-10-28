@@ -168,6 +168,7 @@ export default defineSchema({
     usedAt: nullableNumber,
   })
     .index("by_tokenHash", ["tokenHash"])
+    .index("by_session", ["sessionId"])
     .index("by_createdAt", ["createdAt"]),
 
   settings: defineTable({

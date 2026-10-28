@@ -425,6 +425,15 @@ export const mine = sessionQuery({
         const done = [...juzStates(assignments).values()].filter(
           (s) => s.state === "done",
         ).length;
+        const note = await ctx.db
+          .query("notes")
+          .withIndex("by_person_khatma", (q) =>
+            q
+              .eq("personId", personId)
+              .eq("khatmaId", khatma._id)
+              .eq("clearedAt", null),
+          )
+          .first();
         return {
           inviteCode: khatma.inviteCode,
           name: khatma.name,
@@ -432,6 +441,7 @@ export const mine = sessionQuery({
           schedule: khatma.schedule,
           done,
           holding: heldAssignment(assignments, personId)?.juz ?? null,
+          hasNote: note !== null,
         };
       }),
     );
