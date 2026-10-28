@@ -158,6 +158,8 @@ export const ar = {
   actions: {
     errors: {
       notHolding: "ليس معك جزء الآن.",
+      /** Someone else took the reader's juz' after it opened for help. */
+      takenOver: "أحدهم يُكمل هذا الجزء الآن. جزاكما الله خيراً.",
       /** The session ended on another device (signed out from there, say). */
       signedOut: "خرجتَ من حسابك على هذا الجهاز. سجّل دخولك من جديد لتكمل.",
       shared: {

@@ -95,7 +95,9 @@ export async function activeMembership(
 /**
  * The 30 tiles of a round. Reader names go only to members, only on "reading"
  * tiles (looked up in `readerNames`); `isMine` marks the viewer's own reading
- * assignment. Pure: callers load the assignments and names.
+ * assignment. A hold opened for help is an ordinary open tile to everyone but
+ * its reader, who still sees it as theirs. Pure: callers load the assignments
+ * and names.
  */
 export function buildTiles(
   assignments: readonly Doc<"assignments">[],
@@ -105,14 +107,19 @@ export function buildTiles(
   juzNames: readonly string[],
 ): TileView[] {
   const states = juzStates(assignments);
+  const ownHeld =
+    viewerIsMember && viewerPersonId !== null
+      ? heldAssignment(assignments, viewerPersonId)
+      : null;
   return Array.from({ length: JUZ_COUNT }, (_, i) => {
     const juz = i + 1;
     const found = states.get(juz);
-    const reading = found?.state === "reading" ? found.assignment : null;
+    const own = ownHeld?.juz === juz ? ownHeld : null;
+    const reading = found?.state === "reading" ? found.assignment : own;
     return {
       juz,
       name: juzNames[i] ?? "",
-      state: found?.state ?? "open",
+      state: found?.state ?? (own ? "reading" : "open"),
       readerName:
         viewerIsMember && reading
           ? (readerNames.get(reading.personId) ?? null)
@@ -275,6 +282,10 @@ export const view = sessionQuery({
     const readerNames = isMember
       ? await readerNamesFor(ctx, assignments)
       : new Map<Id<"people">, string>();
+    // the viewer's own hold, even one opened for help, carries their name
+    if (isMember && ctx.person) {
+      readerNames.set(ctx.person._id, ctx.person.displayName);
+    }
     const tiles = buildTiles(
       assignments,
       isMember,
@@ -323,11 +334,18 @@ export const view = sessionQuery({
         isMember,
         notificationsOn: me?.notificationsOn ?? null,
         holding,
-        // filled in by the grace tasks; a placeholder until then
         hold:
-          holding === null
+          held === null
             ? null
-            : { openForHelp: false, canExtend: false, paceDays: null },
+            : {
+                openForHelp: held.openedForHelpAt !== null,
+                canExtend:
+                  held.noticeSentAt !== null &&
+                  !held.extended &&
+                  held.openedForHelpAt === null,
+                // filled in by the pace task
+                paceDays: null,
+              },
         suggestion,
         celebrateRound:
           me && me.lastCelebratedRound < khatma.completedRounds

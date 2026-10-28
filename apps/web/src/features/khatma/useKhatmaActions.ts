@@ -25,11 +25,14 @@ const takeCopy: Record<Failure<TakeResult>, string> = {
   ...errors.shared,
   ...errors.take,
 };
-const finishCopy: Record<Failure<FinishResult>, string> = {
+const releaseCopy: Record<Failure<ReleaseResult>, string> = {
   ...errors.shared,
   not_holding: errors.notHolding,
 };
-const releaseCopy: Record<Failure<ReleaseResult>, string> = finishCopy;
+const finishCopy: Record<Failure<FinishResult>, string> = {
+  ...releaseCopy,
+  taken_over: errors.takenOver,
+};
 const undoCopy: Record<Failure<UndoResult>, string> = {
   ...errors.shared,
   ...errors.undo,

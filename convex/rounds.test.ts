@@ -242,11 +242,19 @@ test("30th finish completes the round 10s later and starts the next", async () =
 test("finishing a non-final juz schedules nothing", async () => {
   const { t, bob, code } = await almostDone(range(1, 28));
   await take(t, code, bob, 29);
+  // taking schedules the hold's grace jobs; finishing must add nothing
+  const before = await t.run((ctx) =>
+    ctx.db.system.query("_scheduled_functions").collect(),
+  );
+  expect(before.map((j) => j.name).sort()).toEqual([
+    "grace:endDue",
+    "grace:noticeDue",
+  ]);
   await finish(t, code, bob);
   const scheduled = await t.run((ctx) =>
     ctx.db.system.query("_scheduled_functions").collect(),
   );
-  expect(scheduled).toHaveLength(0);
+  expect(scheduled).toEqual(before);
 });
 
 test("undo of an earlier finish cancels a pending completion", async () => {
@@ -394,7 +402,11 @@ test("undo right after the round completed reports round_completed", async () =>
   await setSetting(t, "undoWindowMs", 60_000);
   await take(t, code, bob, 30);
   await finish(t, code, bob);
-  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  // just past the completion delay (running every timer would also run the
+  // hold's grace jobs, days later, and close the undo window)
+  vi.advanceTimersByTime(11_000);
+  await t.finishInProgressScheduledFunctions();
+  expect((await viewAs(t, code, bob)).roundNumber).toBe(2);
   expect(await undo(t, code, bob)).toEqual({
     ok: false,
     reason: "round_completed",
