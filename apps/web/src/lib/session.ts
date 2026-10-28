@@ -35,6 +35,16 @@ function remove(key: string): void {
   }
 }
 
+/** Reads a `wirdak.*` value (localStorage, or memory when storage is blocked). */
+export function readStored(key: string): string | null {
+  return read(key);
+}
+
+/** Writes a `wirdak.*` value (localStorage, or memory when storage is blocked). */
+export function writeStored(key: string, value: string): void {
+  write(key, value);
+}
+
 // The `storage` event only fires in other tabs, so same-tab changes notify through this set.
 const listeners = new Set<() => void>();
 

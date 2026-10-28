@@ -1,9 +1,11 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import type { KhatmaView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import type {
   FinishResult,
   ReleaseResult,
+  StillReadingResult,
   TakeResult,
   UndoResult,
 } from "@convex/pool";
@@ -13,6 +15,7 @@ import { UNDO_WINDOW_MS, type ToastData } from "../../components/Toast";
 import { pendingIntent } from "../verify/progress";
 import { t } from "../../i18n/ar";
 import { errorCode } from "../../lib/errors";
+import { markPushAsked, pushAsked, pushSupport } from "../../lib/push";
 import { clearSessionToken, useSessionToken } from "../../lib/session";
 
 type Failure<R> = R extends { ok: false; reason: infer Reason }
@@ -25,11 +28,20 @@ const takeCopy: Record<Failure<TakeResult>, string> = {
   ...errors.shared,
   ...errors.take,
 };
-const finishCopy: Record<Failure<FinishResult>, string> = {
+const releaseCopy: Record<Failure<ReleaseResult>, string> = {
   ...errors.shared,
   not_holding: errors.notHolding,
 };
-const releaseCopy: Record<Failure<ReleaseResult>, string> = finishCopy;
+// `taken_over` is not here: it is a thank-you with the juz' number, handled in `finish`.
+const finishCopy: Record<
+  Exclude<Failure<FinishResult>, "taken_over">,
+  string
+> = releaseCopy;
+const stillReadingCopy: Record<Failure<StillReadingResult>, string> = {
+  ...errors.shared,
+  not_holding: errors.notHolding,
+  ...errors.stillReading,
+};
 const undoCopy: Record<Failure<UndoResult>, string> = {
   ...errors.shared,
   ...errors.undo,
@@ -47,7 +59,11 @@ function resumedJuz(inviteCode: string): number | null {
 const LOST_WAIT_MS = 5_000;
 
 export type OpenSheet =
-  { kind: "take"; juz: number } | { kind: "release" } | null;
+  | { kind: "take"; juz: number }
+  | { kind: "release" }
+  | { kind: "push" }
+  | { kind: "install" }
+  | null;
 
 /**
  * How long the undo button stays, from the moment the finish result arrives. The server's
@@ -93,6 +109,9 @@ export function useKhatmaActions(
   const finishMutation = useMutation(api.pool.finish);
   const undoMutation = useMutation(api.pool.undoFinish);
   const releaseMutation = useMutation(api.pool.release);
+  const stillReadingMutation = useMutation(api.pool.stillReading);
+  const dismissMutation = useMutation(api.notes.dismiss);
+  const notificationsMutation = useMutation(api.khatmas.setNotifications);
   const celebratedMutation = useMutation(api.khatmas.markCelebrated);
   const signOutMutation = useMutation(api.sessions.signOut);
 
@@ -213,6 +232,15 @@ export function useKhatmaActions(
     setPendingJuz(juz);
   }
 
+  /** Once, after the first juz' taken in this browser: the push prompt, or the iPhone install steps. */
+  function offerPush() {
+    if (pushAsked()) return;
+    const support = pushSupport();
+    if (support === "unsupported") return;
+    markPushAsked();
+    setSheet({ kind: support === "ready" ? "push" : "install" });
+  }
+
   async function confirmTake(juz: number) {
     // A dead session takes the signed-out path: verify, then take the same juz'.
     const result = await run(
@@ -224,19 +252,48 @@ export function useKhatmaActions(
     );
     if (!result) return;
     setSheet(null);
-    if (result.ok) return showToast(t.toast.taken(toArabicDigits(juz)));
+    if (result.ok) {
+      showToast(t.toast.taken(toArabicDigits(juz)));
+      return offerPush();
+    }
     showToast(takeCopy[result.reason]);
     if (result.reason === "taken") setLostJuz(juz);
   }
 
   async function finish() {
+    const held = loaded?.me.holding ?? null;
     const result = await run(() => finishMutation(args));
     if (!result) return;
     if (result.ok) {
       showToast(t.toast.finished, undoWindowMs(result.undoUntil, Date.now()));
+    } else if (result.reason === "taken_over") {
+      // Someone else is finishing it: thank them for it, and offer no undo (nothing was finished).
+      showToast(
+        held === null
+          ? t.errors.generic
+          : t.toast.takenOver(toArabicDigits(held)),
+      );
     } else {
       showToast(finishCopy[result.reason]);
     }
+  }
+
+  async function stillReading() {
+    const result = await run(() => stillReadingMutation(args));
+    if (!result) return;
+    showToast(
+      result.ok ? t.toast.stillReading : stillReadingCopy[result.reason],
+    );
+  }
+
+  async function dismissNote(noteId: Id<"notes">) {
+    await run(() => dismissMutation({ sessionToken, noteId }));
+  }
+
+  /** The switch shows the stored value, so only a failure needs a word; success arrives through the view. */
+  async function setNotifications(on: boolean) {
+    const result = await run(() => notificationsMutation({ ...args, on }));
+    if (result && !result.ok) showToast(t.errors.generic);
   }
 
   async function undo() {
@@ -273,6 +330,9 @@ export function useKhatmaActions(
     confirmTake,
     switchAccount,
     finish,
+    stillReading,
+    dismissNote,
+    setNotifications,
     undo,
     confirmRelease,
     continueToKhatma,

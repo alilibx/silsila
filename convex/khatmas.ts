@@ -9,7 +9,9 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { randomToken } from "./lib/crypto";
+import { isValidGrace, graceValidator, type Grace } from "./lib/grace";
 import { JUZ, JUZ_COUNT } from "./lib/juz";
+import { paceDays, personPace } from "./lib/pace";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { scheduleValidator, type Schedule } from "./lib/schedule";
@@ -38,11 +40,20 @@ export type TileView = {
   isMine: boolean;
 };
 
+/** What the reader of a juz' sees about their own hold; never shown to others. */
+export type HoldView = {
+  openForHelp: boolean;
+  canExtend: boolean;
+  paceDays: number | null;
+};
+
 export type KhatmaView = {
   khatmaId: Id<"khatmas">;
   name: string | null;
   createdAt: number;
   schedule: Schedule;
+  grace: Grace;
+  isOrganizer: boolean;
   roundNumber: number;
   targetEndAt: number | null;
   completedRounds: number;
@@ -55,7 +66,10 @@ export type KhatmaView = {
     /** The signed-in viewer's own name (null when signed out). */
     displayName: string | null;
     isMember: boolean;
+    /** The viewer's notification switch; null for non-members. */
+    notificationsOn: boolean | null;
     holding: number | null;
+    hold: HoldView | null;
     suggestion: number | null;
     celebrateRound: number | null;
   };
@@ -82,7 +96,9 @@ export async function activeMembership(
 /**
  * The 30 tiles of a round. Reader names go only to members, only on "reading"
  * tiles (looked up in `readerNames`); `isMine` marks the viewer's own reading
- * assignment. Pure: callers load the assignments and names.
+ * assignment. A hold opened for help is an ordinary open tile to everyone but
+ * its reader, who still sees it as theirs. Pure: callers load the assignments
+ * and names.
  */
 export function buildTiles(
   assignments: readonly Doc<"assignments">[],
@@ -92,14 +108,19 @@ export function buildTiles(
   juzNames: readonly string[],
 ): TileView[] {
   const states = juzStates(assignments);
+  const ownHeld =
+    viewerIsMember && viewerPersonId !== null
+      ? heldAssignment(assignments, viewerPersonId)
+      : null;
   return Array.from({ length: JUZ_COUNT }, (_, i) => {
     const juz = i + 1;
     const found = states.get(juz);
-    const reading = found?.state === "reading" ? found.assignment : null;
+    const own = ownHeld?.juz === juz ? ownHeld : null;
+    const reading = found?.state === "reading" ? found.assignment : own;
     return {
       juz,
       name: juzNames[i] ?? "",
-      state: found?.state ?? "open",
+      state: found?.state ?? (own ? "reading" : "open"),
       readerName:
         viewerIsMember && reading
           ? (readerNames.get(reading.personId) ?? null)
@@ -145,6 +166,8 @@ export const insertKhatma = internalMutation({
     personId: v.id("people"),
     name: v.union(v.string(), v.null()),
     schedule: scheduleValidator,
+    /** Missing means the schedule's default grace. */
+    grace: v.optional(graceValidator),
     inviteCode: v.string(),
     shareToken: v.string(),
   },
@@ -173,6 +196,8 @@ export const insertKhatma = internalMutation({
     const khatmaId = await ctx.db.insert("khatmas", {
       name: args.name,
       schedule: args.schedule,
+      grace:
+        args.grace ?? (await getSetting(ctx, "graceDefaults"))[args.schedule],
       creatorPersonId: args.personId,
       inviteCode: args.inviteCode,
       completedRounds: 0,
@@ -185,7 +210,8 @@ export const insertKhatma = internalMutation({
       joinedAt: now,
       shareToken: args.shareToken,
       status: "active",
-      nudgesOn: true,
+      notificationsOn: true,
+      lastNudgeAt: null,
       lastCelebratedRound: 0,
     });
     return { inviteCode: args.inviteCode };
@@ -208,15 +234,20 @@ export const create = action({
     sessionToken: v.optional(v.string()),
     name: v.union(v.string(), v.null()),
     schedule: scheduleValidator,
+    grace: v.optional(graceValidator),
   },
   handler: async (ctx, args): Promise<{ inviteCode: string }> => {
     const personId = await requirePersonId(ctx, args.sessionToken);
+    if (args.grace && !isValidGrace(args.grace)) {
+      throw new ConvexError({ code: "invalid_grace" });
+    }
     const name = cleanKhatmaName(args.name);
     for (let attempt = 0; attempt < INVITE_CODE_ATTEMPTS; attempt++) {
       const created = await ctx.runMutation(internal.khatmas.insertKhatma, {
         personId,
         name,
         schedule: args.schedule,
+        grace: args.grace,
         inviteCode: randomToken(9),
         shareToken: randomToken(8),
       });
@@ -252,6 +283,10 @@ export const view = sessionQuery({
     const readerNames = isMember
       ? await readerNamesFor(ctx, assignments)
       : new Map<Id<"people">, string>();
+    // the viewer's own hold, even one opened for help, carries their name
+    if (isMember && ctx.person) {
+      readerNames.set(ctx.person._id, ctx.person.displayName);
+    }
     const tiles = buildTiles(
       assignments,
       isMember,
@@ -285,6 +320,8 @@ export const view = sessionQuery({
       name: khatma.name,
       createdAt: khatma.createdAt,
       schedule: khatma.schedule,
+      grace: khatma.grace,
+      isOrganizer: personId !== null && khatma.creatorPersonId === personId,
       roundNumber: round.number,
       targetEndAt: round.targetEndAt,
       completedRounds: khatma.completedRounds,
@@ -296,7 +333,19 @@ export const view = sessionQuery({
         signedIn: ctx.person !== null,
         displayName: ctx.person?.displayName ?? null,
         isMember,
+        notificationsOn: me?.notificationsOn ?? null,
         holding,
+        hold:
+          held === null
+            ? null
+            : {
+                openForHelp: held.openedForHelpAt !== null,
+                canExtend:
+                  held.noticeSentAt !== null &&
+                  !held.extended &&
+                  held.openedForHelpAt === null,
+                paceDays: await heldPaceDays(ctx, held.personId),
+              },
         suggestion,
         celebrateRound:
           me && me.lastCelebratedRound < khatma.completedRounds
@@ -306,6 +355,15 @@ export const view = sessionQuery({
     };
   },
 });
+
+/** The reader's own pace in days; `null` until three finishes count. */
+async function heldPaceDays(
+  ctx: QueryCtx,
+  personId: Id<"people">,
+): Promise<number | null> {
+  const pace = await personPace(ctx, personId);
+  return pace.known ? paceDays(pace.paceMs) : null;
+}
 
 async function lastCompletedRound(
   ctx: QueryCtx,
@@ -348,6 +406,24 @@ export const markCelebrated = sessionMutation({
   },
 });
 
+/**
+ * Turns notifications (pushes and nudges) on or off for the caller in one
+ * khatma. Never throws: signed-out callers, unknown codes, non-members, and
+ * blocked members get `{ ok: false }`.
+ */
+export const setNotifications = sessionMutation({
+  args: { inviteCode: v.string(), on: v.boolean() },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    if (!ctx.person) return { ok: false };
+    const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
+    if (!khatma) return { ok: false };
+    const member = await activeMembership(ctx, khatma._id, ctx.person._id);
+    if (!member) return { ok: false };
+    await ctx.db.patch(member._id, { notificationsOn: args.on });
+    return { ok: true };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Mine
 
@@ -376,6 +452,15 @@ export const mine = sessionQuery({
         const done = [...juzStates(assignments).values()].filter(
           (s) => s.state === "done",
         ).length;
+        const note = await ctx.db
+          .query("notes")
+          .withIndex("by_person_khatma", (q) =>
+            q
+              .eq("personId", personId)
+              .eq("khatmaId", khatma._id)
+              .eq("clearedAt", null),
+          )
+          .first();
         return {
           inviteCode: khatma.inviteCode,
           name: khatma.name,
@@ -383,6 +468,7 @@ export const mine = sessionQuery({
           schedule: khatma.schedule,
           done,
           holding: heldAssignment(assignments, personId)?.juz ?? null,
+          hasNote: note !== null,
         };
       }),
     );

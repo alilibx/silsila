@@ -1,13 +1,22 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button, buttonClass } from "../components/Button";
+import { InstallStepsSheet } from "../components/InstallStepsSheet";
+import { SwitchRow } from "../components/SwitchRow";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { formatDate } from "../lib/format";
+import {
+  currentEndpoint,
+  dropSubscription,
+  enablePush,
+  pushBlocked,
+  pushSupport,
+} from "../lib/push";
 import { clearSessionToken, useSessionToken } from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
 
@@ -92,7 +101,149 @@ function SignedInSettings({
         <span className="font-medium">{t.settings.numberLabel}: </span>
         <span dir="ltr">{maskedPhone}</span>
       </p>
+      <MyNumbers />
+      <DevicePush />
       <Devices />
+    </>
+  );
+}
+
+/** The person's own numbers. Nobody else is ever sent these. */
+function MyNumbers() {
+  const sessionToken = useSessionToken();
+  const stats = useQuery(api.people.myStats, { sessionToken });
+  if (!stats) return null;
+  return (
+    <section aria-labelledby="numbers-heading">
+      <h2 id="numbers-heading" className={headingClass}>
+        {t.settings.numbers}
+      </h2>
+      <div className="grid gap-2 rounded-ui border border-line bg-card p-4">
+        <p>
+          {stats.juzRead > 0
+            ? t.settings.juzRead(stats.juzRead)
+            : t.settings.noJuzYet}
+        </p>
+        {stats.paceDays !== null && <p>{t.card.pace(stats.paceDays)}</p>}
+        {stats.weekStreak !== null && (
+          <p>{t.settings.weekStreak(stats.weekStreak)}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DevicePush() {
+  const support = pushSupport();
+  return (
+    <section aria-labelledby="push-heading">
+      <h2 id="push-heading" className={headingClass}>
+        {t.settings.pushHeading}
+      </h2>
+      {support === "unsupported" ? (
+        <p className="leading-relaxed text-ink-soft">
+          {t.settings.pushUnsupported}
+        </p>
+      ) : support === "ios_install" ? (
+        <IosInstall />
+      ) : (
+        <PushSwitch />
+      )}
+    </section>
+  );
+}
+
+/** On iPhone, push needs the home-screen app: this is the way back to those steps. */
+function IosInstall() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <p className="leading-relaxed text-ink-soft">
+        {t.settings.pushInstallHint}
+      </p>
+      <div className="mt-3">
+        <Button variant="ghost" onClick={() => setOpen(true)}>
+          {t.settings.pushInstall}
+        </Button>
+      </div>
+      {open && <InstallStepsSheet onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function PushSwitch() {
+  const sessionToken = useSessionToken();
+  const unsubscribe = useMutation(api.push.unsubscribe);
+  // undefined while the browser is asked; null when it has no subscription.
+  const [endpoint, setEndpoint] = useState<string | null | undefined>(
+    undefined,
+  );
+  const mine = useQuery(
+    api.push.mine,
+    endpoint && sessionToken ? { sessionToken, endpoint } : "skip",
+  );
+  const [blocked, setBlocked] = useState(pushBlocked);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    currentEndpoint().then(
+      (found) => live && setEndpoint(found),
+      () => live && setEndpoint(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (blocked) {
+    return (
+      <p className="leading-relaxed text-ink-soft">{t.settings.pushBlocked}</p>
+    );
+  }
+  if (endpoint === undefined) return null;
+
+  const on = endpoint !== null && mine?.thisDevice === true;
+
+  async function change(turnOn: boolean) {
+    if (busyRef.current || !sessionToken) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      if (turnOn) {
+        // Straight from the tap: the permission dialog needs the gesture.
+        const result = await enablePush(sessionToken);
+        if (result === "denied") setBlocked(true);
+        else setEndpoint(await currentEndpoint());
+      } else {
+        const dropped = await dropSubscription();
+        setEndpoint(null);
+        if (dropped) await unsubscribe({ sessionToken, endpoint: dropped });
+      }
+    } catch {
+      setError(t.errors.network);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <SwitchRow
+        label={t.settings.pushLabel}
+        on={on}
+        disabled={busy}
+        onChange={(next) => void change(next)}
+      />
+      {error && (
+        <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
+          {error}
+        </p>
+      )}
     </>
   );
 }

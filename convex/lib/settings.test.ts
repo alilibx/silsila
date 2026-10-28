@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { expect, expectTypeOf, test } from "vitest";
 import schema from "../schema";
-import { getSetting, SETTING_DEFAULTS } from "./settings";
+import { getSetting, quietHours, SETTING_DEFAULTS } from "./settings";
 
 const modules = import.meta.glob("../**/*.ts");
 
@@ -52,8 +52,48 @@ test("defaults match the spec", () => {
     createsPerPersonPerDay: 5,
     newMembersPerKhatmaPerHour: 30,
     nameChangesPerPersonPerHour: 10,
+    graceDefaults: {
+      daily: { value: 6, unit: "hours" },
+      every3days: { value: 1, unit: "days" },
+      weekly: { value: 2, unit: "days" },
+      biweekly: { value: 4, unit: "days" },
+      monthly: { value: 7, unit: "days" },
+      none: { value: 7, unit: "days" },
+    },
+    graceNoticeFraction: 0.25,
+    quietStartHour: 22,
+    quietEndHour: 7,
+    defaultPaceMs: 3 * 86_400_000,
+    paceMinMs: 86_400_000,
+    paceMaxMs: 7 * 86_400_000,
+    paceMinCountedMs: 20 * 60_000,
+    paceSampleSize: 5,
+    paceMinFinishes: 3,
+    reminderPaceMultiple: 1.5,
+    nudgeCooldownMs: 86_400_000,
+    openForHelpBatchMs: 3_600_000,
+    organizerInactiveMs: 30 * 86_400_000,
+    successorActiveMs: 7 * 86_400_000,
+    notesRetentionMs: 30 * 86_400_000,
+    notesUnclearedCapMs: 180 * 86_400_000,
+    handoffTtlMs: 30 * 60_000,
+    previewPerIpPerMinute: 30,
+    handoffRedeemGlobalPerMinute: 60,
     maintenanceMode: false,
     announcement: null,
+  });
+});
+
+test("quietHours reads the quiet window from settings", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    expect(await quietHours(ctx)).toEqual({ startHour: 22, endHour: 7 });
+    await ctx.db.insert("settings", {
+      key: "quietEndHour",
+      value: 8,
+      updatedAt: 0,
+    });
+    expect(await quietHours(ctx)).toEqual({ startHour: 22, endHour: 8 });
   });
 });
 

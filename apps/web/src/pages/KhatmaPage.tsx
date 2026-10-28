@@ -1,11 +1,16 @@
 import { api } from "@convex/_generated/api";
 import type { KhatmaView } from "@convex/khatmas";
+import type { NoteView } from "@convex/notes";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
+import { NoteCard, takeTarget } from "../components/NoteCard";
 import { MainCard } from "../components/MainCard";
+import { InstallStepsSheet } from "../components/InstallStepsSheet";
+import { SwitchRow } from "../components/SwitchRow";
 import { PoolGrid } from "../components/PoolGrid";
+import { PushPromptSheet } from "../components/PushPromptSheet";
 import { ReleaseSheet } from "../components/ReleaseSheet";
 import { Ring } from "../components/Ring";
 import { ShareSheets } from "../components/ShareSheets";
@@ -41,6 +46,13 @@ export function KhatmaPage() {
   const actions = useKhatmaActions(view, inviteCode);
   const { sheet, busy } = actions;
   const share = useShareSheet();
+  const isMember =
+    view !== undefined && !("notFound" in view) && view.me.isMember;
+  // Only members have notes; everyone else's query is skipped.
+  const notes = useQuery(
+    api.notes.forKhatma,
+    isMember ? { sessionToken, inviteCode } : "skip",
+  );
 
   // The server decides who is signed in; a stored token alone proves nothing.
   const tokenIsDead =
@@ -81,10 +93,15 @@ export function KhatmaPage() {
       ) : (
         <KhatmaContent
           view={view}
+          notes={notes ?? []}
+          inviteCode={inviteCode}
           busy={busy}
           onTake={actions.take}
           onFinish={() => void actions.finish()}
           onRelease={actions.openRelease}
+          onStillReading={() => void actions.stillReading()}
+          onDismissNote={(noteId) => void actions.dismissNote(noteId)}
+          onSetNotifications={(on) => void actions.setNotifications(on)}
           onInvite={share.openInvite}
           onRemind={share.openRemind}
           hasOpen={openJuz.length > 0}
@@ -118,6 +135,12 @@ export function KhatmaPage() {
           onClose={actions.closeSheet}
         />
       )}
+      {sheet?.kind === "push" && (
+        <PushPromptSheet onClose={actions.closeSheet} />
+      )}
+      {sheet?.kind === "install" && (
+        <InstallStepsSheet onClose={actions.closeSheet} />
+      )}
       {actions.pendingJuz !== null && (
         <VerifySheet
           title={t.verify.beforeTake}
@@ -144,19 +167,29 @@ export function KhatmaPage() {
 
 function KhatmaContent({
   view,
+  notes,
+  inviteCode,
   busy,
   onTake,
   onFinish,
   onRelease,
+  onStillReading,
+  onDismissNote,
+  onSetNotifications,
   onInvite,
   onRemind,
   hasOpen,
 }: {
   view: KhatmaView;
+  notes: NoteView[];
+  inviteCode: string;
   busy: boolean;
   onTake: (juz: number) => void;
   onFinish: () => void;
   onRelease: () => void;
+  onStillReading: () => void;
+  onDismissNote: (noteId: NoteView["noteId"]) => void;
+  onSetNotifications: (on: boolean) => void;
   onInvite: () => void;
   onRemind: () => void;
   hasOpen: boolean;
@@ -201,12 +234,37 @@ function KhatmaContent({
         )}
       </div>
 
+      {view.me.isMember && notes.length > 0 && (
+        <section aria-label={t.notes.heading} className="mt-4 grid gap-3">
+          {notes.map((note) => (
+            <NoteCard
+              key={note.noteId}
+              note={note}
+              takeJuz={takeTarget(
+                note,
+                view.tiles,
+                view.me.holding,
+                view.me.suggestion,
+              )}
+              onStillReading={onStillReading}
+              onFinish={onFinish}
+              onRelease={onRelease}
+              onTake={onTake}
+              onInvite={onInvite}
+              onDismiss={() => onDismissNote(note.noteId)}
+              busy={busy}
+            />
+          ))}
+        </section>
+      )}
+
       <Ring tiles={view.tiles} />
       <MainCard
         view={view}
         onTake={onTake}
         onFinish={onFinish}
         onRelease={onRelease}
+        onStillReading={onStillReading}
         busy={busy}
       />
       {view.me.isMember && (
@@ -220,6 +278,22 @@ function KhatmaContent({
             </Button>
           )}
         </div>
+      )}
+      {view.me.isMember && (
+        <SwitchRow
+          label={t.khatmaSettings.notifications}
+          on={view.me.notificationsOn !== false}
+          disabled={busy}
+          onChange={onSetNotifications}
+        />
+      )}
+      {view.isOrganizer && (
+        <Link
+          to={`/j/${encodeURIComponent(inviteCode)}/settings`}
+          className="mt-3 inline-flex min-h-14 items-center font-semibold text-green underline underline-offset-4"
+        >
+          {t.khatmaSettings.link}
+        </Link>
       )}
       <PoolGrid tiles={view.tiles} onTake={onTake} />
 

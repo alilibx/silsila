@@ -21,7 +21,8 @@ const REQUIRED_ENV = [
   "SITE_URL",
 ] as const;
 
-type EnvName = (typeof REQUIRED_ENV)[number];
+/** The required variables plus `PREVIEW_SECRET`, which only the link-preview endpoint reads. */
+type EnvName = (typeof REQUIRED_ENV)[number] | "PREVIEW_SECRET";
 
 /** An environment variable, treating the empty string as unset. */
 export function env(name: EnvName): string | undefined {

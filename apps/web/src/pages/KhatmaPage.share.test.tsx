@@ -18,11 +18,15 @@ vi.mock("../lib/session", () => ({
   clearSessionToken: () => {},
 }));
 vi.mock("../features/verify/VerifySheet", () => ({ VerifySheet: () => null }));
-vi.mock("convex/react", () => ({
-  useQuery: () => m.view,
-  useMutation: () => vi.fn(),
-  useAction: () => m.ensure,
-}));
+vi.mock("convex/react", async () => {
+  const { getFunctionName } = await import("convex/server");
+  return {
+    useQuery: (ref: never) =>
+      getFunctionName(ref) === "notes:forKhatma" ? [] : m.view,
+    useMutation: () => vi.fn(),
+    useAction: () => m.ensure,
+  };
+});
 
 function StateProbe() {
   const location = useLocation();
@@ -69,7 +73,9 @@ describe("KhatmaPage invite and remind", () => {
         signedIn: false,
         displayName: null,
         isMember: false,
+        notificationsOn: null,
         holding: null,
+        hold: null,
         suggestion: null,
         celebrateRound: null,
       },
@@ -100,6 +106,14 @@ describe("KhatmaPage invite and remind", () => {
     expect(
       screen.getByRole("dialog", { name: "ادعُ أحبابك" }),
     ).toBeInTheDocument();
+  });
+
+  it("arriving after an invite reset opens the plain invite sheet once", async () => {
+    renderAt({ pathname: "/j/CODE", state: { openInvite: true } });
+    expect(
+      await screen.findByRole("dialog", { name: "ادعُ أحبابك" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("state")).toHaveTextContent("null");
   });
 
   it("uses a dated name when the khatma has none", async () => {

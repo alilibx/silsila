@@ -33,6 +33,7 @@ async function signedIn(t: T, displayName: string) {
       displayName,
       verifiedAt: 0,
       timeZone: "Asia/Dubai",
+      lastSeenAt: NOW,
     });
     await ctx.db.insert("sessions", {
       personId: id,
@@ -53,11 +54,13 @@ async function createKhatma(
   who: Who,
   schedule: "weekly" | "none" | "daily" = "weekly",
   name: string | null = null,
+  grace?: { value: number; unit: "minutes" | "hours" | "days" },
 ) {
   const { inviteCode } = await t.action(api.khatmas.create, {
     sessionToken: who.token,
     name,
     schedule,
+    grace,
   });
   return inviteCode;
 }
@@ -85,7 +88,8 @@ async function join(
       personId: who.personId,
       joinedAt: Date.now(),
       status: opts.status ?? "active",
-      nudgesOn: true,
+      notificationsOn: true,
+      lastNudgeAt: null,
       lastCelebratedRound: 0,
       shareToken: opts.shareToken,
     }),
@@ -134,6 +138,13 @@ async function assign(
       finishedAt: state === "done" ? NOW : null,
       releasedAt: state === "released" ? NOW : null,
       releasedBySystem: false,
+      graceWakingMs: 0,
+      noticeAt: NOW,
+      graceEndsAt: NOW,
+      extended: false,
+      noticeSentAt: null,
+      openedForHelpAt: null,
+      remindedAt: null,
     });
   });
 }
@@ -178,10 +189,14 @@ test("create returns an invite code and makes the creator a member", async () =>
     signedIn: true,
     displayName: "علي",
     isMember: true,
+    notificationsOn: true,
     holding: null,
+    hold: null,
     suggestion: 1,
     celebrateRound: null,
   });
+  expect(view.grace).toEqual({ value: 2, unit: "days" });
+  expect(view.isOrganizer).toBe(true);
   expect(view.tiles).toHaveLength(30);
   expect(view.tiles.map((x) => x.juz)).toEqual(
     Array.from({ length: 30 }, (_, i) => i + 1),
@@ -192,7 +207,8 @@ test("create returns an invite code and makes the creator a member", async () =>
   const member = await memberOf(t, khatma._id, ali);
   expect(member).toMatchObject({
     status: "active",
-    nudgesOn: true,
+    notificationsOn: true,
+    lastNudgeAt: null,
     lastCelebratedRound: 0,
     joinedAt: khatma.createdAt,
   });
@@ -452,6 +468,7 @@ test("lastCompleted counts distinct participants", async () => {
       targetEndAt: null,
       completedAt: null,
       lastFinishedAt: null,
+      behindInvitedAt: null,
     });
     await ctx.db.patch(khatma._id, {
       currentRoundId: round2,
@@ -502,6 +519,7 @@ test("mine lists active memberships newest first with progress", async () => {
       schedule: "none",
       done: 0,
       holding: null,
+      hasNote: false,
     },
     {
       inviteCode: first,
@@ -510,8 +528,46 @@ test("mine lists active memberships newest first with progress", async () => {
       schedule: "weekly",
       done: 2,
       holding: 6,
+      hasNote: false,
     },
   ]);
+});
+
+test("mine shows hasNote while an uncleared note waits in that khatma", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const first = await createKhatma(t, ali);
+  vi.setSystemTime(NOW + 1000);
+  const second = await createKhatma(t, ali);
+  const khatma1 = await khatmaByCode(t, first);
+  const khatma2 = await khatmaByCode(t, second);
+
+  const noteId = await t.run((ctx) =>
+    ctx.db.insert("notes", {
+      personId: ali.personId,
+      khatmaId: khatma1._id,
+      kind: "completed",
+      juz: [],
+      count: null,
+      until: null,
+      assignmentId: null,
+      roundNumber: null,
+      createdAt: NOW,
+      pushedAt: null,
+      clearedAt: null,
+    }),
+  );
+  const flags = async () =>
+    Object.fromEntries(
+      (await t.query(api.khatmas.mine, { sessionToken: ali.token })).map(
+        (m) => [m.inviteCode, m.hasNote],
+      ),
+    );
+  expect(await flags()).toEqual({ [first]: true, [second]: false });
+
+  await t.run((ctx) => ctx.db.patch(noteId, { clearedAt: NOW }));
+  expect(await flags()).toEqual({ [first]: false, [second]: false });
+  expect(khatma2._id).toBeDefined();
 });
 
 test("ensureShareToken returns the existing token or creates one for members", async () => {
@@ -573,4 +629,105 @@ test("ensureShareToken rejects signed-out callers, non-members, and blocked memb
   ).rejects.toThrow(/not_found/);
   const blockedRow = await memberOf(t, khatma._id, blocked);
   expect(blockedRow.shareToken).toBeUndefined();
+});
+
+test("create stores the schedule's default grace", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "علي");
+  const daily = await createKhatma(t, ali, "daily");
+  expect((await viewAs(t, daily, ali)).grace).toEqual({
+    value: 6,
+    unit: "hours",
+  });
+  const none = await createKhatma(t, ali, "none");
+  expect((await viewAs(t, none, ali)).grace).toEqual({
+    value: 7,
+    unit: "days",
+  });
+  expect((await khatmaByCode(t, none)).grace).toEqual({
+    value: 7,
+    unit: "days",
+  });
+});
+
+test("create accepts a custom grace and rejects an invalid one", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "علي");
+  const code = await createKhatma(t, ali, "weekly", null, {
+    value: 45,
+    unit: "minutes",
+  });
+  expect((await viewAs(t, code, ali)).grace).toEqual({
+    value: 45,
+    unit: "minutes",
+  });
+  await expect(
+    createKhatma(t, ali, "weekly", null, { value: 10, unit: "minutes" }),
+  ).rejects.toThrow(/invalid_grace/);
+  expect(await t.run((ctx) => ctx.db.query("khatmas").collect())).toHaveLength(
+    1,
+  );
+});
+
+test("isOrganizer is true only for the creator", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "علي");
+  const bob = await signedIn(t, "بكر");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  await join(t, khatma._id, bob);
+  expect((await viewAs(t, code, ali)).isOrganizer).toBe(true);
+  expect((await viewAs(t, code, bob)).isOrganizer).toBe(false);
+  expect((await viewAs(t, code, null)).isOrganizer).toBe(false);
+});
+
+test("a held juz' carries a placeholder hold, others have none", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "علي");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  await assign(t, khatma._id, ali, 4, "reading");
+  const view = await viewAs(t, code, ali);
+  expect(view.me.holding).toBe(4);
+  expect(view.me.hold).toEqual({
+    openForHelp: false,
+    canExtend: false,
+    paceDays: null,
+  });
+});
+
+test("setNotifications flips notificationsOn for a member only", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "علي");
+  const bob = await signedIn(t, "بكر");
+  const viewer = await signedIn(t, "زائر");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  await join(t, khatma._id, bob);
+
+  expect(
+    await t.mutation(api.khatmas.setNotifications, {
+      sessionToken: bob.token,
+      inviteCode: code,
+      on: false,
+    }),
+  ).toEqual({ ok: true });
+  expect((await memberOf(t, khatma._id, bob)).notificationsOn).toBe(false);
+  expect((await viewAs(t, code, bob)).me.notificationsOn).toBe(false);
+  expect((await viewAs(t, code, ali)).me.notificationsOn).toBe(true);
+
+  expect(
+    await t.mutation(api.khatmas.setNotifications, {
+      sessionToken: viewer.token,
+      inviteCode: code,
+      on: false,
+    }),
+  ).toEqual({ ok: false });
+  expect(
+    await t.mutation(api.khatmas.setNotifications, {
+      inviteCode: code,
+      on: true,
+    }),
+  ).toEqual({ ok: false });
+  expect((await viewAs(t, code, viewer)).me.notificationsOn).toBeNull();
 });

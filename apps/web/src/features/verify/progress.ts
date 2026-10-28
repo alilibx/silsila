@@ -1,3 +1,4 @@
+import { isValidGrace, type Grace } from "@convex/lib/grace";
 import { JUZ_COUNT } from "@convex/lib/juz";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 
@@ -9,7 +10,7 @@ const KEY = "wirdak.verify";
  */
 export type VerifyIntent =
   | { kind: "take"; inviteCode: string; juz: number }
-  | { kind: "create"; name: string; schedule: Schedule }
+  | { kind: "create"; name: string; schedule: Schedule; grace?: Grace }
   | { kind: "signin" };
 
 /** What a reloaded tab needs to pick the verification back up. Never holds a PIN or session. */
@@ -43,6 +44,18 @@ function isSchedule(value: unknown): value is Schedule {
   return SCHEDULES.some((s) => s === value);
 }
 
+/** A grace the person edited, if what was saved is still one the server would accept. */
+function parseGrace(raw: unknown): Grace | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const g = raw as Record<string, unknown>;
+  if (typeof g.value !== "number") return undefined;
+  if (g.unit !== "minutes" && g.unit !== "hours" && g.unit !== "days") {
+    return undefined;
+  }
+  const grace: Grace = { value: g.value, unit: g.unit };
+  return isValidGrace(grace) ? grace : undefined;
+}
+
 /** A well-formed intent, or `undefined`. */
 function parseIntent(raw: unknown): VerifyIntent | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
@@ -64,7 +77,13 @@ function parseIntent(raw: unknown): VerifyIntent | undefined {
     typeof i.name === "string" &&
     isSchedule(i.schedule)
   ) {
-    return { kind: "create", name: i.name, schedule: i.schedule };
+    const grace = parseGrace(i.grace);
+    return {
+      kind: "create",
+      name: i.name,
+      schedule: i.schedule,
+      ...(grace ? { grace } : {}),
+    };
   }
   return undefined;
 }

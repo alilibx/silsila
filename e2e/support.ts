@@ -11,6 +11,13 @@ export function randomPhone(): string {
   return `97150${tail}`;
 }
 
+/** Runs an internal Convex function on the local backend (`npx convex run`). */
+async function convexRun(fn: string, args: object): Promise<void> {
+  await run("pnpm", ["exec", "convex", "run", fn, JSON.stringify(args)], {
+    cwd: new URL("..", import.meta.url).pathname,
+  });
+}
+
 /**
  * Stands in for the person pressing "send" in WhatsApp: hands the verification message to the
  * dev-only `dev:simulateIncoming` action, exactly as the webhook would.
@@ -19,17 +26,15 @@ export async function simulateIncoming(
   from: string,
   text: string,
 ): Promise<void> {
-  await run(
-    "pnpm",
-    [
-      "exec",
-      "convex",
-      "run",
-      "dev:simulateIncoming",
-      JSON.stringify({ from, text }),
-    ],
-    { cwd: new URL("..", import.meta.url).pathname },
-  );
+  await convexRun("dev:simulateIncoming", { from, text });
+}
+
+/** Ends the grace of the current hold of `juz` now, instead of waiting hours (dev-only helper). */
+export async function forceGraceEnd(
+  inviteCode: string,
+  juz: number,
+): Promise<void> {
+  await convexRun("dev:forceGraceEnd", { inviteCode, juz });
 }
 
 /** No test may reach WhatsApp or Google Fonts: both are blocked, so runs are offline and deterministic. */
@@ -69,4 +74,12 @@ export async function verifyInSheet(
     sheet.getByText(t.verify.confirmTitle(displayName)),
   ).toBeVisible();
   await sheet.getByRole("button", { name: t.verify.yes }).click();
+}
+
+/** After a person's first juz' in a browser the app offers push once; "not now" closes it. */
+export async function dismissPushPrompt(page: Page): Promise<void> {
+  const prompt = page.getByRole("dialog", { name: t.push.title });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: t.push.notNow }).click();
+  await expect(prompt).toBeHidden();
 }

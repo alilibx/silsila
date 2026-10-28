@@ -27,6 +27,7 @@ async function addPerson(t: T, phone: string, displayName = "علي") {
       displayName,
       verifiedAt: 0,
       timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
     }),
   );
 }

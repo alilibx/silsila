@@ -1,3 +1,5 @@
+import { toArabicDigits } from "@convex/lib/digits";
+import { noteText } from "@convex/lib/noteText";
 import type { Schedule } from "@convex/lib/schedule";
 
 /** Copy every feature shares for failures it cannot explain more precisely. */
@@ -6,6 +8,22 @@ const commonErrors = {
   network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
   generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
 } as const;
+
+/**
+ * A count with its noun, agreeing in Arabic: 1 and 2 use the singular and the dual with no digit,
+ * 3 to 10 use the plural, 11 and up use the singular again (in the accusative, `many`).
+ */
+function counted(
+  n: number,
+  forms: { one: string; two: string; few: string; many: string },
+): string {
+  if (n === 1) return forms.one;
+  if (n === 2) return forms.two;
+  const digits = toArabicDigits(n);
+  return n >= 3 && n <= 10
+    ? `${digits} ${forms.few}`
+    : `${digits} ${forms.many}`;
+}
 
 /** Every UI string lives here. Components never contain Arabic literals. */
 export const ar = {
@@ -44,6 +62,7 @@ export const ar = {
     invited: (inviter: string) => `دعاك ${inviter} إلى هذه الختمة.`,
     invitedAnon: "دُعيتَ إلى هذه الختمة.",
     verifyHint: "تصفّحها بحرية، وعندما تأخذ جزءاً نتحقق من رقمك عبر واتساب.",
+    // The invite preview (lib/og.ts) repeats this wording; change both together.
     untitled: (date: string) => `ختمة ${date}`,
     round: (n: string) => `الختمة ${n}`,
     target: (date: string) => `الهدف: ${date}`,
@@ -78,6 +97,98 @@ export const ar = {
     pickYourself: "أو اختر جزءاً بنفسك",
     allTaken: "كل الأجزاء مأخوذة الآن",
     allTakenHint: "ننتظر أحبابنا يُتمّون قراءتهم.",
+    stillReading: "ما زلت أقرأ",
+    openForHelp: "يمكن لغيرك أن يساعد فيه الآن، ويمكنك إتمامه إن شئت.",
+    /** Whole days, 1 to 7: `يوم`, `يومين`, `٣ أيام`. */
+    pace: (days: number) =>
+      `عادةً تُتمّ الجزء في نحو ${counted(days, {
+        one: "يوم",
+        two: "يومين",
+        few: "أيام",
+        many: "يوماً",
+      })}`,
+  },
+  notes: {
+    heading: "رسائل لك",
+    /** The only door to the note texts: components never import them directly. */
+    text: noteText,
+    stillReading: "ما زلت أقرأ",
+    finished: "أتممت القراءة",
+    cantFinish: "لا أستطيع إكماله",
+    takeJuz: "خذ الجزء",
+    sendInvite: "أرسل الدعوة",
+    takeOne: "خذ جزءاً",
+    ok: "حسناً",
+    /** The label beside the dot on the home page's khatma card. */
+    newMessage: "رسالة جديدة",
+  },
+  grace: {
+    label: "مهلة كل جزء",
+    summary: (amount: string) => `مهلة كل جزء: ${amount}`,
+    change: "تغيير",
+    done: "تمّ",
+    amountLabel: "المدة",
+    unitsLabel: "الوحدة",
+    units: { minutes: "دقائق", hours: "ساعات", days: "أيام" },
+    range: "المهلة بين ٣٠ دقيقة و٣٠ يوماً.",
+    amount: {
+      minutes: (n: number) =>
+        counted(n, {
+          one: "دقيقة",
+          two: "دقيقتان",
+          few: "دقائق",
+          many: "دقيقة",
+        }),
+      hours: (n: number) =>
+        counted(n, {
+          one: "ساعة",
+          two: "ساعتان",
+          few: "ساعات",
+          many: "ساعة",
+        }),
+      days: (n: number) =>
+        counted(n, { one: "يوم", two: "يومان", few: "أيام", many: "يوماً" }),
+    },
+  },
+  khatmaSettings: {
+    link: "إعدادات الختمة",
+    notifications: "إشعارات هذه الختمة",
+    on: "مفعّلة",
+    off: "متوقفة",
+  },
+  organizer: {
+    back: "العودة إلى الختمة",
+    nameHeading: "الاسم",
+    save: "حفظ",
+    saved: "تمّ الحفظ",
+    cancel: "تراجع",
+    scheduleNote: "يبدأ التغيير من الختمة القادمة",
+    graceNote:
+      "إن احتاج القارئ وقتاً أطول يستطيع طلبه مرة واحدة، وبعدها يمكن لغيرك أن يساعد.",
+    suggested: (amount: string) => `المقترح لهذا الموعد: ${amount}`,
+    membersHeading: "الأعضاء",
+    organizerBadge: "المنظّم",
+    makeOrganizer: "اجعله المنظّم",
+    remove: "إزالة",
+    handoverTitle: (name: string) => `اجعل ${name} المنظّم؟`,
+    handoverBody:
+      "ستصبح عضواً عادياً، ولن تستطيع بعد ذلك تغيير إعدادات الختمة.",
+    removeTitle: (name: string) => `إزالة ${name}؟`,
+    removeBody:
+      "سيعود جزؤه إلى الختمة، ولن يستطيع الانضمام مرة أخرى حتى تسمح له.",
+    blockedHeading: "من أُزيلوا",
+    allow: "السماح بالعودة",
+    resetHeading: "رابط الدعوة",
+    reset: "غيّر رابط الدعوة",
+    resetTitle: "تغيير رابط الدعوة؟",
+    resetBody:
+      "الروابط القديمة ستتوقف عن العمل. أرسل الرابط الجديد إلى المجموعة.",
+    resetConfirm: "غيّر الرابط",
+    errors: {
+      maintenance: commonErrors.maintenance,
+      network: commonErrors.network,
+      generic: commonErrors.generic,
+    },
   },
   device: {
     unknownDevice: "جهاز",
@@ -141,6 +252,9 @@ export const ar = {
     undo: "تراجع",
     undone: "أعدنا الجزء إليك. أتمّه متى تيسّر.",
     released: "أعدناه إلى الختمة. جزاك الله خيراً",
+    stillReading: "أعطيناك وقتاً إضافياً. يسّر الله لك.",
+    /** Someone else took the reader's juz' as they tapped finish. */
+    takenOver: (n: string) => `أحدهم يُكمل الجزء ${n} الآن. جزاكما الله خيراً.`,
   },
   take: {
     confirm: "نعم، هذا جزئي",
@@ -153,6 +267,24 @@ export const ar = {
     body: (n: string) => `سنعيد الجزء ${n} ليقرأه غيرك. لن يعرف أحد أنك أعدته.`,
     confirm: "أعِده إلى الختمة",
     keep: "سأكمله إن شاء الله",
+  },
+  push: {
+    title: "تذكير لطيف",
+    body: "نرسل لك تذكيراً لطيفاً، ونخبرك حين نختم معاً.",
+    enable: "فعّل الإشعارات",
+    notNow: "ليس الآن",
+  },
+  install: {
+    title: "أضف وِردك إلى الشاشة الرئيسية",
+    intro:
+      "لتصلك الإشعارات على الآيفون، أضف وِردك إلى الشاشة الرئيسية الآن، ونافذة الخطوات هذه مفتوحة. ثم افتحه من هناك، وستجده مفتوحاً بحسابك.",
+    steps: {
+      share: "اضغط زر المشاركة",
+      add: "اختر «إضافة إلى الشاشة الرئيسية»",
+      confirm: "اضغط «أضف»",
+    },
+    added: "أضفتُه",
+    notNow: "ليس الآن",
   },
   /** Why an action did not go through. Every reason the server can give has kind copy. */
   actions: {
@@ -170,6 +302,10 @@ export const ar = {
         taken: "سبقك أحدهم إليه. اخترنا لك غيره.",
         already_holding: "معك جزء الآن. أتمّه أو أعِده أولاً، ثم خذ غيره.",
         khatma_full: "اكتمل عدد المشاركين في هذه الختمة.",
+      },
+      stillReading: {
+        already_extended: "أعطيناك وقتاً إضافياً من قبل لهذا الجزء.",
+        opened: "لم يعد الوقت الإضافي متاحاً. يمكنك إتمام الجزء متى شئت.",
       },
       undo: {
         window_closed: "انتهت مهلة التراجع. الجزء محسوب لك، تقبّل الله منك.",
@@ -202,6 +338,7 @@ export const ar = {
       weekly: "الأكثر شيوعاً",
       none: "نقرأ على راحتنا",
     } as Partial<Record<Schedule, string>>,
+    graceInvalid: "عدّل مهلة كل جزء لتكون بين ٣٠ دقيقة و٣٠ يوماً.",
     submit: "أنشئ الختمة",
     submitting: "جارٍ الإنشاء",
     beforeCreate: "قبل أن تنشئ ختمة",
@@ -268,6 +405,33 @@ export const ar = {
     signOutOthers: "تسجيل الخروج من كل الأجهزة الأخرى",
     signedOutOthers: "سجّلنا خروج الأجهزة الأخرى.",
     signedOutOne: "سجّلنا خروج ذلك الجهاز.",
+    numbers: "أرقامي",
+    /** Whole juz' read: `جزءاً واحداً`, `جزأين`, `٤ أجزاء`, `١٢ جزءاً`. */
+    juzRead: (n: number) =>
+      `قرأتَ ${counted(n, {
+        one: "جزءاً واحداً",
+        two: "جزأين",
+        few: "أجزاء",
+        many: "جزءاً",
+      })}`,
+    noJuzYet: "لم تُتمّ جزءاً بعد",
+    /** Consecutive weeks with a finish, 2 or more. */
+    weekStreak: (n: number) => {
+      const digits = toArabicDigits(n);
+      if (n === 1) return "أسبوع واحد تقرأ فيه";
+      if (n === 2) return "أسبوعين متتاليين تقرأ فيهما";
+      return n <= 10
+        ? `${digits} أسابيع متتالية تقرأ فيها`
+        : `${digits} أسبوعاً متتالياً تقرأ فيه`;
+    },
+    pushHeading: "الإشعارات على هذا الجهاز",
+    pushLabel: "إشعارات هذا الجهاز",
+    pushInstallHint:
+      "على الآيفون تصلك الإشعارات بعد إضافة وِردك إلى الشاشة الرئيسية.",
+    pushInstall: "أرني خطوات الإضافة",
+    pushUnsupported: "هذا المتصفح لا يدعم الإشعارات.",
+    pushBlocked:
+      "الإشعارات محظورة لوِردك في إعدادات المتصفح. اسمح بها من هناك لتصلك.",
     signedOutPrompt:
       "لا يوجد حساب مسجّل على هذا الجهاز. ابدأ ختمة أو انضم إلى ختمة، وسنتحقق من رقمك عبر واتساب.",
     errors: {

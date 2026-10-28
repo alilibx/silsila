@@ -2,10 +2,15 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { alertOrganizer, isHeld, scheduleGrace } from "./grace";
+import { graceTimes, graceWakingMs } from "./lib/grace";
 import { JUZ_COUNT } from "./lib/juz";
+import { personPace } from "./lib/pace";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
-import { getSetting } from "./lib/settings";
+import { getSetting, quietHours } from "./lib/settings";
+import { addWakingMs, nextAwake, safeTimeZone } from "./lib/wakingTime";
+import { clearNotes, notify } from "./notes";
 import {
   requirePerson,
   sessionMutation,
@@ -128,9 +133,16 @@ async function juzFinishedInRecentRounds(
   return new Set([...juzByRound.values()].flatMap((s) => [...s]));
 }
 
-/** Whether a juz' of the round is held or finished (a released row doesn't count). */
+/**
+ * Whether a juz' of the round is finished or held. A released row doesn't
+ * count, and neither does a hold opened for help: anyone may take that one.
+ */
 function isTaken(rows: readonly Doc<"assignments">[]): boolean {
-  return rows.some((a) => a.finishedAt !== null || a.releasedAt === null);
+  return rows.some(
+    (a) =>
+      a.finishedAt !== null ||
+      (a.releasedAt === null && a.openedForHelpAt === null),
+  );
 }
 
 const soft = (
@@ -154,7 +166,7 @@ export const take = sessionMutation({
       .withIndex("by_round", (q) => q.eq("roundId", round._id))
       .filter((q) => q.eq(q.field("personId"), person._id))
       .collect();
-    if (mine.some((a) => a.finishedAt === null && a.releasedAt === null)) {
+    if (mine.some(isHeld)) {
       return soft("already_holding");
     }
 
@@ -166,7 +178,8 @@ export const take = sessionMutation({
       .collect();
     if (isTaken(sameJuz)) return soft("taken");
 
-    let memberId = member?._id;
+    // A "former" member (unblocked, not in the khatma) joins afresh below.
+    let memberId = member?.status === "active" ? member._id : undefined;
     if (!memberId) {
       const members = await ctx.db
         .query("members")
@@ -184,29 +197,97 @@ export const take = sessionMutation({
         HOUR_MS,
       );
       if (!joinOk) return soft("rate_limited");
-      memberId = await ctx.db.insert("members", {
-        khatmaId: khatma._id,
-        personId: person._id,
+      const fresh = {
         joinedAt: Date.now(),
-        status: "active",
-        nudgesOn: true,
+        status: "active" as const,
+        notificationsOn: true,
+        lastNudgeAt: null,
         // a newcomer never sees a celebration for rounds they didn't join
         lastCelebratedRound: khatma.completedRounds,
-      });
+      };
+      if (member) {
+        await ctx.db.patch(member._id, fresh);
+        memberId = member._id;
+      } else {
+        memberId = await ctx.db.insert("members", {
+          khatmaId: khatma._id,
+          personId: person._id,
+          ...fresh,
+        });
+      }
     }
 
-    await ctx.db.insert("assignments", {
+    const takenAt = Date.now();
+    // Someone else's hold that opened for help ends quietly, with thanks.
+    const helped = sameJuz.find((a) => isHeld(a) && a.openedForHelpAt !== null);
+    if (helped) {
+      await ctx.db.patch(helped._id, {
+        releasedAt: takenAt,
+        releasedBySystem: true,
+      });
+      await clearNotes(ctx, { assignmentId: helped._id });
+      await notify(ctx, {
+        personId: helped.personId,
+        khatmaId: khatma._id,
+        kind: "thanks",
+        juz: [args.juz],
+      });
+    }
+    // An organizer alert for this juz' no longer applies once it's taken.
+    await clearNotes(ctx, {
+      khatmaId: khatma._id,
+      kind: "openForHelp",
+      juz: args.juz,
+    });
+    // A behind invite is answered once they take a juz', so a push queued for the morning dies.
+    await clearNotes(ctx, {
+      khatmaId: khatma._id,
+      personId: person._id,
+      kind: "behind",
+    });
+
+    // The grace the hold starts with stays with it (spec 3.4).
+    const quiet = await quietHours(ctx);
+    const wakingMs = graceWakingMs(khatma.grace, quiet);
+    const { noticeAt, endsAt } = graceTimes(
+      takenAt,
+      wakingMs,
+      safeTimeZone(person.timeZone),
+      quiet,
+      await getSetting(ctx, "graceNoticeFraction"),
+    );
+    const assignmentId = await ctx.db.insert("assignments", {
       khatmaId: khatma._id,
       roundId: round._id,
       roundNumber: round.number,
       juz: args.juz,
       memberId,
       personId: person._id,
-      takenAt: Date.now(),
+      takenAt,
       finishedAt: null,
       releasedAt: null,
       releasedBySystem: false,
+      graceWakingMs: wakingMs,
+      noticeAt,
+      graceEndsAt: endsAt,
+      extended: false,
+      noticeSentAt: null,
+      openedForHelpAt: null,
+      remindedAt: null,
     });
+    await scheduleGrace(ctx, assignmentId, noticeAt, endsAt);
+
+    // One gentle reminder at 1.5x their pace, never in the quiet hours.
+    const { paceMs } = await personPace(ctx, person._id);
+    await ctx.scheduler.runAt(
+      nextAwake(
+        takenAt + (await getSetting(ctx, "reminderPaceMultiple")) * paceMs,
+        person.timeZone,
+        quiet,
+      ),
+      internal.nudges.reminderDue,
+      { assignmentId },
+    );
     return { ok: true };
   },
 });
@@ -218,7 +299,13 @@ export type FinishResult =
   | { ok: true; undoUntil: number }
   | {
       ok: false;
-      reason: "not_holding" | "blocked" | "rate_limited" | "maintenance";
+      reason:
+        | "not_holding"
+        /** someone else took it after it opened for help */
+        | "taken_over"
+        | "blocked"
+        | "rate_limited"
+        | "maintenance";
     };
 
 export type UndoResult =
@@ -240,6 +327,19 @@ export type ReleaseResult =
   | {
       ok: false;
       reason: "not_holding" | "blocked" | "rate_limited" | "maintenance";
+    };
+
+export type StillReadingResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "not_holding"
+        | "already_extended"
+        | "opened"
+        | "blocked"
+        | "rate_limited"
+        | "maintenance";
     };
 
 /**
@@ -298,10 +398,23 @@ export const finish = sessionMutation({
 
     const assignments = await roundAssignments(ctx, round._id);
     const held = heldAssignment(assignments, person._id);
-    if (!held) return { ok: false, reason: "not_holding" };
+    if (!held) {
+      const latest = assignments
+        .filter((a) => a.personId === person._id)
+        .sort((a, b) => b._creationTime - a._creationTime)[0];
+      const takenOver =
+        latest?.releasedBySystem === true && latest.openedForHelpAt !== null;
+      return { ok: false, reason: takenOver ? "taken_over" : "not_holding" };
+    }
 
     const now = Date.now();
     await ctx.db.patch(held._id, { finishedAt: now });
+    await clearNotes(ctx, { assignmentId: held._id });
+    await clearNotes(ctx, {
+      khatmaId: held.khatmaId,
+      kind: "openForHelp",
+      juz: held.juz,
+    });
     await ctx.db.patch(round._id, { lastFinishedAt: now });
     if (doneCount(assignments) + 1 >= JUZ_COUNT) {
       await ctx.scheduler.runAt(
@@ -381,6 +494,25 @@ export const undoFinish = sessionMutation({
     await ctx.db.patch(round._id, {
       lastFinishedAt: remaining.length > 0 ? Math.max(...remaining) : null,
     });
+
+    // The hold is back exactly as it was (spec 3.4). Grace jobs that ran while
+    // it was finished did nothing, so run what they would have done.
+    if (lastDone.openedForHelpAt !== null) {
+      await alertOrganizer(ctx, khatma, lastDone.juz, person._id);
+    } else if (lastDone.graceEndsAt <= now) {
+      await ctx.scheduler.runAfter(0, internal.grace.endDue, {
+        assignmentId: lastDone._id,
+        endsAt: lastDone.graceEndsAt,
+      });
+    } else if (
+      lastDone.noticeSentAt === null &&
+      !lastDone.extended &&
+      lastDone.noticeAt <= now
+    ) {
+      await ctx.scheduler.runAfter(0, internal.grace.noticeDue, {
+        assignmentId: lastDone._id,
+      });
+    }
     return { ok: true };
   },
 });
@@ -390,7 +522,7 @@ export const release = sessionMutation({
   handler: async (ctx, args): Promise<ReleaseResult> => {
     const actor = await poolActor(ctx, args.inviteCode);
     if (!actor.ok) return actor;
-    const { person, round } = actor;
+    const { person, khatma, round } = actor;
 
     const held = heldAssignment(
       await roundAssignments(ctx, round._id),
@@ -401,6 +533,45 @@ export const release = sessionMutation({
       releasedAt: Date.now(),
       releasedBySystem: false,
     });
+    await clearNotes(ctx, { assignmentId: held._id });
+    // The same alert as a timeout, even for a hold already opened for help
+    // (spec 3.4); one still showing that juz' isn't repeated.
+    await alertOrganizer(ctx, khatma, held.juz, person._id);
+    return { ok: true };
+  },
+});
+
+/**
+ * "ما زلت أقرأ": adds one more grace period, in waking time, to the hold's
+ * current end. Once per hold, and not once it has opened for help.
+ */
+export const stillReading = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<StillReadingResult> => {
+    const actor = await poolActor(ctx, args.inviteCode);
+    if (!actor.ok) return actor;
+    const { person, round } = actor;
+
+    const held = heldAssignment(
+      await roundAssignments(ctx, round._id),
+      person._id,
+    );
+    if (!held) return { ok: false, reason: "not_holding" };
+    if (held.openedForHelpAt !== null) return { ok: false, reason: "opened" };
+    if (held.extended) return { ok: false, reason: "already_extended" };
+
+    const endsAt = addWakingMs(
+      held.graceEndsAt,
+      held.graceWakingMs,
+      safeTimeZone(person.timeZone),
+      await quietHours(ctx),
+    );
+    await ctx.db.patch(held._id, { extended: true, graceEndsAt: endsAt });
+    await ctx.scheduler.runAt(endsAt, internal.grace.endDue, {
+      assignmentId: held._id,
+      endsAt,
+    });
+    await clearNotes(ctx, { assignmentId: held._id, kinds: ["almostUp"] });
     return { ok: true };
   },
 });

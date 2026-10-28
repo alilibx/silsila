@@ -1,6 +1,8 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { checkRateLimit } from "./lib/rateLimit";
 import schema from "./schema";
 
@@ -165,4 +167,122 @@ test("purge does not reschedule when nothing is left over", async () => {
     ctx.db.system.query("_scheduled_functions").collect(),
   );
   expect(scheduled).toHaveLength(0);
+});
+
+type Base = {
+  personId: Id<"people">;
+  sessionId: Id<"sessions">;
+  khatmaId: Id<"khatmas">;
+};
+
+/** A person, session, and khatma to hang notes and hand-off tokens on. */
+function seedBase(t: ReturnType<typeof convexTest>): Promise<Base> {
+  return t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "علي",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: NOW,
+    });
+    const sessionId = await ctx.db.insert("sessions", {
+      personId,
+      tokenHash: "t",
+      alertTokenHash: "a",
+      deviceLabel: "x",
+      createdAt: NOW,
+      lastUsedAt: NOW,
+    });
+    const khatmaId = await ctx.db.insert("khatmas", {
+      name: null,
+      schedule: "weekly",
+      grace: { value: 2, unit: "days" },
+      creatorPersonId: personId,
+      inviteCode: "invite000001",
+      completedRounds: 0,
+      createdAt: NOW,
+    });
+    return { personId, sessionId, khatmaId };
+  });
+}
+
+const insertNote = (
+  ctx: MutationCtx,
+  base: Base,
+  createdAt: number,
+  clearedAt: number | null,
+) =>
+  ctx.db.insert("notes", {
+    personId: base.personId,
+    khatmaId: base.khatmaId,
+    kind: "completed",
+    juz: [],
+    count: null,
+    until: null,
+    assignmentId: null,
+    roundNumber: null,
+    createdAt,
+    pushedAt: null,
+    clearedAt,
+  });
+
+test("purge deletes hand-off tokens older than a day and keeps newer ones", async () => {
+  const t = convexTest(schema, modules);
+  const base = await seedBase(t);
+  const ids = await t.run(async (ctx) => {
+    const token = (tokenHash: string, createdAt: number) =>
+      ctx.db.insert("handoffTokens", {
+        tokenHash,
+        personId: base.personId,
+        sessionId: base.sessionId,
+        createdAt,
+        expiresAt: createdAt + 1800_000,
+        usedAt: null,
+      });
+    return {
+      oldToken: await token("old", NOW - 25 * HOUR),
+      newToken: await token("new", NOW - 23 * HOUR),
+    };
+  });
+
+  await t.mutation(internal.maintenance.purge, {});
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(ids.oldToken)).toBeNull();
+    expect(await ctx.db.get(ids.newToken)).not.toBeNull();
+  });
+});
+
+test("purge keeps uncleared notes past 30 days and deletes notes cleared more than 30 days ago", async () => {
+  const DAY = 24 * HOUR;
+  const t = convexTest(schema, modules);
+  const base = await seedBase(t);
+  const ids = await t.run(async (ctx) => ({
+    // a monthly round's "behind" note: old, but its round is still going
+    uncleared40: await insertNote(ctx, base, NOW - 40 * DAY, null),
+    cleared31: await insertNote(ctx, base, NOW - 45 * DAY, NOW - 31 * DAY),
+    cleared29: await insertNote(ctx, base, NOW - 45 * DAY, NOW - 29 * DAY),
+    uncleared181: await insertNote(ctx, base, NOW - 181 * DAY, null),
+    uncleared179: await insertNote(ctx, base, NOW - 179 * DAY, null),
+  }));
+
+  await t.mutation(internal.maintenance.purge, {});
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(ids.uncleared40)).not.toBeNull();
+    expect(await ctx.db.get(ids.cleared31)).toBeNull();
+    expect(await ctx.db.get(ids.cleared29)).not.toBeNull();
+    expect(await ctx.db.get(ids.uncleared181)).toBeNull();
+    expect(await ctx.db.get(ids.uncleared179)).not.toBeNull();
+  });
+});
+
+test("a note past both cutoffs is deleted once, not twice", async () => {
+  const DAY = 24 * HOUR;
+  const t = convexTest(schema, modules);
+  const base = await seedBase(t);
+  const id = await t.run((ctx) =>
+    insertNote(ctx, base, NOW - 200 * DAY, NOW - 40 * DAY),
+  );
+  await t.mutation(internal.maintenance.purge, {});
+  const row = await t.run((ctx) => ctx.db.get(id));
+  expect(row).toBeNull();
 });

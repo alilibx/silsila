@@ -10,4 +10,20 @@ crons.hourly(
   internal.maintenance.purge,
 );
 
+// Hourly: invite free members to a round that can't make its target end.
+crons.hourly(
+  "invite free members to a round that is behind",
+  { minuteUTC: 30 },
+  internal.nudges.behindSweep,
+  {},
+);
+
+// Daily: hand a khatma to an active member when its organizer has been away 30 days.
+crons.daily(
+  "hand a khatma over when its organizer is away",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.organizer.autoHandoverSweep,
+  {},
+);
+
 export default crons;

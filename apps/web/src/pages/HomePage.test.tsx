@@ -81,6 +81,7 @@ const card = (over: object = {}) => ({
   schedule: "weekly",
   done: 12,
   holding: null,
+  hasNote: false,
   ...over,
 });
 
@@ -123,6 +124,22 @@ describe("HomePage", () => {
     const second = links.find((l) => l.getAttribute("href") === "/j/BBB")!;
     expect(second).not.toHaveTextContent("جزؤك");
     expect(second).toHaveTextContent(/^ختمة .*أكتوبر/);
+  });
+
+  it("home shows the new-message label", () => {
+    m.mine = [
+      card({ hasNote: true }),
+      card({ inviteCode: "BBB", name: "ختمة الأصدقاء" }),
+    ];
+    renderHome();
+    const withNote = screen
+      .getAllByRole("link")
+      .find((l) => l.getAttribute("href") === "/j/AAA")!;
+    const without = screen
+      .getAllByRole("link")
+      .find((l) => l.getAttribute("href") === "/j/BBB")!;
+    expect(withNote).toHaveTextContent("رسالة جديدة");
+    expect(without).not.toHaveTextContent("رسالة جديدة");
   });
 
   it("links to create and settings", () => {

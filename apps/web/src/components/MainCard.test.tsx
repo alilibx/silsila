@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { HoldView } from "@convex/khatmas";
 import { makeTiles, makeView } from "../test/fixtures";
 import { MainCard } from "./MainCard";
 
@@ -8,6 +9,7 @@ const handlers = () => ({
   onTake: vi.fn(),
   onFinish: vi.fn(),
   onRelease: vi.fn(),
+  onStillReading: vi.fn(),
 });
 
 describe("MainCard", () => {
@@ -17,7 +19,9 @@ describe("MainCard", () => {
         signedIn: true,
         displayName: "علي",
         isMember: true,
+        notificationsOn: true,
         holding: null,
+        hold: null,
         suggestion: 19,
         celebrateRound: null,
       },
@@ -35,7 +39,9 @@ describe("MainCard", () => {
         signedIn: true,
         displayName: "علي",
         isMember: true,
+        notificationsOn: true,
         holding: null,
+        hold: null,
         suggestion: 19,
         celebrateRound: null,
       },
@@ -53,7 +59,9 @@ describe("MainCard", () => {
         signedIn: true,
         displayName: "علي",
         isMember: true,
+        notificationsOn: true,
         holding: 14,
+        hold: { openForHelp: false, canExtend: false, paceDays: null },
         suggestion: null,
         celebrateRound: null,
       },
@@ -91,5 +99,115 @@ describe("MainCard", () => {
       <MainCard view={makeView()} {...handlers()} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  const holdView = (hold: HoldView) =>
+    makeView({
+      tiles: makeTiles({ 14: { state: "reading", isMine: true } }),
+      me: {
+        signedIn: true,
+        displayName: "علي",
+        isMember: true,
+        notificationsOn: true,
+        holding: 14,
+        hold,
+        suggestion: null,
+        celebrateRound: null,
+      },
+    });
+
+  it("main card never shows time left", () => {
+    for (const openForHelp of [false, true]) {
+      for (const canExtend of [false, true]) {
+        for (const paceDays of [null, 1, 2, 3, 7]) {
+          const { container, unmount } = render(
+            <MainCard
+              view={holdView({ openForHelp, canExtend, paceDays })}
+              {...handlers()}
+            />,
+          );
+          expect(container.textContent).not.toMatch(/ساعة|دقيقة|متبقٍ|تأخر/);
+          unmount();
+        }
+      }
+    }
+  });
+
+  it("main card shows the open-for-help line and the extend button only when allowed", async () => {
+    const h = handlers();
+    const line = "يمكن لغيرك أن يساعد فيه الآن، ويمكنك إتمامه إن شئت.";
+    const { rerender } = render(
+      <MainCard
+        view={holdView({
+          openForHelp: false,
+          canExtend: false,
+          paceDays: null,
+        })}
+        {...h}
+      />,
+    );
+    expect(screen.queryByText(line)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "ما زلت أقرأ" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <MainCard
+        view={holdView({ openForHelp: false, canExtend: true, paceDays: null })}
+        {...h}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "ما زلت أقرأ" }));
+    expect(h.onStillReading).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(line)).not.toBeInTheDocument();
+
+    rerender(
+      <MainCard
+        view={holdView({ openForHelp: true, canExtend: false, paceDays: null })}
+        {...h}
+      />,
+    );
+    expect(screen.getByText(line)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "ما زلت أقرأ" }),
+    ).not.toBeInTheDocument();
+    // finishing and releasing stay available after it opened
+    expect(
+      screen.getByRole("button", { name: "أتممتُ القراءة" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "لا أستطيع إكماله" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    [1, "عادةً تُتمّ الجزء في نحو يوم"],
+    [2, "عادةً تُتمّ الجزء في نحو يومين"],
+    [3, "عادةً تُتمّ الجزء في نحو ٣ أيام"],
+    [7, "عادةً تُتمّ الجزء في نحو ٧ أيام"],
+    // the server decides the number; the client never clamps or rounds it
+    [12, "عادةً تُتمّ الجزء في نحو ١٢ يوماً"],
+  ])("pace of %s days shows its line", (paceDays, text) => {
+    render(
+      <MainCard
+        view={holdView({ openForHelp: false, canExtend: false, paceDays })}
+        {...handlers()}
+      />,
+    );
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
+  it("shows no pace line without a pace", () => {
+    render(
+      <MainCard
+        view={holdView({
+          openForHelp: false,
+          canExtend: false,
+          paceDays: null,
+        })}
+        {...handlers()}
+      />,
+    );
+    expect(screen.queryByText(/عادةً/)).not.toBeInTheDocument();
   });
 });

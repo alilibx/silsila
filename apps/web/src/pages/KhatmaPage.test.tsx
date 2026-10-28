@@ -28,10 +28,14 @@ vi.mock("../features/verify/VerifySheet", () => ({
     </div>
   ),
 }));
-vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQuery(...args),
-  useMutation: () => vi.fn(),
-}));
+vi.mock("convex/react", async () => {
+  const { getFunctionName } = await import("convex/server");
+  return {
+    useQuery: (ref: never, ...rest: unknown[]) =>
+      getFunctionName(ref) === "notes:forKhatma" ? [] : useQuery(ref, ...rest),
+    useMutation: () => vi.fn(),
+  };
+});
 
 function renderAt(url: string) {
   return render(
@@ -155,7 +159,9 @@ describe("KhatmaPage", () => {
           signedIn: false,
           displayName: null,
           isMember: false,
+          notificationsOn: null,
           holding: null,
+          hold: null,
           suggestion: 1,
           celebrateRound: null,
           ...over,
@@ -200,7 +206,9 @@ describe("KhatmaPage", () => {
           signedIn: false,
           displayName: null,
           isMember: false,
+          notificationsOn: null,
           holding: null,
+          hold: null,
           suggestion: 3,
           celebrateRound: null,
         },
@@ -285,7 +293,9 @@ describe("KhatmaPage", () => {
             signedIn: true,
             displayName: "علي",
             isMember: true,
+            notificationsOn: true,
             holding: null,
+            hold: null,
             suggestion: 3,
             celebrateRound: null,
           },

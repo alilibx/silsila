@@ -32,6 +32,7 @@ async function signedIn(t: T, displayName: string) {
       displayName,
       verifiedAt: 0,
       timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
     });
     await ctx.db.insert("sessions", {
       personId: id,
@@ -76,7 +77,7 @@ async function join(
   t: T,
   khatmaId: Id<"khatmas">,
   who: Who,
-  opts: { status?: "active" | "blocked"; shareToken?: string } = {},
+  opts: { status?: "active" | "blocked" | "former"; shareToken?: string } = {},
 ) {
   return await t.run((ctx) =>
     ctx.db.insert("members", {
@@ -84,7 +85,8 @@ async function join(
       personId: who.personId,
       joinedAt: Date.now(),
       status: opts.status ?? "active",
-      nudgesOn: true,
+      notificationsOn: true,
+      lastNudgeAt: null,
       lastCelebratedRound: 0,
       shareToken: opts.shareToken,
     }),
@@ -133,6 +135,13 @@ async function assign(
       finishedAt: state === "done" ? NOW : null,
       releasedAt: state === "released" ? NOW : null,
       releasedBySystem: false,
+      graceWakingMs: 0,
+      noticeAt: NOW,
+      graceEndsAt: NOW,
+      extended: false,
+      noticeSentAt: null,
+      openedForHelpAt: null,
+      remindedAt: null,
     });
   });
 }
@@ -165,6 +174,7 @@ async function advanceTo(t: T, khatmaId: Id<"khatmas">, number: number) {
         targetEndAt: null,
         completedAt: n < number ? NOW : null,
         lastFinishedAt: null,
+        behindInvitedAt: null,
       });
       if (n === number)
         await ctx.db.patch(khatmaId, { currentRoundId: roundId });
@@ -197,7 +207,8 @@ test("take marks the juz reading and makes the person a member", async () => {
   const member = await memberOf(t, khatma._id, bob);
   expect(member).toMatchObject({
     status: "active",
-    nudgesOn: true,
+    notificationsOn: true,
+    lastNudgeAt: null,
     lastCelebratedRound: 0,
   });
   expect(member.shareToken).toBeUndefined();
@@ -306,13 +317,15 @@ async function fillMembers(t: T, khatmaId: Id<"khatmas">, count: number) {
         displayName: `M${i}`,
         verifiedAt: 0,
         timeZone: "Asia/Dubai",
+        lastSeenAt: 0,
       });
       await ctx.db.insert("members", {
         khatmaId,
         personId,
         joinedAt: NOW,
         status: "active",
-        nudgesOn: true,
+        notificationsOn: true,
+        lastNudgeAt: null,
         lastCelebratedRound: 0,
       });
     }
@@ -361,6 +374,44 @@ test("blocked member gets blocked on take and no suggestion", async () => {
   expect((await viewAs(t, code, null)).me.suggestion).toBe(1);
   const cat = await signedIn(t, "C");
   expect((await viewAs(t, code, cat)).me.suggestion).toBe(1);
+});
+
+test("a former member is treated as a non-member and take reactivates the row", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const code = await createKhatma(t, ali);
+  const khatma = await khatmaByCode(t, code);
+  const bob = await signedIn(t, "B");
+  const rowId = await join(t, khatma._id, bob, {
+    status: "former",
+    shareToken: "keptToken01",
+  });
+  await t.run((ctx) =>
+    ctx.db.patch(rowId, { notificationsOn: false, lastNudgeAt: 5 }),
+  );
+  const before = await viewAs(t, code, bob);
+  expect(before.me.isMember).toBe(false);
+  expect(before.me.notificationsOn).toBeNull();
+  expect(before.memberCount).toBe(1);
+
+  expect(await take(t, code, bob, 4)).toEqual({ ok: true });
+  const rows = await t.run((ctx) =>
+    ctx.db
+      .query("members")
+      .withIndex("by_khatma_person", (q) =>
+        q.eq("khatmaId", khatma._id).eq("personId", bob.personId),
+      )
+      .collect(),
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    _id: rowId,
+    status: "active",
+    notificationsOn: true,
+    lastNudgeAt: null,
+    shareToken: "keptToken01",
+  });
+  expect((await viewAs(t, code, bob)).me.holding).toBe(4);
 });
 
 /** Marks `juzList` finished by `who` in round `roundNumber`. */

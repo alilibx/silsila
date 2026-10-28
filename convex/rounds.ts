@@ -6,6 +6,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { isHeld } from "./grace";
 import { onRoundCompleted } from "./hooks";
 import { JUZ_COUNT } from "./lib/juz";
 import { targetEndFor } from "./lib/schedule";
@@ -30,6 +31,7 @@ export async function insertRound(
     targetEndAt: targetEndFor(khatma.schedule, startedAt),
     completedAt: null,
     lastFinishedAt: null,
+    behindInvitedAt: null,
   });
   await ctx.db.patch(khatmaId, { currentRoundId: roundId });
   return roundId;
@@ -51,17 +53,14 @@ export function heldAssignment(
   assignments: readonly Doc<"assignments">[],
   personId: Id<"people">,
 ): Doc<"assignments"> | null {
-  return (
-    assignments.find(
-      (a) =>
-        a.personId === personId &&
-        a.finishedAt === null &&
-        a.releasedAt === null,
-    ) ?? null
-  );
+  return assignments.find((a) => a.personId === personId && isHeld(a)) ?? null;
 }
 
-/** Per-juz state from a round's assignment rows: done beats reading beats open. */
+/**
+ * Per-juz state from a round's assignment rows: done beats reading beats open.
+ * A hold opened for help counts as open here; only its reader is shown it as
+ * theirs (`buildTiles`), and `heldAssignment` still returns it for them.
+ */
 export function juzStates(
   assignments: readonly Doc<"assignments">[],
 ): Map<number, { state: "reading" | "done"; assignment: Doc<"assignments"> }> {
@@ -73,7 +72,7 @@ export function juzStates(
     if (byJuz.get(a.juz)?.state === "done") continue;
     if (a.finishedAt !== null)
       byJuz.set(a.juz, { state: "done", assignment: a });
-    else if (a.releasedAt === null)
+    else if (a.releasedAt === null && a.openedForHelpAt === null)
       byJuz.set(a.juz, { state: "reading", assignment: a });
   }
   return byJuz;

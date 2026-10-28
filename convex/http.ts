@@ -221,4 +221,39 @@ http.route({
   }),
 });
 
+// ---------------------------------------------------------------------------
+// GET /api/preview: the data behind a WhatsApp link preview. Called only by the
+// Vercel function that serves /j/:code; it vouches for the visitor's IP.
+
+http.route({
+  path: "/api/preview",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const expected = env("PREVIEW_SECRET");
+    const secret = req.headers.get("X-Preview-Secret");
+    if (
+      expected === undefined ||
+      expected === "" ||
+      secret === null ||
+      !timingSafeEqual(secret, expected)
+    ) {
+      return new Response(null, { status: 401 });
+    }
+
+    // Bounded: it becomes part of a rate-limit key.
+    const ip = (req.headers.get("X-Visitor-Ip") ?? "unknown").slice(0, MAX_IP);
+    if (!(await ctx.runMutation(internal.preview.allowHit, { ip }))) {
+      return json(429, { error: "rate_limited" }, {});
+    }
+
+    const params = new URL(req.url).searchParams;
+    const found = await ctx.runQuery(internal.preview.lookup, {
+      inviteCode: (params.get("code") ?? "").slice(0, MAX_CLIENT_KEY),
+      from: params.get("from")?.slice(0, MAX_CLIENT_KEY) ?? null,
+    });
+    if (found === null) return json(404, { error: "not_found" }, {});
+    return json(200, found, {});
+  }),
+});
+
 export default http;

@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { graceValidator } from "./lib/grace";
 import { scheduleValidator } from "./lib/schedule";
 
 const nullableNumber = v.union(v.number(), v.null());
@@ -10,6 +11,7 @@ export default defineSchema({
     displayName: v.string(),
     verifiedAt: v.number(),
     timeZone: v.string(),
+    lastSeenAt: v.number(),
   }).index("by_phone", ["phone"]),
 
   sessions: defineTable({
@@ -56,6 +58,7 @@ export default defineSchema({
   khatmas: defineTable({
     name: v.union(v.string(), v.null()),
     schedule: scheduleValidator,
+    grace: graceValidator,
     creatorPersonId: v.id("people"),
     inviteCode: v.string(),
     currentRoundId: v.optional(v.id("rounds")),
@@ -68,8 +71,14 @@ export default defineSchema({
     personId: v.id("people"),
     joinedAt: v.number(),
     shareToken: v.optional(v.string()),
-    status: v.union(v.literal("active"), v.literal("blocked")),
-    nudgesOn: v.boolean(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("blocked"),
+      // An unblocked person who isn't a member; `take` reactivates the row.
+      v.literal("former"),
+    ),
+    notificationsOn: v.boolean(),
+    lastNudgeAt: nullableNumber,
     lastCelebratedRound: v.number(),
   })
     .index("by_khatma", ["khatmaId"])
@@ -84,6 +93,7 @@ export default defineSchema({
     targetEndAt: nullableNumber,
     completedAt: nullableNumber,
     lastFinishedAt: nullableNumber,
+    behindInvitedAt: nullableNumber,
   }).index("by_khatma_number", ["khatmaId", "number"]),
 
   assignments: defineTable({
@@ -97,10 +107,70 @@ export default defineSchema({
     finishedAt: nullableNumber,
     releasedAt: nullableNumber,
     releasedBySystem: v.boolean(),
+    graceWakingMs: v.number(),
+    noticeAt: v.number(),
+    graceEndsAt: v.number(),
+    extended: v.boolean(),
+    noticeSentAt: nullableNumber,
+    openedForHelpAt: nullableNumber,
+    remindedAt: nullableNumber,
   })
     .index("by_round_juz", ["roundId", "juz"])
     .index("by_khatma_person", ["khatmaId", "personId"])
-    .index("by_round", ["roundId"]),
+    .index("by_round", ["roundId"])
+    .index("by_person_finishedAt", ["personId", "finishedAt"]),
+
+  notes: defineTable({
+    personId: v.id("people"),
+    khatmaId: v.id("khatmas"),
+    kind: v.union(
+      v.literal("almostUp"),
+      v.literal("openForHelp"),
+      v.literal("thanks"),
+      v.literal("reminder"),
+      v.literal("behind"),
+      v.literal("completed"),
+      v.literal("nowOrganizer"),
+      v.literal("organizerMoved"),
+    ),
+    juz: v.array(v.number()),
+    count: nullableNumber,
+    until: nullableNumber,
+    assignmentId: v.union(v.id("assignments"), v.null()),
+    roundNumber: nullableNumber,
+    createdAt: v.number(),
+    pushedAt: nullableNumber,
+    clearedAt: nullableNumber,
+  })
+    .index("by_person_khatma", ["personId", "khatmaId", "clearedAt"])
+    .index("by_khatma_kind", ["khatmaId", "kind", "clearedAt"])
+    .index("by_assignment", ["assignmentId"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_clearedAt", ["clearedAt"]),
+
+  pushSubscriptions: defineTable({
+    personId: v.id("people"),
+    sessionId: v.id("sessions"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_person", ["personId"])
+    .index("by_session", ["sessionId"])
+    .index("by_endpoint", ["endpoint"]),
+
+  handoffTokens: defineTable({
+    tokenHash: v.string(),
+    personId: v.id("people"),
+    sessionId: v.id("sessions"),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedAt: nullableNumber,
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_session", ["sessionId"])
+    .index("by_createdAt", ["createdAt"]),
 
   settings: defineTable({
     key: v.string(),
