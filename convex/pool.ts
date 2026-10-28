@@ -140,32 +140,15 @@ const soft = (
 export const take = sessionMutation({
   args: { inviteCode: v.string(), juz: v.number() },
   handler: async (ctx, args): Promise<TakeResult> => {
+    // a signed-out caller hears not_signed_in before any check of the juz'
     const person = requirePerson(ctx);
     if (!Number.isInteger(args.juz) || args.juz < 1 || args.juz > JUZ_COUNT) {
       throw new ConvexError({ code: "invalid_juz" });
     }
-    if (await getSetting(ctx, "maintenanceMode")) return soft("maintenance");
+    const actor = await poolActor(ctx, args.inviteCode);
+    if (!actor.ok) return actor;
+    const { khatma, round, member } = actor;
 
-    const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
-    if (!khatma?.currentRoundId) throw new ConvexError({ code: "not_found" });
-    const round = await ctx.db.get(khatma.currentRoundId);
-    if (!round) throw new ConvexError({ code: "not_found" });
-
-    const member = await ctx.db
-      .query("members")
-      .withIndex("by_khatma_person", (q) =>
-        q.eq("khatmaId", khatma._id).eq("personId", person._id),
-      )
-      .first();
-    if (member?.status === "blocked") return soft("blocked");
-
-    const poolOk = await checkRateLimit(
-      ctx,
-      `pool:${person._id}`,
-      await getSetting(ctx, "poolActionsPerPersonPerMinute"),
-      MINUTE_MS,
-    );
-    if (!poolOk) return soft("rate_limited");
     const mine = await ctx.db
       .query("assignments")
       .withIndex("by_round", (q) => q.eq("roundId", round._id))
@@ -260,9 +243,10 @@ export type ReleaseResult =
     };
 
 /**
- * What finish, undo, and release share: the signed-in person, the khatma
- * behind the invite code and its current round, after the maintenance and
- * blocked checks and the per-person pool rate limit (the same bucket as `take`).
+ * What take, finish, undo, and release share: the signed-in person, the khatma
+ * behind the invite code, its current round and the person's membership (if
+ * any), after the maintenance and blocked checks and the per-person pool rate
+ * limit, in that order.
  */
 async function poolActor(
   ctx: MutationCtx & SessionContext,
@@ -273,6 +257,7 @@ async function poolActor(
       person: Doc<"people">;
       khatma: Doc<"khatmas">;
       round: Doc<"rounds">;
+      member: Doc<"members"> | null;
     }
   | { ok: false; reason: "blocked" | "rate_limited" | "maintenance" }
 > {
@@ -301,7 +286,7 @@ async function poolActor(
     MINUTE_MS,
   );
   if (!allowed) return { ok: false, reason: "rate_limited" };
-  return { ok: true, person, khatma, round };
+  return { ok: true, person, khatma, round, member };
 }
 
 export const finish = sessionMutation({
