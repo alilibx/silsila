@@ -16,7 +16,7 @@ import { scheduleValidator, type Schedule } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
 import { resolveSession, sessionMutation, sessionQuery } from "./lib/session";
 import { cleanKhatmaName } from "./lib/text";
-import { suggestJuz } from "./pool";
+import { suggestJuzInRound } from "./pool";
 import {
   heldAssignment,
   insertRound,
@@ -269,7 +269,7 @@ export const view = sessionQuery({
       members.some((m) => m.personId === personId && m.status === "blocked");
     const suggestion =
       holding === null && !blocked
-        ? await suggestJuz(ctx, khatma._id, personId)
+        ? await suggestJuzInRound(ctx, round, assignments, personId)
         : null;
 
     let inviterName: string | null = null;

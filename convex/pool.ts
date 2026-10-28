@@ -50,24 +50,47 @@ export async function suggestJuz(
   if (!khatma?.currentRoundId) return null;
   const round = await ctx.db.get(khatma.currentRoundId);
   if (!round) return null;
+  return suggestJuzInRound(
+    ctx,
+    round,
+    await roundAssignments(ctx, round._id),
+    personId,
+  );
+}
 
-  const taken = juzStates(await roundAssignments(ctx, round._id));
-  const open: number[] = [];
-  for (let juz = 1; juz <= JUZ_COUNT; juz++) {
-    if (!taken.has(juz)) open.push(juz);
-  }
+/**
+ * `suggestJuz` for callers that already loaded the current round and its
+ * assignment rows, so they are not read twice.
+ */
+export async function suggestJuzInRound(
+  ctx: QueryCtx,
+  round: Doc<"rounds">,
+  assignments: readonly Doc<"assignments">[],
+  personId: Id<"people"> | null,
+): Promise<number | null> {
+  const open = openJuz(assignments);
   const lowestOpen = open[0] ?? null;
   if (lowestOpen === null || personId === null) return lowestOpen;
 
   const lookback = await getSetting(ctx, "rotationLookbackRounds");
   const recentlyRead = await juzFinishedInRecentRounds(
     ctx,
-    khatmaId,
+    round.khatmaId,
     personId,
     round.number,
     lookback,
   );
   return open.find((juz) => !recentlyRead.has(juz)) ?? lowestOpen;
+}
+
+/** The ajza' of a round that are neither held nor finished, lowest first. Pure. */
+function openJuz(assignments: readonly Doc<"assignments">[]): number[] {
+  const taken = juzStates(assignments);
+  const open: number[] = [];
+  for (let juz = 1; juz <= JUZ_COUNT; juz++) {
+    if (!taken.has(juz)) open.push(juz);
+  }
+  return open;
 }
 
 /**
