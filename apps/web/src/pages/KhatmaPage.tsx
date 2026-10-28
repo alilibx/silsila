@@ -5,7 +5,9 @@ import { useQuery } from "convex/react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
 import { MainCard } from "../components/MainCard";
+import { InstallStepsSheet } from "../components/InstallStepsSheet";
 import { PoolGrid } from "../components/PoolGrid";
+import { PushPromptSheet } from "../components/PushPromptSheet";
 import { ReleaseSheet } from "../components/ReleaseSheet";
 import { Ring } from "../components/Ring";
 import { ShareSheets } from "../components/ShareSheets";
@@ -117,6 +119,12 @@ export function KhatmaPage() {
           onConfirm={() => void actions.confirmRelease()}
           onClose={actions.closeSheet}
         />
+      )}
+      {sheet?.kind === "push" && (
+        <PushPromptSheet onClose={actions.closeSheet} />
+      )}
+      {sheet?.kind === "install" && (
+        <InstallStepsSheet onClose={actions.closeSheet} />
       )}
       {actions.pendingJuz !== null && (
         <VerifySheet

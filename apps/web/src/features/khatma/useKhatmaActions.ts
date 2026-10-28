@@ -13,6 +13,7 @@ import { UNDO_WINDOW_MS, type ToastData } from "../../components/Toast";
 import { pendingIntent } from "../verify/progress";
 import { t } from "../../i18n/ar";
 import { errorCode } from "../../lib/errors";
+import { markPushAsked, pushAsked, pushSupport } from "../../lib/push";
 import { clearSessionToken, useSessionToken } from "../../lib/session";
 
 type Failure<R> = R extends { ok: false; reason: infer Reason }
@@ -50,7 +51,11 @@ function resumedJuz(inviteCode: string): number | null {
 const LOST_WAIT_MS = 5_000;
 
 export type OpenSheet =
-  { kind: "take"; juz: number } | { kind: "release" } | null;
+  | { kind: "take"; juz: number }
+  | { kind: "release" }
+  | { kind: "push" }
+  | { kind: "install" }
+  | null;
 
 /**
  * How long the undo button stays, from the moment the finish result arrives. The server's
@@ -216,6 +221,15 @@ export function useKhatmaActions(
     setPendingJuz(juz);
   }
 
+  /** Once, after the first juz' taken in this browser: the push prompt, or the iPhone install steps. */
+  function offerPush() {
+    if (pushAsked()) return;
+    const support = pushSupport();
+    if (support === "unsupported") return;
+    markPushAsked();
+    setSheet({ kind: support === "ready" ? "push" : "install" });
+  }
+
   async function confirmTake(juz: number) {
     // A dead session takes the signed-out path: verify, then take the same juz'.
     const result = await run(
@@ -227,7 +241,10 @@ export function useKhatmaActions(
     );
     if (!result) return;
     setSheet(null);
-    if (result.ok) return showToast(t.toast.taken(toArabicDigits(juz)));
+    if (result.ok) {
+      showToast(t.toast.taken(toArabicDigits(juz)));
+      return offerPush();
+    }
     showToast(takeCopy[result.reason]);
     if (result.reason === "taken") setLostJuz(juz);
   }

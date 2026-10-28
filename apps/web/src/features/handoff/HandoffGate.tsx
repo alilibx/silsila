@@ -1,0 +1,77 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { PushPromptSheet } from "../../components/PushPromptSheet";
+import { t } from "../../i18n/ar";
+import { redeemHandoffToken } from "../../lib/handoff";
+import { isStandalone, markPushAsked, pushSupport } from "../../lib/push";
+import { getSessionToken, setSessionToken } from "../../lib/session";
+
+/** Whether this launch will redeem a token; decided before the first render so nothing flashes. */
+function willRedeem(): boolean {
+  return (
+    new URLSearchParams(window.location.search).has("h") &&
+    isStandalone() &&
+    getSessionToken() === null
+  );
+}
+
+function takeHandoffToken(): string | null {
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get("h");
+  if (token === null) return null;
+  // The token is spent or useless from here on: never leave it in the address bar or history.
+  url.searchParams.delete("h");
+  window.history.replaceState(
+    window.history.state,
+    "",
+    url.pathname + url.search + url.hash,
+  );
+  return token;
+}
+
+/**
+ * First launch of the iPhone home-screen app: a `?h=` token from the swapped-in manifest's
+ * `start_url` is traded for a session of this app's own, then the push prompt follows. It only
+ * redeems inside the home-screen app, and never over a session the app already has.
+ */
+export function HandoffGate({ children }: { children: ReactNode }) {
+  // Read once on mount (a ref survives StrictMode's second effect run, so one token, one redeem).
+  const started = useRef(false);
+  const [redeeming, setRedeeming] = useState(willRedeem);
+  const [prompt, setPrompt] = useState(false);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    const token = takeHandoffToken();
+    if (token === null || !isStandalone() || getSessionToken() !== null) return;
+    void (async () => {
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const sessionToken = await redeemHandoffToken(token, timeZone);
+      if (sessionToken !== null) {
+        setSessionToken(sessionToken);
+        if (pushSupport() === "ready") {
+          markPushAsked();
+          setPrompt(true);
+        }
+      }
+      setRedeeming(false);
+    })();
+  }, []);
+
+  // Wait for the exchange so the first screen never flashes signed out.
+  if (redeeming) {
+    return (
+      <main aria-busy="true" className="mx-auto max-w-xl p-5">
+        <p className="py-16 text-center text-xl text-ink-soft">
+          {t.common.loading}
+        </p>
+      </main>
+    );
+  }
+  return (
+    <>
+      {children}
+      {prompt && <PushPromptSheet onClose={() => setPrompt(false)} />}
+    </>
+  );
+}

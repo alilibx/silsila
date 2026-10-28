@@ -20,7 +20,9 @@ const m = vi.hoisted(() => ({
   token: undefined as string | undefined,
 }));
 
-vi.mock("../lib/session", () => ({
+vi.mock("../lib/session", async (importOriginal) => ({
+  // Real storage helpers: the push prompt after a first take reads its "asked" flag from them.
+  ...(await importOriginal<typeof import("../lib/session")>()),
   useSessionToken: () => m.token,
   getSessionToken: () => m.token ?? null,
   clearSessionToken: () => {

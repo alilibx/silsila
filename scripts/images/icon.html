@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <!-- One page, four icons: the variant is chosen by the URL hash (see scripts/render-images.ts). -->
+    <meta name="render-size" content="512x512" />
+    <meta name="render-output" content="icons/icon-192.png 192x192 #any" />
+    <meta name="render-output" content="icons/icon-512.png 512x512 #any" />
+    <meta
+      name="render-output"
+      content="icons/maskable-512.png 512x512 #maskable"
+    />
+    <meta
+      name="render-output"
+      content="icons/apple-touch-icon.png 180x180 #any"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #f5efe3;
+        overflow: hidden;
+      }
+      svg {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      The misbaha ring from og.png: 30 beads, a saffron one every tenth, and the tassel.
+      Drawn around the middle of its own height in a 512 box. The farthest bead is 168 from the
+      centre, so even at the maskable scale (1.15) it is 193, inside the 80% safe circle (204.8).
+      The plain icons draw it larger still (1.25), leaving a 46px margin.
+    -->
+    <svg id="icon" viewBox="0 0 512 512"></svg>
+    <script>
+      const maskable = location.hash === "#maskable";
+      const scale = maskable ? 1.15 : 1.25;
+      const R = 130; // ring radius
+      const r = 13; // bead radius
+      const cy = 231; // ring centre; the tassel hangs below it
+      const NS = "http://www.w3.org/2000/svg";
+      const g = document.createElementNS(NS, "g");
+      g.setAttribute(
+        "transform",
+        `translate(256 256) scale(${scale}) translate(-256 -256)`,
+      );
+      const add = (tag, attrs) => {
+        const el = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        g.appendChild(el);
+      };
+      for (let i = 0; i < 30; i++) {
+        const a = (i / 30) * 2 * Math.PI;
+        add("circle", {
+          cx: (256 + R * Math.sin(a)).toFixed(1),
+          cy: (cy - R * Math.cos(a)).toFixed(1),
+          r,
+          fill: i % 10 === 0 ? "#C98A1E" : "#1F5A45",
+        });
+      }
+      add("line", {
+        x1: 256,
+        y1: cy + R + r,
+        x2: 256,
+        y2: cy + R + 29,
+        stroke: "#1F5A45",
+        "stroke-width": 4,
+      });
+      add("circle", { cx: 256, cy: cy + R + 46, r: 17, fill: "#C98A1E" });
+      document.getElementById("icon").appendChild(g);
+    </script>
+  </body>
+</html>

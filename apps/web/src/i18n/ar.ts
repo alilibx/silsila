@@ -155,6 +155,23 @@ export const ar = {
     confirm: "أعِده إلى الختمة",
     keep: "سأكمله إن شاء الله",
   },
+  push: {
+    title: "تذكير لطيف",
+    body: "نرسل لك تذكيراً لطيفاً، ونخبرك حين نختم معاً.",
+    enable: "فعّل الإشعارات",
+    notNow: "ليس الآن",
+  },
+  install: {
+    title: "أضف وِردك إلى الشاشة الرئيسية",
+    intro:
+      "لتصلك الإشعارات على الآيفون، أضف وِردك إلى الشاشة الرئيسية ثم افتحه من هناك. ستجده مفتوحاً بحسابك.",
+    steps: {
+      share: "اضغط زر المشاركة",
+      add: "اختر «إضافة إلى الشاشة الرئيسية»",
+      confirm: "اضغط «أضف»",
+    },
+    done: "تم",
+  },
   /** Why an action did not go through. Every reason the server can give has kind copy. */
   actions: {
     errors: {
