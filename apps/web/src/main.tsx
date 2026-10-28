@@ -4,7 +4,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { linkPageManifest } from "./lib/handoff";
 import "./styles.css";
+
+linkPageManifest();
 
 const root = createRoot(document.getElementById("root")!);
 const convexUrl = import.meta.env.VITE_CONVEX_URL;

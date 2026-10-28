@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createHandoffToken,
+  extendHandoffToken,
   handoffManifest,
-  installHandoffManifest,
+  linkHandoffManifest,
+  linkPageManifest,
   redeemHandoffToken,
+  STATIC_MANIFEST,
 } from "./handoff";
 
 const m = vi.hoisted(() => ({ action: vi.fn() }));
@@ -92,17 +95,65 @@ describe("createHandoffToken / redeemHandoffToken", () => {
   });
 });
 
-describe("installHandoffManifest", () => {
-  it("swaps the manifest link for a blob and restores the original", async () => {
-    document.head.innerHTML =
-      '<link rel="manifest" href="/manifest.webmanifest">';
-    const link = document.querySelector<HTMLLinkElement>(
-      'link[rel="manifest"]',
-    )!;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => STATIC }),
-    );
+describe("extendHandoffToken", () => {
+  it("returns the lifetime, invalid when refused, or null when offline", async () => {
+    m.action.mockResolvedValueOnce({ ttlMs: 1_800_000 });
+    expect(await extendHandoffToken("sess", "tok")).toBe(1_800_000);
+    expect(m.action.mock.calls[0]?.[1]).toEqual({
+      sessionToken: "sess",
+      token: "tok",
+    });
+    m.action.mockResolvedValueOnce({ error: "invalid" });
+    expect(await extendHandoffToken("sess", "tok")).toBe("invalid");
+    m.action.mockRejectedValueOnce(new Error("offline"));
+    expect(await extendHandoffToken("sess", "tok")).toBeNull();
+  });
+});
+
+const IPHONE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+const DESKTOP_UA = navigator.userAgent;
+const manifestHrefs = () =>
+  [...document.querySelectorAll('link[rel="manifest"]')].map((l) =>
+    l.getAttribute("href"),
+  );
+
+function setDevice(userAgent: string, standalone: boolean | undefined) {
+  Object.defineProperty(navigator, "userAgent", {
+    value: userAgent,
+    configurable: true,
+  });
+  Object.defineProperty(navigator, "standalone", {
+    value: standalone,
+    configurable: true,
+  });
+}
+
+describe("linkPageManifest", () => {
+  afterEach(() => setDevice(DESKTOP_UA, undefined));
+
+  it("links the static manifest off iOS and in the home-screen app", () => {
+    linkPageManifest();
+    expect(manifestHrefs()).toEqual([STATIC_MANIFEST]);
+    document.head.innerHTML = "";
+    setDevice(IPHONE_UA, true);
+    linkPageManifest();
+    expect(manifestHrefs()).toEqual([STATIC_MANIFEST]);
+  });
+
+  it("links none in an iPhone browser tab, which waits for the hand-off one", () => {
+    setDevice(IPHONE_UA, false);
+    linkPageManifest();
+    expect(manifestHrefs()).toEqual([]);
+  });
+});
+
+describe("linkHandoffManifest", () => {
+  it("links a blob manifest with the token in start_url, and keeps it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => STATIC });
+    vi.stubGlobal("fetch", fetchMock);
     let blob: Blob | undefined;
     URL.createObjectURL = vi.fn((b: Blob) => {
       blob = b;
@@ -111,31 +162,22 @@ describe("installHandoffManifest", () => {
     URL.revokeObjectURL = vi.fn();
     const before = window.location.href;
 
-    const restore = await installHandoffManifest("tok");
-    expect(link.getAttribute("href")).toBe("blob:test/1");
-    const text = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.readAsText(blob!);
-    });
-    const manifest = JSON.parse(text);
+    const link = await linkHandoffManifest("tok");
+    expect(fetchMock).toHaveBeenCalledWith(STATIC_MANIFEST);
+    expect(link?.isConnected).toBe(true);
+    expect(manifestHrefs()).toEqual(["blob:test/1"]);
+    const manifest = JSON.parse(await blob!.text());
     expect(manifest.start_url).toBe(`${window.location.origin}/?h=tok`);
     expect(manifest.id).toBe(`${window.location.origin}/`);
     expect(window.location.href).toBe(before);
-
-    restore();
-    expect(link.getAttribute("href")).toBe("/manifest.webmanifest");
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test/1");
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   });
 
-  it("leaves the page alone when the manifest cannot be read", async () => {
-    document.head.innerHTML =
-      '<link rel="manifest" href="/manifest.webmanifest">';
+  it("links nothing when the manifest cannot be read", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    const restore = await installHandoffManifest("tok");
-    expect(
-      document.querySelector('link[rel="manifest"]')?.getAttribute("href"),
-    ).toBe("/manifest.webmanifest");
-    expect(() => restore()).not.toThrow();
+    expect(await linkHandoffManifest("tok")).toBeNull();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    expect(await linkHandoffManifest("tok")).toBeNull();
+    expect(manifestHrefs()).toEqual([]);
   });
 });

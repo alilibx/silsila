@@ -89,6 +89,83 @@ test("create stores only the hash, tied to the person and session, with a 30 min
   expect(rows[0]?.createdAt).toBeLessThan(NOW + 1000);
 });
 
+async function extend(t: T, sessionToken: string, token: string) {
+  return t.action(api.handoff.extend, { sessionToken, token });
+}
+
+test("extend pushes an unused token's expiry out by the live TTL, and it still redeems", async () => {
+  const t = convexTest(schema, modules);
+  const { token } = await signedIn(t);
+  const raw = await mint(t, token);
+  vi.setSystemTime(NOW + 20 * MIN);
+  expect(await extend(t, token, raw)).toEqual({ ttlMs: 30 * MIN });
+  const [row] = await t.run((ctx) => ctx.db.query("handoffTokens").collect());
+  expect(row?.expiresAt).toBeGreaterThanOrEqual(NOW + 50 * MIN);
+  expect(row?.expiresAt).toBeLessThan(NOW + 50 * MIN + 1000);
+  // past the first expiry, still good
+  vi.setSystemTime(NOW + 45 * MIN);
+  const res = await t.action(api.handoff.redeem, {
+    token: raw,
+    timeZone: "UTC",
+  });
+  expect("sessionToken" in res).toBe(true);
+});
+
+test("extend re-arms an expired token that is not yet purged", async () => {
+  const t = convexTest(schema, modules);
+  const { token } = await signedIn(t);
+  const raw = await mint(t, token);
+  vi.setSystemTime(NOW + 3 * 60 * MIN);
+  expect(await extend(t, token, raw)).toEqual({ ttlMs: 30 * MIN });
+  const res = await t.action(api.handoff.redeem, {
+    token: raw,
+    timeZone: "UTC",
+  });
+  expect("sessionToken" in res).toBe(true);
+});
+
+test("extend refuses a used token, another session's, an unknown one, and after sign-out", async () => {
+  const t = convexTest(schema, modules);
+  const { personId, token } = await signedIn(t);
+  const used = await mint(t, token);
+  await t.action(api.handoff.redeem, { token: used, timeZone: "UTC" });
+  expect(await extend(t, token, used)).toEqual({ error: "invalid" });
+
+  // the same person, signed in on another device
+  const otherToken = "tok_other";
+  await t.run(async (ctx) =>
+    ctx.db.insert("sessions", {
+      personId,
+      tokenHash: await sha256Hex(otherToken),
+      alertTokenHash: await sha256Hex(`alert_${otherToken}`),
+      deviceLabel: "Mac Safari",
+      createdAt: 0,
+      lastUsedAt: 0,
+    }),
+  );
+  const mine = await mint(t, token);
+  expect(await extend(t, otherToken, mine)).toEqual({ error: "invalid" });
+  expect(await extend(t, token, "garbage")).toEqual({ error: "invalid" });
+  expect(await extend(t, "nope", mine)).toEqual({ error: "invalid" });
+
+  await t.mutation(api.sessions.signOut, { sessionToken: token });
+  expect(await extend(t, token, mine)).toEqual({ error: "invalid" });
+});
+
+test("extend follows a changed TTL setting", async () => {
+  const t = convexTest(schema, modules);
+  const { token } = await signedIn(t);
+  const raw = await mint(t, token);
+  await t.run((ctx) =>
+    ctx.db.insert("settings", {
+      key: "handoffTtlMs",
+      value: 6 * MIN,
+      updatedAt: 0,
+    }),
+  );
+  expect(await extend(t, token, raw)).toEqual({ ttlMs: 6 * MIN });
+});
+
 test("redeem once gives a session for the same person; second redeem is invalid", async () => {
   const t = convexTest(schema, modules);
   const { personId, token } = await signedIn(t);
