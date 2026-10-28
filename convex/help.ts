@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -387,5 +388,34 @@ export const uploadUrlInternal = internalMutation({
     if (!(await checkRateLimits(ctx, buckets)))
       return { error: "rate_limited" };
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+
+const AUTO_CLOSE_BATCH = 500;
+
+/**
+ * Closes answered requests the person hasn't answered within
+ * `helpAutoCloseMs` (spec 3.4). The system does it, so there's no audit row.
+ */
+export const autoClose = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const cutoff = now - (await getSetting(ctx, "helpAutoCloseMs"));
+    const due = await ctx.db
+      .query("helpRequests")
+      .withIndex("by_status_answeredAt", (q) =>
+        q.eq("status", "answered").lt("answeredAt", cutoff),
+      )
+      .take(AUTO_CLOSE_BATCH + 1);
+    for (const r of due.slice(0, AUTO_CLOSE_BATCH)) {
+      await ctx.db.patch(r._id, { status: "closed", closedAt: now });
+    }
+    if (due.length > AUTO_CLOSE_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.help.autoClose, {});
+    }
   },
 });

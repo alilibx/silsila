@@ -337,3 +337,88 @@ test("purge deletes audit rows after two years and expired admin sessions", asyn
     expect(await ctx.db.get(live)).not.toBeNull();
   });
 });
+
+async function closedHelpRequest(
+  t: ReturnType<typeof convexTest>,
+  closedAt: number,
+) {
+  return await t.run(async (ctx) => {
+    const shot = await ctx.storage.store(
+      new Blob([new Uint8Array(10)], { type: "image/png" }),
+    );
+    const requestId = await ctx.db.insert("helpRequests", {
+      personId: null,
+      reporterHash: "h",
+      khatmaId: null,
+      status: "closed",
+      context: {
+        path: "/",
+        appVersion: "",
+        userAgent: "",
+        screen: "",
+        timeZone: "",
+      },
+      createdAt: closedAt - 1000,
+      lastMessageAt: closedAt - 1000,
+      answeredAt: null,
+      closedAt,
+      seenAt: null,
+      attachmentsDeletedAt: null,
+    });
+    const messageId = await ctx.db.insert("helpMessages", {
+      requestId,
+      from: "visitor",
+      text: "نص",
+      screenshotId: shot,
+      voiceId: null,
+      voiceSeconds: null,
+      createdAt: closedAt - 1000,
+    });
+    return { requestId, messageId, shot };
+  });
+}
+
+test("purge deletes help files after 30 days and conversations after 180", async () => {
+  const t = convexTest(schema, modules);
+  const now = Date.now();
+  const DAY_MS = 86_400_000;
+  const recent = await closedHelpRequest(t, now - 29 * DAY_MS);
+  const filesGone = await closedHelpRequest(t, now - 30 * DAY_MS - 60_000);
+  const allGone = await closedHelpRequest(t, now - 180 * DAY_MS - 60_000);
+
+  await t.mutation(internal.maintenance.purge, {});
+
+  await t.run(async (ctx) => {
+    expect(await ctx.db.system.get(recent.shot)).not.toBeNull();
+
+    expect(await ctx.db.system.get(filesGone.shot)).toBeNull();
+    expect(await ctx.db.get(filesGone.messageId)).toMatchObject({
+      text: "نص",
+      screenshotId: null,
+    });
+    expect(
+      (await ctx.db.get(filesGone.requestId))?.attachmentsDeletedAt,
+    ).not.toBeNull();
+
+    expect(await ctx.db.get(allGone.requestId)).toBeNull();
+    expect(await ctx.db.get(allGone.messageId)).toBeNull();
+    expect(await ctx.db.system.get(allGone.shot)).toBeNull();
+  });
+});
+
+test("purge deletes uploads never attached, after an hour", async () => {
+  const t = convexTest(schema, modules);
+  const orphan = await t.run((ctx) =>
+    ctx.storage.store(new Blob([new Uint8Array(5)], { type: "image/png" })),
+  );
+  const attached = await closedHelpRequest(t, Date.now() + 1);
+
+  vi.setSystemTime(Date.now() + 59 * 60_000);
+  await t.mutation(internal.maintenance.purge, {});
+  expect(await t.run((ctx) => ctx.db.system.get(orphan))).not.toBeNull();
+
+  vi.setSystemTime(Date.now() + 2 * 60_000);
+  await t.mutation(internal.maintenance.purge, {});
+  expect(await t.run((ctx) => ctx.db.system.get(orphan))).toBeNull();
+  expect(await t.run((ctx) => ctx.db.system.get(attached.shot))).not.toBeNull();
+});

@@ -235,7 +235,8 @@ export default defineSchema({
     .index("by_reporter", ["reporterHash", "lastMessageAt"])
     .index("by_status", ["status", "lastMessageAt"])
     .index("by_status_answeredAt", ["status", "answeredAt"])
-    .index("by_closedAt", ["closedAt"]),
+    .index("by_closedAt", ["closedAt"])
+    .index("by_attachments_closedAt", ["attachmentsDeletedAt", "closedAt"]),
 
   helpMessages: defineTable({
     requestId: v.id("helpRequests"),
@@ -284,6 +285,12 @@ export default defineSchema({
     .index("by_at", ["at"])
     .index("by_admin_at", ["adminId", "at"])
     .index("by_action_at", ["action", "at"]),
+
+  /** Where an incremental sweep got to, by name (e.g. the orphaned-upload sweep). */
+  sweepMarks: defineTable({
+    name: v.string(),
+    value: v.number(),
+  }).index("by_name", ["name"]),
 
   rateLimits: defineTable({
     key: v.string(),

@@ -324,3 +324,25 @@ test("help works during maintenance", async () => {
   );
   expect("requestId" in (await send(t, { text: "help" }))).toBe(true);
 });
+
+test("an answered request with no word back closes after 14 days", async () => {
+  const t = convexTest(schema, modules);
+  await member(t);
+  const res = await send(t, { text: "a" });
+  if (!("requestId" in res)) throw new Error();
+  await t.run((ctx) =>
+    ctx.db.patch(res.requestId, { status: "answered", answeredAt: NOW }),
+  );
+
+  vi.setSystemTime(NOW + 13 * DAY);
+  await t.mutation(internal.help.autoClose, {});
+  expect((await t.run((ctx) => ctx.db.get(res.requestId)))?.status).toBe(
+    "answered",
+  );
+
+  vi.setSystemTime(NOW + 14 * DAY + 60_000);
+  await t.mutation(internal.help.autoClose, {});
+  const row = await t.run((ctx) => ctx.db.get(res.requestId));
+  expect(row?.status).toBe("closed");
+  expect(row?.closedAt).toBeGreaterThan(NOW + 14 * DAY);
+});
