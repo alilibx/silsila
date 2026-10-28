@@ -1,9 +1,15 @@
 import { ConvexError, v } from "convex/values";
 import { paceDays, personPace, weekStreak } from "./lib/pace";
 import { checkRateLimit } from "./lib/rateLimit";
-import { requirePerson, sessionMutation, sessionQuery } from "./lib/session";
+import {
+  LAST_USED_REFRESH_MS,
+  requirePerson,
+  sessionMutation,
+  sessionQuery,
+} from "./lib/session";
 import { getSetting } from "./lib/settings";
 import { cleanDisplayName } from "./lib/text";
+import { cleanTimeZone } from "./verification";
 
 const HOUR_MS = 3_600_000;
 
@@ -25,6 +31,29 @@ export const updateDisplayName = sessionMutation({
     );
     if (!allowed) throw new ConvexError({ code: "rate_limited" });
     await ctx.db.patch(person._id, { displayName });
+  },
+});
+
+/**
+ * The app calls this when it opens or comes back to the foreground. Records
+ * that the caller was just here (at most once an hour, the same as the
+ * session's `lastUsedAt`) and keeps their time zone current, which waking time
+ * and quiet hours read. Signed-out callers get `{ ok: false }`.
+ */
+export const touch = sessionMutation({
+  args: { timeZone: v.string() },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const person = ctx.person;
+    if (!person) return { ok: false };
+    const now = Date.now();
+    const timeZone = cleanTimeZone(args.timeZone);
+    await ctx.db.patch(person._id, {
+      ...(now - person.lastSeenAt >= LAST_USED_REFRESH_MS
+        ? { lastSeenAt: now }
+        : {}),
+      ...(timeZone !== person.timeZone ? { timeZone } : {}),
+    });
+    return { ok: true };
   },
 });
 

@@ -30,6 +30,7 @@ import type * as lib_wakingTime from "../lib/wakingTime.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notes from "../notes.js";
 import type * as nudges from "../nudges.js";
+import type * as organizer from "../organizer.js";
 import type * as people from "../people.js";
 import type * as pool from "../pool.js";
 import type * as push from "../push.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   notes: typeof notes;
   nudges: typeof nudges;
+  organizer: typeof organizer;
   people: typeof people;
   pool: typeof pool;
   push: typeof push;
