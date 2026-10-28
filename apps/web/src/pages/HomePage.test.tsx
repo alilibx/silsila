@@ -28,6 +28,11 @@ vi.mock("convex/react", async () => {
   };
 });
 
+// The reply card has its own tests (features/help).
+vi.mock("../features/help/HelpReplyCard", () => ({
+  HelpReplyCard: () => null,
+}));
+
 vi.mock("../features/verify/VerifySheet", () => ({
   VerifySheet: (props: {
     title: string;

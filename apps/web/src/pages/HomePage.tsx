@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 import { Button, buttonClass } from "../components/Button";
+import { HelpReplyCard } from "../features/help/HelpReplyCard";
 import { pendingResumePath } from "../features/verify/progress";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { t } from "../i18n/ar";
@@ -73,6 +74,8 @@ function HomeContent({
           </Link>
         )}
       </header>
+
+      <HelpReplyCard />
 
       {me ? (
         <>
