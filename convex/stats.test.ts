@@ -217,3 +217,141 @@ test("purge drops sign-in counters a week after their day", async () => {
     [signInKey(D - 6, "started"), "summary:1"].sort(),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Morning summary and milestones
+
+async function adminWithPush(t: T, prefs: Record<string, boolean> = {}) {
+  return await t.run(async (ctx) => {
+    const adminId = await ctx.db.insert("admins", {
+      phone: "+971500000099",
+      addedBy: null,
+      addedAt: 0,
+      ...prefs,
+    });
+    await ctx.db.insert("adminPushSubscriptions", {
+      adminId,
+      endpoint: "https://push.example/a",
+      p256dh: "p",
+      auth: "a",
+      createdAt: 0,
+    });
+    return adminId;
+  });
+}
+
+function scheduledPushes(t: T) {
+  return t.run(async (ctx) =>
+    (await ctx.db.system.query("_scheduled_functions").collect())
+      .filter((s) => s.name === "pushNode:deliverToAdmins")
+      .map((s) => s.args[0] as { kind: string; body?: string }),
+  );
+}
+
+test("milestone sequences", async () => {
+  const { milestonesFor } = await import("./lib/milestones");
+  expect(milestonesFor("khatmas", 260)).toEqual([10, 50, 100, 250]);
+  expect(milestonesFor("khatmas", 3000)).toEqual([
+    10, 50, 100, 250, 500, 1000, 2000, 3000,
+  ]);
+  expect(milestonesFor("members", 25_000).slice(-2)).toEqual([10_000, 20_000]);
+  expect(milestonesFor("completed", 1)).toEqual([1]);
+  expect(milestonesFor("completed", 0)).toEqual([]);
+});
+
+test("two milestones crossed at once: both marked, only the highest pushed", async () => {
+  const t = convexTest(schema, modules);
+  await adminWithPush(t);
+  await day(t, D - 1, { totalKhatmas: 120, totalMembers: 10 });
+  await t.mutation(internal.stats.checkMilestones, {});
+  const sent = await t.run((ctx) => ctx.db.query("milestonesSent").collect());
+  expect(
+    sent
+      .filter((s) => s.metric === "khatmas")
+      .map((s) => s.value)
+      .sort((a, b) => a - b),
+  ).toEqual([10, 50, 100]);
+  const pushes = await scheduledPushes(t);
+  expect(pushes).toHaveLength(1);
+  expect(pushes[0]?.body).toContain("١٠٠");
+
+  // A later crossing inside the spacing window is marked, not pushed.
+  await day(t, D - 1, { totalKhatmas: 260, totalMembers: 10 });
+  await t.mutation(internal.stats.checkMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(1);
+  expect(
+    (await t.run((ctx) => ctx.db.query("milestonesSent").collect())).some(
+      (s) => s.metric === "khatmas" && s.value === 250,
+    ),
+  ).toBe(true);
+});
+
+test("the backfill marks milestones already passed without pushing", async () => {
+  const t = convexTest(schema, modules);
+  await adminWithPush(t);
+  await day(t, D - 1, {
+    totalKhatmas: 60,
+    totalMembers: 150,
+    totalRoundsCompleted: 12,
+  });
+  await t.mutation(internal.stats.markPassedMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(0);
+  await t.mutation(internal.stats.checkMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(0);
+});
+
+test("the morning summary goes out once, at the summary hour", async () => {
+  // convex-test's clock only moves forward, so this test starts early.
+  vi.setSystemTime(dayStart(D) + 7 * HOUR);
+  const t = convexTest(schema, modules);
+  await adminWithPush(t);
+  await day(t, D - 1, {
+    newKhatmas: 12,
+    newMembers: 140,
+    ajzaFinished: 214,
+    roundsCompleted: 3,
+  });
+
+  vi.setSystemTime(dayStart(D) + 7 * HOUR + 5 * 60_000);
+  await t.mutation(internal.stats.morningSummary, {});
+  expect(await scheduledPushes(t)).toHaveLength(0);
+
+  vi.setSystemTime(dayStart(D) + 8 * HOUR + 5 * 60_000);
+  await t.mutation(internal.stats.morningSummary, {});
+  await t.mutation(internal.stats.morningSummary, {});
+  const pushes = await scheduledPushes(t);
+  expect(pushes).toHaveLength(1);
+  expect(pushes[0]).toMatchObject({ kind: "summary" });
+  expect(pushes[0]?.body).toBe(
+    "أمس: ١٢ ختمة جديدة · ١٤٠ عضواً جديداً · ٢١٤ جزءاً · ٣ ختمة مكتملة · طلبات مساعدة مفتوحة: ٠",
+  );
+
+  vi.setSystemTime(dayStart(D) + 9 * HOUR + 5 * 60_000);
+  await t.mutation(internal.stats.morningSummary, {});
+  expect(await scheduledPushes(t)).toHaveLength(1);
+});
+
+function day(t: T, d: number, fields: Partial<Record<string, number>>) {
+  return t.run(async (ctx) => {
+    const existing = await ctx.db
+      .query("dailyStats")
+      .withIndex("by_day", (q) => q.eq("day", d))
+      .first();
+    const row = {
+      day: d,
+      ajzaFinished: 0,
+      newMembers: 0,
+      newKhatmas: 0,
+      roundsCompleted: 0,
+      signInsStarted: 0,
+      signInsCompleted: 0,
+      totalMembers: 0,
+      totalKhatmas: 0,
+      totalRoundsCompleted: 0,
+      computedAt: 0,
+      ...fields,
+    };
+    if (existing) await ctx.db.replace(existing._id, row);
+    else await ctx.db.insert("dailyStats", row);
+  });
+}

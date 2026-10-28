@@ -50,4 +50,20 @@ crons.daily(
   {},
 );
 
+// Hourly: the morning summary goes out when the Dubai hour is `summaryHour`.
+crons.hourly(
+  "send the admins' morning summary",
+  { minuteUTC: 5 },
+  internal.stats.morningSummary,
+  {},
+);
+
+// Every 10 minutes: push a milestone when a total passes one.
+crons.interval(
+  "push milestones",
+  { minutes: 10 },
+  internal.stats.checkMilestones,
+  {},
+);
+
 export default crons;

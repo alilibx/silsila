@@ -33,6 +33,7 @@ import type * as lib_help from "../lib/help.js";
 import type * as lib_helpFiles from "../lib/helpFiles.js";
 import type * as lib_juz from "../lib/juz.js";
 import type * as lib_khatma from "../lib/khatma.js";
+import type * as lib_milestones from "../lib/milestones.js";
 import type * as lib_noteText from "../lib/noteText.js";
 import type * as lib_pace from "../lib/pace.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
@@ -91,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   "lib/helpFiles": typeof lib_helpFiles;
   "lib/juz": typeof lib_juz;
   "lib/khatma": typeof lib_khatma;
+  "lib/milestones": typeof lib_milestones;
   "lib/noteText": typeof lib_noteText;
   "lib/pace": typeof lib_pace;
   "lib/rateLimit": typeof lib_rateLimit;

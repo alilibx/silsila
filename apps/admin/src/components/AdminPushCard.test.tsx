@@ -17,7 +17,7 @@ vi.mock("convex/react", async () => {
   return {
     useQuery: () => m.mine,
     useMutation: (ref: never) =>
-      getFunctionName(ref) === "adminPush:setNotifyHelp"
+      getFunctionName(ref) === "adminPush:setNotify"
         ? m.setNotifyHelp
         : vi.fn(),
   };
@@ -56,6 +56,7 @@ describe("AdminPushCard", () => {
     await userEvent.click(toggle);
     expect(m.setNotifyHelp).toHaveBeenCalledWith({
       adminToken: "tok",
+      kind: "help",
       on: false,
     });
     await userEvent.click(

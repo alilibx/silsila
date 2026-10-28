@@ -27,7 +27,7 @@ export function AdminPushCard() {
       ? "skip"
       : { adminToken, ...(endpoint ? { endpoint } : {}) },
   );
-  const setNotifyHelp = useMutation(api.adminPush.setNotifyHelp);
+  const setNotify = useMutation(api.adminPush.setNotify);
 
   useEffect(() => {
     void currentAdminEndpoint().then(setEndpoint);
@@ -56,7 +56,7 @@ export function AdminPushCard() {
             label={t.adminPush.help}
             on={mine.notifyHelp}
             disabled={busy}
-            onChange={(on) => void setNotifyHelp({ adminToken, on })}
+            onChange={(on) => void setNotify({ adminToken, kind: "help", on })}
           />
           <button
             type="button"

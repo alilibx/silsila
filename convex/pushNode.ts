@@ -79,11 +79,18 @@ export const deliver = internalAction({
   },
 });
 
-/** A new help request or message, pushed to every listening admin (spec 7). */
+/** A help request or message, the morning summary, or a milestone, to every listening admin (spec 7). */
 export const deliverToAdmins = internalAction({
   args: {
-    requestId: v.id("helpRequests"),
-    kind: v.union(v.literal("request"), v.literal("message")),
+    kind: v.union(
+      v.literal("request"),
+      v.literal("message"),
+      v.literal("summary"),
+      v.literal("milestone"),
+    ),
+    requestId: v.optional(v.id("helpRequests")),
+    body: v.optional(v.string()),
+    tag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const plan = await ctx.runQuery(internal.adminPush.deliveryPlan, args);
