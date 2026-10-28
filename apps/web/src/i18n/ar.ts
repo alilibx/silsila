@@ -275,6 +275,17 @@ export const ar = {
     enable: "فعّل الإشعارات",
     notNow: "ليس الآن",
   },
+  /** Notifications on WhatsApp, off until the person turns them on. */
+  whatsappNotes: {
+    heading: "رسائل واتساب",
+    label: "تنبيهات الختمات على واتساب",
+    explain: "نرسل لك تنبيهات ختماتك على واتساب، على رقمك المسجّل.",
+    offer: "أرسلها لي على واتساب",
+    sheetTitle: "التنبيهات على واتساب",
+    sheetBody:
+      "هذا المتصفح لا يدعم الإشعارات. نستطيع أن نرسل لك تنبيهات ختماتك على واتساب، على رقمك المسجّل.",
+    notNow: "ليس الآن",
+  },
   install: {
     title: "أضف وِردك إلى الشاشة الرئيسية",
     intro:

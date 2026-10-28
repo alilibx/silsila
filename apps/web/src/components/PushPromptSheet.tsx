@@ -4,6 +4,7 @@ import { enablePush } from "../lib/push";
 import { useSessionToken } from "../lib/session";
 import { Button } from "./Button";
 import { Sheet } from "./Sheet";
+import { WhatsAppOffer } from "./WhatsAppOffer";
 
 /** One plain sentence about why, then the browser's own permission dialog. */
 export function PushPromptSheet({ onClose }: { onClose: () => void }) {
@@ -29,6 +30,7 @@ export function PushPromptSheet({ onClose }: { onClose: () => void }) {
         <Button onClick={() => void enable()} disabled={busy}>
           {t.push.enable}
         </Button>
+        <WhatsAppOffer onDone={onClose} />
         <Button variant="ghost" onClick={onClose}>
           {t.push.notNow}
         </Button>
