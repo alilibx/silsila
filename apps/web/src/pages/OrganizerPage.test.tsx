@@ -1,6 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
+import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
@@ -47,8 +48,13 @@ const organizerView = {
   blocked: [{ memberId: "m9", displayName: "ليلى" }],
 };
 
+const visited: string[] = [];
+
 function Where() {
   const location = useLocation();
+  useEffect(() => {
+    visited.push(location.pathname);
+  }, [location.pathname]);
   return (
     <output data-testid="where">
       {location.pathname}|{JSON.stringify(location.state)}
@@ -57,14 +63,18 @@ function Where() {
 }
 
 function renderPage() {
-  return render(
+  return render(tree());
+}
+
+function tree() {
+  return (
     <MemoryRouter initialEntries={["/j/CODE/settings"]}>
       <Where />
       <Routes>
         <Route path="/j/:inviteCode" element={<p>khatma-page</p>} />
         <Route path="/j/:inviteCode/settings" element={<OrganizerPage />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -72,6 +82,7 @@ const section = (name: string) => screen.getByRole("region", { name });
 
 describe("OrganizerPage", () => {
   beforeEach(() => {
+    visited.length = 0;
     Object.values(m.fns).forEach((f) =>
       f.mockReset().mockResolvedValue({ ok: true }),
     );
@@ -127,6 +138,13 @@ describe("OrganizerPage", () => {
       inviteCode: "CODE",
       name: "ختمة الجيران",
     });
+    // The confirmation sits under the button that was tapped, not at the foot of the page.
+    expect(
+      await within(section(t.organizer.nameHeading)).findByRole("status"),
+    ).toHaveTextContent(t.organizer.saved);
+    expect(
+      within(section(t.create.scheduleLegend)).getByRole("status"),
+    ).toBeEmptyDOMElement();
 
     const scheduleSection = section(t.create.scheduleLegend);
     expect(scheduleSection).toHaveTextContent(t.organizer.scheduleNote);
@@ -140,8 +158,8 @@ describe("OrganizerPage", () => {
       schedule: "monthly",
     });
     expect(
-      (await screen.findAllByText(t.organizer.saved)).length,
-    ).toBeGreaterThan(0);
+      await within(scheduleSection).findByText(t.organizer.saved),
+    ).toBeInTheDocument();
   });
 
   it("an emptied name is sent as null", async () => {
@@ -232,9 +250,9 @@ describe("OrganizerPage", () => {
         name: t.organizer.save,
       }),
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      t.errors.network,
-    );
+    expect(
+      await within(section(t.organizer.nameHeading)).findByRole("alert"),
+    ).toHaveTextContent(t.errors.network);
   });
 
   it("remove asks for confirmation first", async () => {
@@ -384,5 +402,68 @@ describe("OrganizerPage", () => {
     const where = screen.getByTestId("where");
     expect(where).toHaveTextContent(/^\/j\/NEWCODE\|/);
     expect(where).toHaveTextContent('{"openInvite":true}');
+  });
+
+  it("a refused removal shows its error inside the members section", async () => {
+    m.fns.removeMember.mockResolvedValue({ ok: false, reason: "not_member" });
+    const user = userEvent.setup();
+    renderPage();
+    const members = section(t.organizer.membersHeading);
+    await user.click(
+      within(within(members).getAllByRole("listitem")[1]!).getByRole("button", {
+        name: /^إزالة/,
+      }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "إزالة" }),
+    );
+    expect(await within(members).findByRole("alert")).toHaveTextContent(
+      t.errors.generic,
+    );
+  });
+
+  it("a refused unblock shows the common error inside the blocked section", async () => {
+    m.fns.unblock.mockResolvedValue({ ok: false });
+    const user = userEvent.setup();
+    renderPage();
+    const blocked = section(t.organizer.blockedHeading);
+    await user.click(
+      within(blocked).getByRole("button", { name: /^السماح بالعودة/ }),
+    );
+    expect(await within(blocked).findByRole("alert")).toHaveTextContent(
+      t.errors.generic,
+    );
+  });
+
+  it("the old code turning forbidden mid-reset does not bounce to the dead link", async () => {
+    let finish: (value: { inviteCode: string }) => void = () => {};
+    m.resetInvite.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    const view = renderPage();
+    await user.click(
+      within(section(t.organizer.resetHeading)).getByRole("button", {
+        name: t.organizer.reset,
+      }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: t.organizer.resetConfirm,
+      }),
+    );
+    // The server swapped the code: the live query for the old one is now forbidden.
+    m.settings = { forbidden: true };
+    view.rerender(tree());
+    expect(screen.queryByText("khatma-page")).toBeNull();
+    expect(screen.getByTestId("where")).toHaveTextContent(
+      /^\/j\/CODE\/settings\|/,
+    );
+    await act(async () => finish({ inviteCode: "NEWCODE" }));
+    expect(await screen.findByText("khatma-page")).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent(/^\/j\/NEWCODE\|/);
+    expect(visited).not.toContain("/j/CODE");
   });
 });

@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { isValidGrace, type Grace } from "@convex/lib/grace";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { Button } from "../components/Button";
 import { formatGrace, GraceField } from "../components/GraceField";
@@ -29,6 +29,12 @@ type Confirm =
   | { kind: "remove" | "handover"; memberId: Id<"members">; name: string }
   | { kind: "reset" };
 
+type SectionId =
+  "name" | "schedule" | "grace" | "members" | "blocked" | "reset";
+
+/** The one line of feedback on the page, shown under the section that caused it. */
+type Feedback = { section: SectionId; kind: "saved" | "error"; text: string };
+
 const sameGrace = (a: Grace, b: Grace) =>
   a.value === b.value && a.unit === b.unit;
 
@@ -39,8 +45,14 @@ export function OrganizerPage() {
     sessionToken,
     inviteCode,
   });
+  // Resetting the link kills the old code, so its query turns `forbidden` before the new code
+  // is navigated to. That moment must not bounce the organizer to the dead address.
+  const resetting = useRef(false);
 
-  if (settings === undefined) {
+  if (
+    settings === undefined ||
+    ("forbidden" in settings && resetting.current)
+  ) {
     return (
       <main aria-busy="true" className="mx-auto max-w-xl p-5">
         <p className="py-16 text-center text-xl text-ink-soft">
@@ -52,7 +64,13 @@ export function OrganizerPage() {
   if ("forbidden" in settings) {
     return <Navigate to={khatmaPath(inviteCode)} replace />;
   }
-  return <OrganizerContent settings={settings} inviteCode={inviteCode} />;
+  return (
+    <OrganizerContent
+      settings={settings}
+      inviteCode={inviteCode}
+      resetting={resetting}
+    />
+  );
 }
 
 const khatmaPath = (inviteCode: string) =>
@@ -61,9 +79,11 @@ const khatmaPath = (inviteCode: string) =>
 function OrganizerContent({
   settings,
   inviteCode,
+  resetting,
 }: {
   settings: Settings;
   inviteCode: string;
+  resetting: RefObject<boolean>;
 }) {
   const sessionToken = useSessionToken();
   const navigate = useNavigate();
@@ -79,8 +99,7 @@ function OrganizerContent({
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const trimmed = name.trim();
   const nameChanged = trimmed !== (settings.name ?? "");
@@ -90,28 +109,39 @@ function OrganizerContent({
 
   /**
    * One call at a time. A thrown `forbidden` means the role is gone: back to the khatma.
-   * `work` returns the copy of a refusal to show, or null when it went through.
+   * `work` returns the copy of a refusal to show, or null when it went through; the result
+   * shows under `section`.
    */
-  async function run(work: () => Promise<string | null>): Promise<void> {
+  async function run(
+    section: SectionId,
+    work: () => Promise<string | null>,
+    saved: string | null = null,
+  ): Promise<void> {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
-    setMessage(null);
-    setError(null);
+    setFeedback(null);
     try {
       const refusal = await work();
-      if (refusal !== null) setError(refusal);
+      if (refusal !== null) {
+        setFeedback({ section, kind: "error", text: refusal });
+      } else if (saved !== null) {
+        setFeedback({ section, kind: "saved", text: saved });
+      }
     } catch (caught) {
       const code = errorCode(caught);
       if (code === "forbidden") {
         void navigate(khatmaPath(inviteCode), { replace: true });
         return;
       }
-      setError(
-        code === null
-          ? t.organizer.errors.network
-          : (organizerErrors[code] ?? t.organizer.errors.generic),
-      );
+      setFeedback({
+        section,
+        kind: "error",
+        text:
+          code === null
+            ? t.organizer.errors.network
+            : (organizerErrors[code] ?? t.organizer.errors.generic),
+      });
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -119,30 +149,40 @@ function OrganizerContent({
   }
 
   const save = (
+    section: SectionId,
     changes:
       { name: string | null } | { schedule: Schedule } | { grace: Grace },
   ) =>
-    run(async () => {
-      const result = await update({ sessionToken, inviteCode, ...changes });
-      if (!result.ok) return t.grace.range;
-      setMessage(t.organizer.saved);
-      return null;
-    });
+    run(
+      section,
+      async () => {
+        const result = await update({ sessionToken, inviteCode, ...changes });
+        return result.ok ? null : t.grace.range;
+      },
+      t.organizer.saved,
+    );
 
   const confirmed = (action: Confirm) => {
     setConfirm(null);
-    return run(async () => {
-      if (action.kind === "reset") {
-        const { inviteCode: fresh } = await resetInvite({
-          sessionToken,
-          inviteCode,
-        });
-        void navigate(khatmaPath(fresh), {
-          replace: true,
-          state: { openInvite: true },
-        });
+    if (action.kind === "reset") {
+      return run("reset", async () => {
+        resetting.current = true;
+        try {
+          const { inviteCode: fresh } = await resetInvite({
+            sessionToken,
+            inviteCode,
+          });
+          void navigate(khatmaPath(fresh), {
+            replace: true,
+            state: { openInvite: true },
+          });
+        } finally {
+          resetting.current = false;
+        }
         return null;
-      }
+      });
+    }
+    return run("members", async () => {
       const args = { sessionToken, inviteCode, memberId: action.memberId };
       const result =
         action.kind === "remove"
@@ -173,7 +213,11 @@ function OrganizerContent({
           {t.khatmaSettings.link}
         </h1>
 
-        <Section heading={t.organizer.nameHeading}>
+        <Section
+          id="name"
+          heading={t.organizer.nameHeading}
+          feedback={feedback}
+        >
           <label htmlFor="khatma-name" className="block font-medium">
             {t.create.nameLabel}
           </label>
@@ -188,11 +232,17 @@ function OrganizerContent({
           />
           <SaveButton
             disabled={busy || !nameChanged}
-            onClick={() => void save({ name: trimmed === "" ? null : trimmed })}
+            onClick={() =>
+              void save("name", { name: trimmed === "" ? null : trimmed })
+            }
           />
         </Section>
 
-        <Section heading={t.create.scheduleLegend}>
+        <Section
+          id="schedule"
+          heading={t.create.scheduleLegend}
+          feedback={feedback}
+        >
           <div className="grid gap-2.5">
             {SCHEDULES.map((value) => (
               <label
@@ -214,11 +264,11 @@ function OrganizerContent({
           <p className="mt-3 text-ink-soft">{t.organizer.scheduleNote}</p>
           <SaveButton
             disabled={busy || !scheduleChanged}
-            onClick={() => void save({ schedule })}
+            onClick={() => void save("schedule", { schedule })}
           />
         </Section>
 
-        <Section heading={t.grace.label}>
+        <Section id="grace" heading={t.grace.label} feedback={feedback}>
           <p className="leading-relaxed text-ink-soft">
             {t.organizer.graceNote}
           </p>
@@ -227,8 +277,7 @@ function OrganizerContent({
             schedule={settings.schedule}
             onChange={(next) => {
               setGrace(next);
-              setMessage(null);
-              setError(null);
+              setFeedback(null);
             }}
           />
           {!sameGrace(settings.suggestedGrace, settings.grace) && (
@@ -238,11 +287,15 @@ function OrganizerContent({
           )}
           <SaveButton
             disabled={busy || !graceChanged || !graceValid}
-            onClick={() => void save({ grace })}
+            onClick={() => void save("grace", { grace })}
           />
         </Section>
 
-        <Section heading={t.organizer.membersHeading}>
+        <Section
+          id="members"
+          heading={t.organizer.membersHeading}
+          feedback={feedback}
+        >
           <ul className="grid gap-3">
             {settings.members.map((member) => (
               <li
@@ -294,7 +347,11 @@ function OrganizerContent({
         </Section>
 
         {settings.blocked.length > 0 && (
-          <Section heading={t.organizer.blockedHeading}>
+          <Section
+            id="blocked"
+            heading={t.organizer.blockedHeading}
+            feedback={feedback}
+          >
             <ul className="grid gap-3">
               {settings.blocked.map((member) => (
                 <li
@@ -308,13 +365,13 @@ function OrganizerContent({
                       disabled={busy}
                       aria-label={`${t.organizer.allow}: ${member.displayName}`}
                       onClick={() =>
-                        void run(async () => {
-                          await unblock({
+                        void run("blocked", async () => {
+                          const result = await unblock({
                             sessionToken,
                             inviteCode,
                             memberId: member.memberId,
                           });
-                          return null;
+                          return result.ok ? null : t.organizer.errors.generic;
                         })
                       }
                       className={rowButton}
@@ -328,7 +385,11 @@ function OrganizerContent({
           </Section>
         )}
 
-        <Section heading={t.organizer.resetHeading}>
+        <Section
+          id="reset"
+          heading={t.organizer.resetHeading}
+          feedback={feedback}
+        >
           <Button
             variant="ghost"
             disabled={busy}
@@ -337,15 +398,6 @@ function OrganizerContent({
             {t.organizer.reset}
           </Button>
         </Section>
-
-        {error && (
-          <p role="alert" className={errorText}>
-            {error}
-          </p>
-        )}
-        <p role="status" className="mt-3 font-medium text-green">
-          {message}
-        </p>
       </main>
 
       {confirm && sheet && (
@@ -389,16 +441,29 @@ function sheetCopy(confirm: Confirm) {
 }
 
 function Section({
+  id,
   heading,
+  feedback,
   children,
 }: {
+  id: SectionId;
   heading: string;
+  feedback: Feedback | null;
   children: ReactNode;
 }) {
+  const own = feedback?.section === id ? feedback : null;
   return (
     <section aria-label={heading} className={sectionClass}>
       <h2 className={headingClass}>{heading}</h2>
       {children}
+      {own?.kind === "error" && (
+        <p role="alert" className={errorText}>
+          {own.text}
+        </p>
+      )}
+      <p role="status" className="mt-3 font-medium text-green">
+        {own?.kind === "saved" ? own.text : ""}
+      </p>
     </section>
   );
 }
