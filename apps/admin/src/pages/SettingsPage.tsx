@@ -9,6 +9,7 @@ const ORDER: SettingGroup[] = [
   "switches",
   "pace",
   "notifications",
+  "help",
   "limits",
   "sessions",
 ];

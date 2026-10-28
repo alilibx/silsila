@@ -42,6 +42,13 @@ const labels: Record<SettingKey, string> = {
   announcement: "إعلان أعلى الموقع",
   maintenanceMessage: "رسالة الصيانة",
   minClientVersion: "أقل إصدار مسموح للموقع",
+  helpRequestsPerPersonPerDay: "طلبات مساعدة لكل شخص / يوم",
+  helpRequestsPerVisitorPerDay: "طلبات مساعدة لكل زائر / يوم",
+  helpRequestsPerIpPerDay: "طلبات مساعدة لكل IP / يوم",
+  helpMessagesPerHour: "رسائل المساعدة / ساعة",
+  helpAutoCloseMs: "إغلاق تلقائي بعد الرد بلا جواب",
+  helpAttachmentRetentionMs: "الاحتفاظ بالصور والتسجيلات بعد الإغلاق",
+  helpRetentionMs: "الاحتفاظ بالمحادثة بعد الإغلاق",
 };
 
 const groups: Record<SettingGroup, string> = {
@@ -50,6 +57,7 @@ const groups: Record<SettingGroup, string> = {
   notifications: "التنبيهات وساعات الهدوء",
   limits: "الحدود",
   sessions: "الجلسات والاحتفاظ",
+  help: "طلبات المساعدة",
 };
 
 const actions: Record<AuditAction, string> = {
@@ -58,6 +66,8 @@ const actions: Record<AuditAction, string> = {
   "admin.remove": "حذف مشرفًا",
   "setting.set": "غيّر إعدادًا",
   "setting.reset": "أعاد إعدادًا للافتراضي",
+  "help.close": "أغلق طلب مساعدة",
+  "help.reopen": "أعاد فتح طلب مساعدة",
 };
 
 /** Every admin panel string lives here. Components never contain Arabic literals. */
