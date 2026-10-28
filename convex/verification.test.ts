@@ -1178,3 +1178,58 @@ test("a rate-limited phone is neither relayed nor answered", async () => {
     true,
   );
 });
+
+test("sign-ins are counted per Dubai day: started, then completed", async () => {
+  const t = convexTest(schema, modules);
+  const { dubaiDay, readCounter } = await import("./lib/stats");
+  const v = await start(t);
+  await send(t, v.message);
+  expect(await claim(t, v)).toHaveProperty("sessionToken");
+  const day = dubaiDay(Date.now());
+  await t.run(async (ctx) => {
+    expect(await readCounter(ctx, `signin:${day}:started`)).toBe(1);
+    expect(await readCounter(ctx, `signin:${day}:completed`)).toBe(1);
+  });
+});
+
+test("admin sign-ins aren't counted with members'", async () => {
+  const t = convexTest(schema, modules);
+  const { dubaiDay, readCounter } = await import("./lib/stats");
+  await t.mutation(internal.verification.createPending, {
+    candidates: ["ABCDEFGH23"],
+    secretHash: "h",
+    displayName: "",
+    clientKey: "c",
+    ip: null,
+    returnPath: "/",
+    surface: "admin",
+  });
+  await t.run(async (ctx) => {
+    expect(
+      await readCounter(ctx, `signin:${dubaiDay(Date.now())}:started`),
+    ).toBe(0);
+  });
+});
+
+test("a blocked number gets 'no code found' and the code stays unused", async () => {
+  const t = convexTest(schema, modules);
+  const adminId = await t.run((ctx) =>
+    ctx.db.insert("admins", {
+      phone: "+971500000099",
+      addedBy: null,
+      addedAt: 0,
+    }),
+  );
+  await t.run((ctx) =>
+    ctx.db.insert("blockedPhones", {
+      phone: E164,
+      blockedBy: adminId,
+      at: NOW,
+      note: null,
+    }),
+  );
+  const v = await start(t);
+  await send(t, v.message);
+  expect(sent.map((s) => s.body)).toEqual([NO_MATCH]);
+  expect((await status(t, v)).status).toBe("pending");
+});
