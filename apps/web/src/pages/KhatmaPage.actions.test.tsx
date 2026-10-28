@@ -1,13 +1,13 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HoldView, KhatmaView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
 import { t } from "../i18n/ar";
 import { makeTiles, makeView } from "../test/fixtures";
-import { KhatmaPage } from "./KhatmaPage";
+import { KhatmaPage, KhatmaRoute } from "./KhatmaPage";
 
 const m = vi.hoisted(() => ({
   query: vi.fn(),
@@ -631,6 +631,25 @@ describe("take after verification", () => {
 describe("finish and undo", () => {
   const holding = () =>
     makeView({ me: signedIn({ holding: 5, suggestion: null }) });
+
+  it("switching to another khatma drops the undo toast, so undo never hits the wrong khatma", async () => {
+    m.finish.mockResolvedValue({ ok: true, undoUntil: NOW + 10_000 });
+    m.query.mockReturnValue(holding());
+    const raw = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <MemoryRouter initialEntries={["/j/CODE"]}>
+        <Link to="/j/OTHER">other khatma</Link>
+        <Routes>
+          <Route path="/j/:inviteCode" element={<KhatmaRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await raw.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "تراجع" })).toBeInTheDocument();
+    await raw.click(screen.getByRole("link", { name: "other khatma" }));
+    expect(screen.queryByRole("button", { name: "تراجع" })).toBeNull();
+  });
 
   it("finish shows the undo toast, and undo calls undoFinish", async () => {
     m.finish.mockResolvedValue({ ok: true, undoUntil: NOW + 10_000 });

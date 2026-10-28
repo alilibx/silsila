@@ -11,10 +11,13 @@ import { BottomBar } from "./BottomBar";
 const m = vi.hoisted(() => ({
   me: undefined as unknown,
   mine: undefined as unknown,
+  clear: vi.fn(),
 }));
 
 vi.mock("../lib/session", () => ({
   useSessionToken: () => "token",
+  getSessionToken: () => "token",
+  clearSessionToken: () => m.clear(),
 }));
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
@@ -55,6 +58,7 @@ const current = () =>
 
 describe("BottomBar", () => {
   beforeEach(() => {
+    m.clear.mockReset();
     m.me = { displayName: "علي", maskedPhone: "+971 50 ••• 1234" };
     m.mine = [card];
   });
@@ -96,6 +100,19 @@ describe("BottomBar", () => {
     m.me = null;
     renderAt("/");
     expect(screen.queryByRole("navigation")).toBeNull();
+  });
+
+  it("clears a stored token the server answers as signed out, on any page", () => {
+    // /new has no dead-token check of its own; once cleared, it shows its back link again.
+    m.me = null;
+    renderAt("/new");
+    expect(m.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the token while the session is loading", () => {
+    m.me = undefined;
+    renderAt("/new");
+    expect(m.clear).not.toHaveBeenCalled();
   });
 
   it("hides while the session is loading", () => {

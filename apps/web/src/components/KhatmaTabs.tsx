@@ -57,7 +57,7 @@ export function KhatmaTabs({ tab, onChange, idPrefix }: Props) {
       role="tablist"
       aria-label={t.nav.tabs.label}
       onKeyDown={onKeyDown}
-      className="mt-4 flex gap-1 rounded-ui bg-paper-2 p-1"
+      className="mt-4 flex flex-wrap gap-1 rounded-ui bg-paper-2 p-1"
     >
       {TABS.map((name) => {
         const selected = name === tab;
@@ -74,7 +74,7 @@ export function KhatmaTabs({ tab, onChange, idPrefix }: Props) {
             aria-controls={`${idPrefix}-panel`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(name)}
-            className={`min-h-14 flex-1 rounded-[14px] px-2 text-center leading-tight ${
+            className={`min-h-14 grow basis-auto rounded-[14px] px-2 text-center leading-tight ${
               selected
                 ? "bg-card font-semibold text-green-deep shadow-sm"
                 : "text-ink-soft"

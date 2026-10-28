@@ -5,6 +5,7 @@ import { Link, matchPath, useLocation } from "react-router";
 import { useBottomBarHidden } from "../features/nav/bottomBarUi";
 import { t } from "../i18n/ar";
 import { useSessionToken } from "../lib/session";
+import { useClearDeadToken } from "../lib/useClearDeadToken";
 
 type Item = "home" | "create" | "settings";
 
@@ -64,6 +65,9 @@ export function BottomBar() {
   const sessionToken = useSessionToken();
   const me = useQuery(api.sessions.me, { sessionToken });
   const mine = useQuery(api.khatmas.mine, { sessionToken });
+  // A stored token the server answers as signed out is dead. Clearing it here covers every page,
+  // including /new, which would otherwise hide its back link and show no bar either.
+  useClearDeadToken(sessionToken, me === null);
   const hidden = useBottomBarHidden();
   const { pathname } = useLocation();
 
@@ -144,7 +148,7 @@ function BarLink({
           ? `${children}${t.common.listSeparator}${t.notes.newMessage}`
           : undefined
       }
-      className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-center leading-tight ${
+      className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-center leading-tight [overflow-wrap:anywhere] ${
         isActive ? "font-semibold text-green" : "text-ink-soft"
       }`}
     >

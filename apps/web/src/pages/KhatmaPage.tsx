@@ -353,15 +353,15 @@ function MemberContent({
         </Link>
       </header>
 
-      <div className="flex items-start justify-between gap-3">
-        <h1 className="font-display text-4xl leading-tight text-green-deep">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <h1 className="min-w-0 font-display text-4xl leading-tight break-words text-green-deep">
           {khatmaTitle(view)}
         </h1>
         {onSwitch && (
           <button
             type="button"
             onClick={onSwitch}
-            className="mt-1 inline-flex min-h-11 shrink-0 items-center rounded-full border-2 border-green px-3.5 text-base font-semibold text-green"
+            className="mt-1 inline-flex min-h-11 max-w-full items-center rounded-full border-2 border-green px-3.5 text-base font-semibold text-green"
           >
             {t.nav.switchKhatma}
           </button>
@@ -445,4 +445,13 @@ function MemberContent({
       </section>
     </main>
   );
+}
+
+/**
+ * The khatma route. Keyed by invite code so switching khatmas starts fresh: an undo toast, a
+ * lost-race wait or an open sheet belongs to the khatma it came from.
+ */
+export function KhatmaRoute() {
+  const { inviteCode = "" } = useParams();
+  return <KhatmaPage key={inviteCode} />;
 }

@@ -164,6 +164,28 @@ test("core loop: create, take, finish, invite, join, switch", async ({
     page.getByRole("heading", { level: 1, name: KHATMA_NAME }),
   ).toBeVisible();
 
+  // At a very large phone text size nothing runs off the screen: the page never scrolls
+  // sideways, and no tab, bar label or the switch button is cut off.
+  await page.addStyleTag({ content: "html { font-size: 225% !important; }" });
+  const overflow = await page.evaluate(() => {
+    const root = document.documentElement;
+    const clipped = [
+      ...document.querySelectorAll('[role="tab"], nav a, main h1 + button'),
+    ]
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        return (
+          box.left < -1 ||
+          box.right > root.clientWidth + 1 ||
+          el.scrollWidth > el.clientWidth + 1
+        );
+      })
+      .map((el) => el.textContent);
+    return { page: root.scrollWidth - root.clientWidth, clipped };
+  });
+  expect(overflow).toEqual({ page: 0, clipped: [] });
+  await page.addStyleTag({ content: "html { font-size: 112.5% !important; }" });
+
   // Signed out, there is no bottom bar.
   const visitor = await browser.newContext();
   try {
