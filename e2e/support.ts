@@ -13,7 +13,7 @@ export function randomPhone(): string {
 
 /** Runs an internal Convex function on the local backend (`npx convex run`). */
 async function convexRun(fn: string, args: object): Promise<void> {
-  await run("pnpm", ["exec", "convex", "run", fn, JSON.stringify(args)], {
+  await run("bunx", ["convex", "run", fn, JSON.stringify(args)], {
     cwd: new URL("..", import.meta.url).pathname,
   });
 }

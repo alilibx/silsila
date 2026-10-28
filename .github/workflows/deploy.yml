@@ -52,13 +52,15 @@ jobs:
         with:
           # Fully qualified for production, so a branch named like a release tag cannot stand in.
           ref: ${{ inputs.environment == 'production' && format('refs/tags/{0}', inputs.ref) || inputs.ref }}
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # Bun installs packages; Vite, Vitest, Convex and the rest still run on Node.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       # Secrets are passed only to the steps that need them, never to dependency install scripts.
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       - run: npm install --global vercel@56.3.2
       - run: vercel pull --yes --environment="$TARGET"
         env:

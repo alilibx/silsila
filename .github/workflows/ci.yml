@@ -13,18 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # Bun installs packages; Vite, Vitest, Convex and the rest still run on Node.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      # `bun run test` runs Vitest; `bun test` would start Bun's own test runner instead.
+      - run: bun run test
       # The same build Vercel runs after `convex deploy` (see docs/deploy.md), so a broken
       # bundle fails here first. A placeholder URL: without one, main.tsx renders only the
       # "missing VITE_CONVEX_URL" notice and the app itself would be tree-shaken away.
-      - run: pnpm --filter web build
+      - run: bun run --filter web build
         env:
           VITE_CONVEX_URL: https://ci-placeholder.convex.cloud

@@ -3,14 +3,17 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "packageManager": "pnpm@11.22.0",
+  "packageManager": "bun@1.4.2",
+  "workspaces": [
+    "apps/*"
+  ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "dev": "run-p dev:convex dev:web",
     "dev:convex": "convex dev",
-    "dev:web": "pnpm --if-present --filter ./apps/web dev",
+    "dev:web": "bun --cwd apps/web run dev",
     "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -39,5 +42,8 @@
   "dependencies": {
     "libphonenumber-js": "^1.13.15",
     "web-push": "^3.6.7"
-  }
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ]
 }

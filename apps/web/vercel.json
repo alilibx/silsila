@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd ../.. && pnpm exec convex deploy --check-build-environment \"${CONVEX_CHECK_BUILD_ENVIRONMENT:-enable}\" --cmd 'pnpm --filter web build' --cmd-url-env-var-name VITE_CONVEX_URL",
+  "installCommand": "",
+  "buildCommand": "cd ../.. && bunx convex deploy --check-build-environment \"${CONVEX_CHECK_BUILD_ENVIRONMENT:-enable}\" --cmd 'bun run --filter web build' --cmd-url-env-var-name VITE_CONVEX_URL",
   "outputDirectory": "dist",
   "git": {
     "deploymentEnabled": false
