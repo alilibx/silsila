@@ -66,8 +66,11 @@ describe("handoffManifest id", () => {
 
 describe("createHandoffToken / redeemHandoffToken", () => {
   it("returns the token, or null when the server says not signed in or fails", async () => {
-    m.action.mockResolvedValueOnce({ token: "abc" });
-    expect(await createHandoffToken("sess")).toBe("abc");
+    m.action.mockResolvedValueOnce({ token: "abc", ttlMs: 1_800_000 });
+    expect(await createHandoffToken("sess")).toEqual({
+      token: "abc",
+      ttlMs: 1_800_000,
+    });
     expect(m.action.mock.calls[0]?.[1]).toEqual({ sessionToken: "sess" });
     m.action.mockResolvedValueOnce({ error: "not_signed_in" });
     expect(await createHandoffToken("sess")).toBeNull();

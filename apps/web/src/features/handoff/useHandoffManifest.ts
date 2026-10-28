@@ -1,59 +1,54 @@
 import { useEffect } from "react";
 import { createHandoffToken, installHandoffManifest } from "../../lib/handoff";
+import { isIos, isStandalone } from "../../lib/push";
 import { useSessionToken } from "../../lib/session";
 
-/** Tokens live 30 minutes (`handoffTtlMs`); renew well before that. */
-export const HANDOFF_RENEW_MS = 20 * 60_000;
+/** A token is renewed once this share of its lifetime (the live `handoffTtlMs`) has passed. */
+const RENEW_AT = 2 / 3;
 const CHECK_MS = 60_000;
 
 /**
- * Only iPhone Safari defines `navigator.standalone`, and it is `false` in a browser tab (`true`
- * in the home-screen app, which redeems the token instead).
- */
-function inIphoneBrowserTab(): boolean {
-  return (navigator as { standalone?: boolean }).standalone === false;
-}
-
-/**
- * While signed in on iPhone Safari, keeps the page's manifest swapped for one whose `start_url`
- * carries a fresh hand-off token. Safari's Share menu saves whatever manifest is in place, so the
- * home-screen app opens signed in however it was added: from Wirdak's install steps or straight
- * from the Share menu. A token is single-use and renewed before it expires; timers sleep in a
+ * While signed in in an iPhone or iPad browser tab (any iOS browser can add to the home screen),
+ * keeps the page's manifest swapped for one whose `start_url` carries a fresh hand-off token. The
+ * Share menu saves whatever manifest is in place, so the home-screen app opens signed in however
+ * it was added: from Wirdak's install steps or straight from the Share menu. The home-screen app
+ * itself redeems tokens instead (`HandoffGate`). A token is single-use and renewed before it expires; timers sleep in a
  * background tab, so a renewal is also checked whenever the page becomes visible again.
  */
 export function useHandoffManifest(): void {
   const sessionToken = useSessionToken();
 
   useEffect(() => {
-    if (!sessionToken || !inIphoneBrowserTab()) return;
+    if (!sessionToken || !isIos() || isStandalone()) return;
     let cancelled = false;
     let restore = () => {};
-    let issuedAt = 0;
+    // When the token in place is due for renewal; 0 until there is one.
+    let renewAt = 0;
     let renewing = false;
 
     const renew = async () => {
       if (renewing) return;
       renewing = true;
       try {
-        const token = await createHandoffToken(sessionToken);
-        if (!token || cancelled) return;
+        const created = await createHandoffToken(sessionToken);
+        if (!created || cancelled) return;
         // Back to the static manifest first, so the new one is built from it.
         restore();
         restore = () => {};
-        const undo = await installHandoffManifest(token);
+        const undo = await installHandoffManifest(created.token);
         if (cancelled) {
           undo();
           return;
         }
         restore = undo;
-        issuedAt = Date.now();
+        renewAt = Date.now() + Math.max(CHECK_MS, created.ttlMs * RENEW_AT);
       } finally {
         renewing = false;
       }
     };
     const renewIfDue = () => {
       if (document.visibilityState === "visible") {
-        if (Date.now() - issuedAt >= HANDOFF_RENEW_MS) void renew();
+        if (Date.now() >= renewAt) void renew();
       }
     };
 
