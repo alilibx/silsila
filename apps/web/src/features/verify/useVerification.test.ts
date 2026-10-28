@@ -96,6 +96,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.useRealTimers();
@@ -118,7 +119,6 @@ describe("useVerification: start", () => {
     vi.setSystemTime(1_000_000);
     window.history.replaceState(null, "", "/j/ABC123");
     const { result } = await started();
-    window.history.replaceState(null, "", "/");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://x.convex.site/api/verification/start");
     expect(init.method).toBe("POST");
