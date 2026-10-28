@@ -1,10 +1,15 @@
+import { PostHogProvider } from "@posthog/react";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
+import posthog from "posthog-js";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { initializePostHogLogging } from "./lib/posthogLogs";
 import "./styles.css";
+
+initializePostHogLogging();
 
 const root = createRoot(document.getElementById("root")!);
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
@@ -21,13 +26,15 @@ if (!convexUrl) {
   const convex = new ConvexReactClient(convexUrl);
   root.render(
     <StrictMode>
-      <ErrorBoundary>
-        <ConvexProvider client={convex}>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
-        </ConvexProvider>
-      </ErrorBoundary>
+      <PostHogProvider client={posthog}>
+        <ErrorBoundary>
+          <ConvexProvider client={convex}>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </ConvexProvider>
+        </ErrorBoundary>
+      </PostHogProvider>
     </StrictMode>,
   );
 }

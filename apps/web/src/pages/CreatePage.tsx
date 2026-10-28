@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { isValidGrace, type Grace } from "@convex/lib/grace";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 import { useAction } from "convex/react";
+import posthog from "posthog-js";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "../components/Button";
@@ -11,6 +12,7 @@ import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { formatDate } from "../lib/format";
+import { posthogLog } from "../lib/posthogLogs";
 import {
   clearSessionToken,
   getSessionToken,
@@ -54,6 +56,14 @@ export function CreatePage() {
         name: name.trim() === "" ? null : name.trim(),
         schedule,
         ...(grace ? { grace } : {}),
+      });
+      posthog.capture("khatma_created", {
+        schedule,
+        has_custom_grace: grace !== null,
+      });
+      posthogLog.info("khatma creation completed", {
+        schedule,
+        has_custom_grace: grace !== null,
       });
       void navigate(`/j/${encodeURIComponent(inviteCode)}`, {
         state: { justCreated: true },

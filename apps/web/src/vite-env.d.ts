@@ -8,6 +8,9 @@ interface ImportMetaEnv {
    * deployments: it is derived from a `.convex.cloud` VITE_CONVEX_URL (see src/lib/env.ts).
    */
   readonly VITE_CONVEX_SITE_URL?: string;
+  /** Optional PostHog browser analytics configuration. */
+  readonly VITE_POSTHOG_PROJECT_TOKEN?: string;
+  readonly VITE_POSTHOG_HOST?: string;
 }
 
 interface ImportMeta {

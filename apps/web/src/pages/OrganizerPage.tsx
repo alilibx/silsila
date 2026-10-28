@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { isValidGrace, type Grace } from "@convex/lib/grace";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 import { useAction, useMutation, useQuery } from "convex/react";
+import posthog from "posthog-js";
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { Button } from "../components/Button";
@@ -157,7 +158,9 @@ function OrganizerContent({
       section,
       async () => {
         const result = await update({ sessionToken, inviteCode, ...changes });
-        return result.ok ? null : t.grace.range;
+        if (!result.ok) return t.grace.range;
+        posthog.capture("organizer_settings_updated", { setting: section });
+        return null;
       },
       t.organizer.saved,
     );
@@ -172,6 +175,7 @@ function OrganizerContent({
             sessionToken,
             inviteCode,
           });
+          posthog.capture("khatma_invite_reset");
           void navigate(khatmaPath(fresh), {
             replace: true,
             state: { openInvite: true },
@@ -193,6 +197,9 @@ function OrganizerContent({
           ? await removeMember(args)
           : await handOver(args);
       if (!result.ok) return t.organizer.errors.generic;
+      posthog.capture("member_management_completed", {
+        action: action.kind,
+      });
       if (action.kind === "handover") {
         void navigate(khatmaPath(inviteCode), { replace: true });
       }
@@ -375,7 +382,11 @@ function OrganizerContent({
                             inviteCode,
                             memberId: member.memberId,
                           });
-                          return result.ok ? null : t.organizer.errors.generic;
+                          if (!result.ok) return t.organizer.errors.generic;
+                          posthog.capture("member_management_completed", {
+                            action: "unblock",
+                          });
+                          return null;
                         })
                       }
                       className={rowButton}

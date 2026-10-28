@@ -1,5 +1,7 @@
+import posthog from "posthog-js";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { t } from "../i18n/ar";
+import { posthogLog } from "../lib/posthogLogs";
 import { Button } from "./Button";
 
 type Props = { children: ReactNode };
@@ -18,7 +20,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    // No analytics: the browser console is the only place this goes.
+    const exception =
+      error instanceof Error ? error : new Error("Unknown React render error");
+    posthog.captureException(exception, { component_stack: info.componentStack });
+    posthogLog.error("react render failed", { error_type: exception.name });
     console.error(error, info.componentStack);
   }
 
