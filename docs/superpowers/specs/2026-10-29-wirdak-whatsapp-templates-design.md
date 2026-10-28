@@ -63,8 +63,10 @@ The WhatsApp Business tools available to the builder can't create AUTHENTICATION
 | Message | Button label | Button URL |
 | --- | --- | --- |
 | Verified | ارجع إلى وِردك | `SITE_URL` + return path |
-| New sign-in | سجّل الخروج من الأجهزة الأخرى | `SITE_URL/signout?t=<alert token>` |
-| Account created | سجّل الخروج من كل الأجهزة | `SITE_URL/signout?t=<alert token>` |
+| New sign-in | لستُ أنا | `SITE_URL/signout?t=<alert token>` |
+| Account created | لستُ أنا | `SITE_URL/signout?t=<alert token>` |
+
+Meta caps a link button's label at 20 characters, so both alerts say «لستُ أنا» ("not me") on the button and name it in the text ("اضغط «لستُ أنا» لتسجيل الخروج من …") **[builder's call]**.
 
 The alert token is a sign-out-only token, not a sign-in token, and it is unchanged from today. It already travels in the message today, and ARQ-272 strips it on the web side before PostHog sees it. The verified reply with no `SITE_URL` stays plain text.
 

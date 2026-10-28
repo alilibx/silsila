@@ -33,7 +33,7 @@ So plan 3 has two halves: a **help button** in the website, which every member s
 
 - **Content settings from v1 spec 5.5:** schedule options, celebration duas, and WhatsApp message templates. Each needs its own validation (the duas against the verified mushaf source), and none hurts while it lives in code **[builder's call]**.
 - **Feature flags.** Nothing is behind a flag yet. Add the first flag with the first feature that needs one **[builder's call]**.
-- **WhatsApp messages from the app**, including answering help requests over WhatsApp. Business-started messages need Meta-approved templates. Unchanged from the plan 2 spec.
+- **WhatsApp messages from the app**, including answering help requests over WhatsApp. Business-started messages need Meta-approved templates. Unchanged from the plan 2 spec. Since then, the WhatsApp templates design (`2026-10-29-wirdak-whatsapp-templates-design.md`, ARQ-275) sends notifications on WhatsApp to people who opt in.
 - **Deleting or correcting a person from the panel.** The privacy policy promises a copy, correction, or deletion on request by email. Those stay manual for now, through the Convex dashboard, because deletion reaches nearly every table and needs its own design and tests. Until it's built, Ali records each manual deletion as a note on the person's help request or in Linear **[builder's call: Ali can pull it into plan 3]**. It's a follow-up Linear issue when the build starts.
 - **Admin roles.** Every admin can do everything. A second role comes when there's a second kind of admin **[builder's call]**.
 - **Exporting data**, CSV downloads, and outside analytics tools.
