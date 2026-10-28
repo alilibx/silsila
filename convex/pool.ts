@@ -5,10 +5,11 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { alertOrganizer, scheduleGrace } from "./grace";
 import { graceTimes, graceWakingMs } from "./lib/grace";
 import { JUZ_COUNT } from "./lib/juz";
+import { personPace } from "./lib/pace";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { getSetting, quietHours } from "./lib/settings";
-import { addWakingMs, safeTimeZone } from "./lib/wakingTime";
+import { addWakingMs, nextAwake, safeTimeZone } from "./lib/wakingTime";
 import { clearNotes, notify } from "./notes";
 import {
   requirePerson,
@@ -274,6 +275,18 @@ export const take = sessionMutation({
       remindedAt: null,
     });
     await scheduleGrace(ctx, assignmentId, noticeAt, endsAt);
+
+    // One gentle reminder at 1.5x their pace, never in the quiet hours.
+    const { paceMs } = await personPace(ctx, person._id);
+    await ctx.scheduler.runAt(
+      nextAwake(
+        takenAt + (await getSetting(ctx, "reminderPaceMultiple")) * paceMs,
+        person.timeZone,
+        quiet,
+      ),
+      internal.nudges.reminderDue,
+      { assignmentId },
+    );
     return { ok: true };
   },
 });

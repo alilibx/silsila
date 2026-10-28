@@ -11,6 +11,7 @@ import {
 import { randomToken } from "./lib/crypto";
 import { isValidGrace, graceValidator, type Grace } from "./lib/grace";
 import { JUZ, JUZ_COUNT } from "./lib/juz";
+import { paceDays, personPace } from "./lib/pace";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { scheduleValidator, type Schedule } from "./lib/schedule";
@@ -343,8 +344,7 @@ export const view = sessionQuery({
                   held.noticeSentAt !== null &&
                   !held.extended &&
                   held.openedForHelpAt === null,
-                // filled in by the pace task
-                paceDays: null,
+                paceDays: await heldPaceDays(ctx, held.personId),
               },
         suggestion,
         celebrateRound:
@@ -355,6 +355,15 @@ export const view = sessionQuery({
     };
   },
 });
+
+/** The reader's own pace in days; `null` until three finishes count. */
+async function heldPaceDays(
+  ctx: QueryCtx,
+  personId: Id<"people">,
+): Promise<number | null> {
+  const pace = await personPace(ctx, personId);
+  return pace.known ? paceDays(pace.paceMs) : null;
+}
 
 async function lastCompletedRound(
   ctx: QueryCtx,

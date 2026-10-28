@@ -8,6 +8,7 @@ export type QuietHours = { startHour: number; endHour: number };
 
 const FALLBACK_TZ = "Asia/Dubai";
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 const DAY_HOURS = 24;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -105,6 +106,12 @@ function localToInstant(
   const first = guess - offsetAt(guess, tz);
   // Correct once more with the offset at the result so DST changes land right.
   return guess - offsetAt(first, tz);
+}
+
+/** The local calendar date of an instant in `tz`, as days since 1970-01-01. */
+export function localDayNumber(at: number, tz: string): number {
+  const w = wallClock(at, safeTimeZone(tz));
+  return Math.floor(Date.UTC(w.year, w.month - 1, w.day) / DAY_MS);
 }
 
 function awakeHours(q: QuietHours): number {

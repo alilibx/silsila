@@ -242,13 +242,14 @@ test("30th finish completes the round 10s later and starts the next", async () =
 test("finishing a non-final juz schedules nothing", async () => {
   const { t, bob, code } = await almostDone(range(1, 28));
   await take(t, code, bob, 29);
-  // taking schedules the hold's grace jobs; finishing must add nothing
+  // taking schedules the hold's grace and reminder jobs; finishing must add nothing
   const before = await t.run((ctx) =>
     ctx.db.system.query("_scheduled_functions").collect(),
   );
   expect(before.map((j) => j.name).sort()).toEqual([
     "grace:endDue",
     "grace:noticeDue",
+    "nudges:reminderDue",
   ]);
   await finish(t, code, bob);
   const scheduled = await t.run((ctx) =>

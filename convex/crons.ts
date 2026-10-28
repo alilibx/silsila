@@ -10,4 +10,12 @@ crons.hourly(
   internal.maintenance.purge,
 );
 
+// Hourly: invite free members to a round that can't make its target end.
+crons.hourly(
+  "invite free members to a round that is behind",
+  { minuteUTC: 30 },
+  internal.nudges.behindSweep,
+  {},
+);
+
 export default crons;
