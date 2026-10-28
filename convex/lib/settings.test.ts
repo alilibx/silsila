@@ -51,6 +51,7 @@ test("defaults match the spec", () => {
     poolActionsPerPersonPerMinute: 10,
     createsPerPersonPerDay: 5,
     newMembersPerKhatmaPerHour: 30,
+    nameChangesPerPersonPerHour: 10,
     maintenanceMode: false,
     announcement: null,
   });

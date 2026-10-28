@@ -286,6 +286,74 @@ test("updateDisplayName rejects blank names and stores the cleaned name", async 
   expect(person!.displayName).not.toMatch(/\u202E/);
 });
 
+test("updateDisplayName is refused during maintenance", async () => {
+  const t = convexTest(schema, modules);
+  const personId = await addPerson(t, "+971501234567", "علي");
+  await addSession(t, personId, "tok_1", "al_1");
+  await t.run((ctx) =>
+    ctx.db.insert("settings", {
+      key: "maintenanceMode",
+      value: true,
+      updatedAt: NOW,
+    }),
+  );
+  await expect(
+    t.mutation(api.people.updateDisplayName, {
+      sessionToken: "tok_1",
+      displayName: "سعيد",
+    }),
+  ).rejects.toMatchObject({ data: { code: "maintenance" } });
+  const person = await t.run((ctx) => ctx.db.get(personId));
+  expect(person?.displayName).toBe("علي");
+});
+
+test("updateDisplayName allows 10 changes per person per hour", async () => {
+  const t = convexTest(schema, modules);
+  const personId = await addPerson(t, "+971501234567");
+  await addSession(t, personId, "tok_1", "al_1");
+  const other = await addPerson(t, "+971501234568");
+  await addSession(t, other, "tok_2", "al_2");
+  const rename = (sessionToken: string, displayName: string) =>
+    t.mutation(api.people.updateDisplayName, { sessionToken, displayName });
+
+  for (let i = 0; i < 10; i++) await rename("tok_1", `اسم ${i}`);
+  await expect(rename("tok_1", "اسم أخير")).rejects.toMatchObject({
+    data: { code: "rate_limited" },
+  });
+  expect((await t.run((ctx) => ctx.db.get(personId)))?.displayName).toBe(
+    "اسم 9",
+  );
+  // a refused name does not spend the bucket, and another person has their own
+  await rename("tok_2", "سارة");
+  // the window resets after an hour
+  vi.setSystemTime(NOW + HOUR + 1_000);
+  await rename("tok_1", "اسم أخير");
+  expect((await t.run((ctx) => ctx.db.get(personId)))?.displayName).toBe(
+    "اسم أخير",
+  );
+});
+
+test("an invalid name does not spend a name change", async () => {
+  const t = convexTest(schema, modules);
+  const personId = await addPerson(t, "+971501234567");
+  await addSession(t, personId, "tok_1", "al_1");
+  for (let i = 0; i < 10; i++) {
+    await expect(
+      t.mutation(api.people.updateDisplayName, {
+        sessionToken: "tok_1",
+        displayName: "   ",
+      }),
+    ).rejects.toMatchObject({ data: { code: "invalid_name" } });
+  }
+  await t.mutation(api.people.updateDisplayName, {
+    sessionToken: "tok_1",
+    displayName: "سعيد",
+  });
+  expect((await t.run((ctx) => ctx.db.get(personId)))?.displayName).toBe(
+    "سعيد",
+  );
+});
+
 test("sessionMutation touches lastUsedAt at most once per hour; sessionQuery never writes", async () => {
   const t = convexTest(schema, modules);
   const personId = await addPerson(t, "+971501234567");

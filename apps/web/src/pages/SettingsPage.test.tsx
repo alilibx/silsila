@@ -156,6 +156,20 @@ describe("SettingsPage", () => {
     );
   });
 
+  it.each(["maintenance", "rate_limited"] as const)(
+    "shows %s kindly, not as a network failure",
+    async (code) => {
+      m.fns.updateDisplayName.mockRejectedValue(new ConvexError({ code }));
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole("button", { name: "احفظ الاسم" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(t.settings.errors[code]);
+      expect(alert).not.toHaveTextContent(t.errors.network);
+      expect(alert).not.toHaveTextContent(t.errors.generic);
+    },
+  );
+
   it("lists devices, marking this one", () => {
     renderPage();
     const items = screen.getAllByRole("listitem");

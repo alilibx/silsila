@@ -16,6 +16,7 @@ export const SETTING_DEFAULTS = {
   poolActionsPerPersonPerMinute: 10,
   createsPerPersonPerDay: 5,
   newMembersPerKhatmaPerHour: 30,
+  nameChangesPerPersonPerHour: 10,
   maintenanceMode: false,
   announcement: null as string | null,
 };
