@@ -93,3 +93,8 @@ test("help settings have their own ranges", () => {
   expect(validateSetting("helpRequestsPerIpPerDay", 10)).toBeNull();
   expect(SETTING_SPECS.helpMessagesPerHour.group).toBe("help");
 });
+
+test("summary hour and milestone spacing", () => {
+  expect(validateSetting("milestonePushSpacingMs", 5_000)).toBe("out_of_range");
+  expect(validateSetting("summaryHour", 8)).toBeNull();
+});

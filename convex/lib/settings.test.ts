@@ -90,6 +90,8 @@ test("defaults match the spec", () => {
     helpAutoCloseMs: 14 * 86_400_000,
     helpAttachmentRetentionMs: 30 * 86_400_000,
     helpRetentionMs: 180 * 86_400_000,
+    summaryHour: 8,
+    milestonePushSpacingMs: 60_000,
   });
 });
 

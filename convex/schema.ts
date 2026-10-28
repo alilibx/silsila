@@ -1,6 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { auditActionValidator } from "./lib/audit";
+import { auditActionValidator, auditTargetKindValidator } from "./lib/audit";
 import { graceValidator } from "./lib/grace";
 import { scheduleValidator } from "./lib/schedule";
 
@@ -71,7 +71,9 @@ export default defineSchema({
     currentRoundId: v.optional(v.id("rounds")),
     completedRounds: v.number(),
     createdAt: v.number(),
-  }).index("by_inviteCode", ["inviteCode"]),
+  })
+    .index("by_inviteCode", ["inviteCode"])
+    .searchIndex("search_name", { searchField: "name" }),
 
   members: defineTable({
     khatmaId: v.id("khatmas"),
@@ -101,7 +103,11 @@ export default defineSchema({
     completedAt: nullableNumber,
     lastFinishedAt: nullableNumber,
     behindInvitedAt: nullableNumber,
-  }).index("by_khatma_number", ["khatmaId", "number"]),
+  })
+    .index("by_khatma_number", ["khatmaId", "number"])
+    .index("by_lastFinishedAt", ["lastFinishedAt"])
+    .index("by_completedAt", ["completedAt"])
+    .index("by_open_lastFinishedAt", ["completedAt", "lastFinishedAt"]),
 
   assignments: defineTable({
     khatmaId: v.id("khatmas"),
@@ -125,7 +131,8 @@ export default defineSchema({
     .index("by_round_juz", ["roundId", "juz"])
     .index("by_khatma_person", ["khatmaId", "personId"])
     .index("by_round", ["roundId"])
-    .index("by_person_finishedAt", ["personId", "finishedAt"]),
+    .index("by_person_finishedAt", ["personId", "finishedAt"])
+    .index("by_finishedAt", ["finishedAt"]),
 
   notes: defineTable({
     personId: v.id("people"),
@@ -192,6 +199,47 @@ export default defineSchema({
     addedAt: v.number(),
     /** Push alerts for help requests; absent means on (spec 7). */
     notifyHelp: v.optional(v.boolean()),
+    notifySummary: v.optional(v.boolean()),
+    notifyMilestones: v.optional(v.boolean()),
+  }).index("by_phone", ["phone"]),
+
+  /** One row per Dubai day: that day's counts and the running totals (spec 6.2). */
+  dailyStats: defineTable({
+    day: v.number(),
+    ajzaFinished: v.number(),
+    newMembers: v.number(),
+    newKhatmas: v.number(),
+    roundsCompleted: v.number(),
+    signInsStarted: v.number(),
+    signInsCompleted: v.number(),
+    totalMembers: v.number(),
+    totalKhatmas: v.number(),
+    totalRoundsCompleted: v.number(),
+    computedAt: v.number(),
+  }).index("by_day", ["day"]),
+
+  /** Small named counters, e.g. `signin:<day>:started` (verifications are purged daily). */
+  counters: defineTable({
+    key: v.string(),
+    value: v.number(),
+  }).index("by_key", ["key"]),
+
+  milestonesSent: defineTable({
+    metric: v.union(
+      v.literal("khatmas"),
+      v.literal("members"),
+      v.literal("completed"),
+    ),
+    value: v.number(),
+    sentAt: v.number(),
+  }).index("by_metric_value", ["metric", "value"]),
+
+  /** Numbers an admin blocked app-wide (spec 8). */
+  blockedPhones: defineTable({
+    phone: v.string(),
+    blockedBy: v.id("admins"),
+    at: v.number(),
+    note: v.union(v.string(), v.null()),
   }).index("by_phone", ["phone"]),
 
   /** Admin push subscriptions belong to the admin, not to one admin session (spec 7). */
@@ -273,11 +321,7 @@ export default defineSchema({
     /** The actor's phone when the row was written, so it outlives the admin's removal. */
     adminPhone: v.union(v.string(), v.null()),
     action: auditActionValidator,
-    targetKind: v.union(
-      v.literal("admin"),
-      v.literal("setting"),
-      v.literal("help"),
-    ),
+    targetKind: auditTargetKindValidator,
     targetId: v.string(),
     before: v.any(),
     after: v.any(),

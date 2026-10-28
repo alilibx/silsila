@@ -157,6 +157,13 @@ export const SETTING_SPECS: { [K in SettingKey]: SettingSpec } = {
     max: 365 * DAY,
     group: "help",
   },
+  summaryHour: { kind: "hour", group: "notifications" },
+  milestonePushSpacingMs: {
+    kind: "duration",
+    min: 10 * SECOND,
+    max: HOUR,
+    group: "notifications",
+  },
   helpRetentionMs: {
     kind: "duration",
     min: 30 * DAY,

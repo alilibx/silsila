@@ -49,6 +49,8 @@ const labels: Record<SettingKey, string> = {
   helpAutoCloseMs: "إغلاق تلقائي بعد الرد بلا جواب",
   helpAttachmentRetentionMs: "الاحتفاظ بالصور والتسجيلات بعد الإغلاق",
   helpRetentionMs: "الاحتفاظ بالمحادثة بعد الإغلاق",
+  summaryHour: "ساعة الملخص الصباحي (بتوقيت دبي)",
+  milestonePushSpacingMs: "أقل مدة بين تنبيهي إنجاز",
 };
 
 const groups: Record<SettingGroup, string> = {
@@ -68,6 +70,11 @@ const actions: Record<AuditAction, string> = {
   "setting.reset": "أعاد إعدادًا للافتراضي",
   "help.close": "أغلق طلب مساعدة",
   "help.reopen": "أعاد فتح طلب مساعدة",
+  "person.signOutAll": "أنهى كل جلسات شخص",
+  "phone.block": "حظر رقماً",
+  "phone.unblock": "ألغى حظر رقم",
+  "khatma.resetInvite": "أعاد ضبط رابط دعوة",
+  "khatma.handOver": "سلّم دور المنظّم",
 };
 
 /** Every admin panel string lives here. Components never contain Arabic literals. */
