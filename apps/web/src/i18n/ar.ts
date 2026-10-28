@@ -31,6 +31,12 @@ export const ar = {
   app: {
     name: "وِردك",
   },
+  status: {
+    maintenanceDefault: "نعمل على تحسين وِردك. نعود قريبًا بإذن الله.",
+    updateNeeded: "يوجد إصدار أحدث من وِردك.",
+    updateButton: "حدّث الصفحة",
+    dismiss: "إخفاء",
+  },
   pages: {
     home: "ختماتي",
     create: "ختمة جديدة",
