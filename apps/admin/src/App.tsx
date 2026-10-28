@@ -9,6 +9,8 @@ import { clearAdminToken, useAdminToken } from "./lib/adminSession";
 import { AdminsPage } from "./pages/AdminsPage";
 import { AlertSignOutPage } from "./pages/AlertSignOutPage";
 import { AuditPage } from "./pages/AuditPage";
+import { HelpInboxPage } from "./pages/HelpInboxPage";
+import { HelpRequestPage } from "./pages/HelpRequestPage";
 import { HomePage } from "./pages/HomePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SignInPage } from "./pages/SignInPage";
@@ -91,6 +93,8 @@ function SignedIn({
           }
         >
           <Route path="/" element={<HomePage />} />
+          <Route path="/help" element={<HelpInboxPage />} />
+          <Route path="/help/:requestId" element={<HelpRequestPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/admins" element={<AdminsPage />} />

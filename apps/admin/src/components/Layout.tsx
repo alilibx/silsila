@@ -1,12 +1,29 @@
+import { api } from "@convex/_generated/api";
+import { toArabicDigits } from "@convex/lib/digits";
+import { useQuery } from "convex/react";
 import { NavLink, Outlet } from "react-router";
 import { t } from "../i18n/ar";
+import { useAdminToken } from "../lib/adminSession";
 
 const NAV = [
   { to: "/", label: t.nav.home },
+  { to: "/help", label: t.nav.help },
   { to: "/settings", label: t.nav.settings },
   { to: "/audit", label: t.nav.audit },
   { to: "/admins", label: t.nav.admins },
 ] as const;
+
+/** How many help requests wait, on the help tab. */
+function OpenHelpBadge() {
+  const adminToken = useAdminToken() ?? "";
+  const counts = useQuery(api.adminHelp.counts, { adminToken });
+  if (!counts || counts.open === 0) return null;
+  return (
+    <span className="ms-1 rounded-full bg-saffron px-1.5 text-xs text-white">
+      {counts.open >= 100 ? t.help.manyOpen : toArabicDigits(counts.open)}
+    </span>
+  );
+}
 
 /** The signed-in frame: header, the page, and the bottom nav (phone first, spec 4.1). */
 export function Layout({ actions }: { actions?: React.ReactNode }) {
@@ -36,6 +53,7 @@ export function Layout({ actions }: { actions?: React.ReactNode }) {
                 }
               >
                 {item.label}
+                {item.to === "/help" && <OpenHelpBadge />}
               </NavLink>
             </li>
           ))}
