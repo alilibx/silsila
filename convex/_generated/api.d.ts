@@ -8,6 +8,10 @@
  * @module
  */
 
+import type * as adminAuth from "../adminAuth.js";
+import type * as adminSettings from "../adminSettings.js";
+import type * as admins from "../admins.js";
+import type * as audit from "../audit.js";
 import type * as crons from "../crons.js";
 import type * as dev from "../dev.js";
 import type * as grace from "../grace.js";
@@ -15,6 +19,8 @@ import type * as handoff from "../handoff.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as khatmas from "../khatmas.js";
+import type * as lib_adminSession from "../lib/adminSession.js";
+import type * as lib_audit from "../lib/audit.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_digits from "../lib/digits.js";
 import type * as lib_grace from "../lib/grace.js";
@@ -25,6 +31,7 @@ import type * as lib_pace from "../lib/pace.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_schedule from "../lib/schedule.js";
 import type * as lib_session from "../lib/session.js";
+import type * as lib_settingSpecs from "../lib/settingSpecs.js";
 import type * as lib_settings from "../lib/settings.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_wakingTime from "../lib/wakingTime.js";
@@ -36,6 +43,7 @@ import type * as organizer from "../organizer.js";
 import type * as people from "../people.js";
 import type * as pool from "../pool.js";
 import type * as preview from "../preview.js";
+import type * as publicSettings from "../publicSettings.js";
 import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
 import type * as rounds from "../rounds.js";
@@ -51,6 +59,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  adminAuth: typeof adminAuth;
+  adminSettings: typeof adminSettings;
+  admins: typeof admins;
+  audit: typeof audit;
   crons: typeof crons;
   dev: typeof dev;
   grace: typeof grace;
@@ -58,6 +70,8 @@ declare const fullApi: ApiFromModules<{
   hooks: typeof hooks;
   http: typeof http;
   khatmas: typeof khatmas;
+  "lib/adminSession": typeof lib_adminSession;
+  "lib/audit": typeof lib_audit;
   "lib/crypto": typeof lib_crypto;
   "lib/digits": typeof lib_digits;
   "lib/grace": typeof lib_grace;
@@ -68,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/schedule": typeof lib_schedule;
   "lib/session": typeof lib_session;
+  "lib/settingSpecs": typeof lib_settingSpecs;
   "lib/settings": typeof lib_settings;
   "lib/text": typeof lib_text;
   "lib/wakingTime": typeof lib_wakingTime;
@@ -79,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   people: typeof people;
   pool: typeof pool;
   preview: typeof preview;
+  publicSettings: typeof publicSettings;
   push: typeof push;
   pushNode: typeof pushNode;
   rounds: typeof rounds;

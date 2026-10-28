@@ -1,0 +1,3 @@
+/* The website's theme (colors, fonts, pattern), plus its components as Tailwind sources. */
+@import "../../web/src/styles.css";
+@source "../../web/src/components";

@@ -18,6 +18,8 @@ const BATCH = 500;
 const INBOUND_TTL_MS = 7 * DAY_MS;
 const VERIFICATION_TTL_MS = DAY_MS;
 const HANDOFF_TTL_MS = DAY_MS;
+/** Audit rows are kept 2 years (spec 4.5). */
+export const AUDIT_TTL_MS = 2 * 365 * DAY_MS;
 
 /** Deletes up to BATCH rows; returns true when more old rows remain. */
 async function deleteBatch(
@@ -29,6 +31,8 @@ async function deleteBatch(
       | "verifications"
       | "notes"
       | "handoffTokens"
+      | "auditLog"
+      | "adminSessions"
     >;
   }[],
 ): Promise<boolean> {
@@ -87,12 +91,24 @@ export const purge = internalMutation({
       .withIndex("by_createdAt", (q) => q.lt("createdAt", now - HANDOFF_TTL_MS))
       .take(BATCH + 1);
 
+    const audit = await ctx.db
+      .query("auditLog")
+      .withIndex("by_at", (q) => q.lt("at", now - AUDIT_TTL_MS))
+      .take(BATCH + 1);
+    // An expired admin session can never be used again (12 hours, spec 4.2).
+    const adminSessions = await ctx.db
+      .query("adminSessions")
+      .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
+      .take(BATCH + 1);
+
     const more = [
       await deleteBatch(ctx, rateLimits),
       await deleteBatch(ctx, inbound),
       await deleteBatch(ctx, verifications),
       await deleteBatch(ctx, notes),
       await deleteBatch(ctx, handoffs),
+      await deleteBatch(ctx, audit),
+      await deleteBatch(ctx, adminSessions),
     ].some(Boolean);
 
     if (more) await ctx.scheduler.runAfter(0, internal.maintenance.purge, {});

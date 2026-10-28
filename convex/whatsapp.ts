@@ -35,7 +35,9 @@ type EnvName =
   | "WHATSAPP_RELAY_URL"
   | "WHATSAPP_RELAY_SECRET"
   // Only the link-preview endpoint reads this.
-  | "PREVIEW_SECRET";
+  | "PREVIEW_SECRET"
+  // The admin panel's origin (spec 4.2, 11).
+  | "ADMIN_SITE_URL";
 
 /** An environment variable, treating the empty string as unset. */
 export function env(name: EnvName): string | undefined {
@@ -92,6 +94,12 @@ export function siteUrl(): string {
   return url.replace(/\/+$/, "");
 }
 
+/** `ADMIN_SITE_URL` without a trailing slash; dev falls back to the admin Vite server. */
+export function adminSiteUrl(): string {
+  const url = env("ADMIN_SITE_URL") ?? (isDev() ? "http://localhost:5174" : "");
+  return url.replace(/\/+$/, "");
+}
+
 // ---------------------------------------------------------------------------
 // Message texts (sent verbatim)
 
@@ -103,6 +111,11 @@ export const NO_MATCH_REPLY =
 export const pinReply = (pin: string) =>
   `رمز الدخول إلى وِردك: ${pin}\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
 const VERIFIED = "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.";
+/** The code for an admin panel sign-in. No link: the admin page is already waiting for it. */
+export const adminPinReply = (pin: string) =>
+  `رمز الدخول إلى لوحة إدارة وِردك: ${pin}\nلا تعطه لأحد. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
+export const adminSignInAlert = (deviceLabel: string, alertToken: string) =>
+  `تسجيل دخول إلى لوحة إدارة وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لإنهاء كل جلسات الإدارة: ${adminSiteUrl()}/signout?t=${alertToken}`;
 const signInAlert = (deviceLabel: string) =>
   `تسجيل دخول جديد إلى وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من الأجهزة الأخرى.`;
 /** Sent instead of `signInAlert` when the sign-in created the account. */
@@ -575,7 +588,9 @@ export async function takeIncoming(
       await sendVerified(phone, result.returnPath);
       return "taken";
     case "needs_pin":
-      await sendPin(phone, pin);
+      // Admin codes keep their own wording (plan 3a); members get the template.
+      if (result.admin) await sendWhatsAppText(phone, adminPinReply(pin));
+      else await sendPin(phone, pin);
       return "taken";
   }
 }

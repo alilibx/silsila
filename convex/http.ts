@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
 import {
+  adminSiteUrl,
   env,
   inboundSource,
   isDev,
@@ -33,8 +34,22 @@ function allowedOrigin(origin: string): boolean {
   return (isDev() && origin === DEV_ORIGIN) || (site !== "" && origin === site);
 }
 
-function corsHeaders(origin: string | null): Record<string, string> {
-  return origin !== null && allowedOrigin(origin)
+const ADMIN_DEV_ORIGIN = "http://localhost:5174";
+
+/** The admin panel's origin. Kept apart from `allowedOrigin`: each route trusts one app. */
+function allowedAdminOrigin(origin: string): boolean {
+  const admin = adminSiteUrl();
+  return (
+    (isDev() && origin === ADMIN_DEV_ORIGIN) ||
+    (admin !== "" && origin === admin)
+  );
+}
+
+function corsHeaders(
+  origin: string | null,
+  allowed: (origin: string) => boolean = allowedOrigin,
+): Record<string, string> {
+  return origin !== null && allowed(origin)
     ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" }
     : { Vary: "Origin" };
 }
@@ -163,6 +178,72 @@ http.route({
       ip: await callerIp(ctx, req),
       // Optional and never refused: a bad path just links to the home page.
       ...(typeof returnPath === "string" ? { returnPath } : {}),
+    });
+    if ("error" in res) {
+      return json(START_ERROR_STATUS[res.error], { error: res.error }, headers);
+    }
+    return json(200, res, headers);
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/verification/start: the admin panel's sign-in (spec 4.2).
+// Only the admin origin may call it, and it works during maintenance.
+
+http.route({
+  path: "/api/admin/verification/start",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, req) => {
+    const origin = req.headers.get("Origin");
+    if (origin === null || !allowedAdminOrigin(origin)) {
+      return new Response(null, { status: 403, headers: corsHeaders(null) });
+    }
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(origin, allowedAdminOrigin),
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }),
+});
+
+http.route({
+  path: "/api/admin/verification/start",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const origin = req.headers.get("Origin");
+    // Unlike the website's route, a request with no Origin is refused too:
+    // the admin panel is only ever called from its own pages.
+    if (origin === null || !allowedAdminOrigin(origin)) {
+      return json(403, { error: "forbidden_origin" }, corsHeaders(null));
+    }
+    const headers = corsHeaders(origin, allowedAdminOrigin);
+
+    const raw = await readCappedText(req, MAX_START_BODY);
+    if (raw === null) return json(413, { error: "too_large" }, headers);
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = null;
+    }
+    const { clientKey } = (body ?? {}) as Record<string, unknown>;
+    if (
+      typeof clientKey !== "string" ||
+      clientKey.length === 0 ||
+      clientKey.length > MAX_CLIENT_KEY
+    ) {
+      return json(400, { error: "bad_request" }, headers);
+    }
+
+    const res = await ctx.runAction(internal.verification.startInternal, {
+      displayName: "",
+      clientKey,
+      ip: await callerIp(ctx, req),
+      surface: "admin",
     });
     if ("error" in res) {
       return json(START_ERROR_STATUS[res.error], { error: res.error }, headers);

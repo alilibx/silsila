@@ -141,6 +141,29 @@ async function toNeedsPin(
   });
 }
 
+/**
+ * Moves an admin panel verification to `needs_pin`. Every phone gets here, on
+ * the allowlist or not, so the reply never tells anyone whether a number is an
+ * admin; only an allowlisted one carries `adminId`. Never touches `people`.
+ */
+async function toAdminNeedsPin(
+  ctx: MutationCtx,
+  doc: Doc<"verifications">,
+  fields: { phone: string; pinHash: string },
+) {
+  const admin = await ctx.db
+    .query("admins")
+    .withIndex("by_phone", (q) => q.eq("phone", fields.phone))
+    .first();
+  await ctx.db.patch(doc._id, {
+    ...fields,
+    ...(admin ? { adminId: admin._id } : {}),
+    status: "needs_pin",
+    pinAttempts: 0,
+    expiresAt: await freshExpiry(ctx, doc._id),
+  });
+}
+
 function insertPerson(
   ctx: MutationCtx,
   doc: Doc<"verifications">,
@@ -207,12 +230,15 @@ export const startInternal = internalAction({
     clientKey: v.string(),
     ip: v.union(v.string(), v.null()),
     returnPath: v.optional(v.string()),
+    surface: v.optional(v.literal("admin")),
   },
   handler: async (ctx, args): Promise<StartResult> => {
     if (!isDev() && !whatsappConfigured()) {
       return { error: "whatsapp_not_configured" };
     }
-    const displayName = cleanDisplayName(args.displayName);
+    // An admin sign-in has no display name: it never creates a person.
+    const displayName =
+      args.surface === "admin" ? "" : cleanDisplayName(args.displayName);
     if (displayName === null) return { error: "invalid_name" };
 
     const candidates = Array.from({ length: CODE_CANDIDATES }, () =>
@@ -226,6 +252,7 @@ export const startInternal = internalAction({
       clientKey: args.clientKey,
       ip: args.ip,
       returnPath: cleanReturnPath(args.returnPath),
+      ...(args.surface === "admin" ? { surface: "admin" as const } : {}),
     });
     if ("error" in res) return res;
     const code = formatCode(res.code);
@@ -239,6 +266,59 @@ export const startInternal = internalAction({
   },
 });
 
+async function siteStartBuckets(
+  ctx: MutationCtx,
+  clientKey: string,
+  ip: string | null,
+): Promise<RateLimitBucket[]> {
+  const buckets: RateLimitBucket[] = [
+    {
+      key: `verifyStart:client:${clientKey}`,
+      limit: await getSetting(ctx, "verifyStartPerClientPer10Min"),
+      windowMs: TEN_MIN_MS,
+    },
+    shardedBucket(
+      "verifyStart:global",
+      await getSetting(ctx, "verifyGlobalPerMinute"),
+      MINUTE_MS,
+    ),
+  ];
+  if (ip !== null) {
+    buckets.push({
+      key: `verifyStart:ip:${ip}`,
+      limit: await getSetting(ctx, "verifyStartPerIpPer10Min"),
+      windowMs: TEN_MIN_MS,
+    });
+  }
+  return buckets;
+}
+
+/**
+ * Admin starts have buckets of their own, so a flood on the website can't
+ * lock admins out. Fixed numbers, not settings: an admin could otherwise
+ * loosen the limit that guards the admin panel itself.
+ */
+function adminStartBuckets(
+  clientKey: string,
+  ip: string | null,
+): RateLimitBucket[] {
+  // The global bucket isn't sharded: admin traffic is too small for write
+  // contention, and 20 split over 10 shards would refuse a third start that
+  // happened to land on a busy shard.
+  const buckets: RateLimitBucket[] = [
+    { key: `adminStart:client:${clientKey}`, limit: 5, windowMs: TEN_MIN_MS },
+    { key: "adminStart:global", limit: 20, windowMs: MINUTE_MS },
+  ];
+  if (ip !== null) {
+    buckets.push({
+      key: `adminStart:ip:${ip}`,
+      limit: 10,
+      windowMs: TEN_MIN_MS,
+    });
+  }
+  return buckets;
+}
+
 export const createPending = internalMutation({
   args: {
     candidates: v.array(v.string()),
@@ -247,6 +327,7 @@ export const createPending = internalMutation({
     clientKey: v.string(),
     ip: v.union(v.string(), v.null()),
     returnPath: v.string(),
+    surface: v.optional(v.literal("admin")),
   },
   handler: async (
     ctx,
@@ -255,32 +336,17 @@ export const createPending = internalMutation({
     | { verificationId: Id<"verifications">; code: string }
     | { error: "maintenance" | "rate_limited" }
   > => {
-    if (await getSetting(ctx, "maintenanceMode")) {
+    const admin = args.surface === "admin";
+    // Admins must be able to sign in to turn maintenance off (spec 4.2).
+    if (!admin && (await getSetting(ctx, "maintenanceMode"))) {
       return { error: "maintenance" };
     }
-    const perClient = await getSetting(ctx, "verifyStartPerClientPer10Min");
     const clientKey = (
       await sha256Hex(args.clientKey.slice(0, MAX_CLIENT_KEY))
     ).slice(0, 32);
-    const buckets: RateLimitBucket[] = [
-      {
-        key: `verifyStart:client:${clientKey}`,
-        limit: perClient,
-        windowMs: TEN_MIN_MS,
-      },
-      shardedBucket(
-        "verifyStart:global",
-        await getSetting(ctx, "verifyGlobalPerMinute"),
-        MINUTE_MS,
-      ),
-    ];
-    if (args.ip !== null) {
-      buckets.push({
-        key: `verifyStart:ip:${args.ip}`,
-        limit: await getSetting(ctx, "verifyStartPerIpPer10Min"),
-        windowMs: TEN_MIN_MS,
-      });
-    }
+    const buckets: RateLimitBucket[] = admin
+      ? adminStartBuckets(clientKey, args.ip)
+      : await siteStartBuckets(ctx, clientKey, args.ip);
     // All or nothing: a start refused by one limit spends none of the others.
     const allowed = await checkRateLimits(ctx, buckets);
     if (!allowed) return { error: "rate_limited" };
@@ -310,6 +376,7 @@ export const createPending = internalMutation({
       status: "pending",
       pinAttempts: 0,
       returnPath: args.returnPath,
+      ...(admin ? { surface: "admin" as const } : {}),
       createdAt: now,
       expiresAt,
     });
@@ -422,7 +489,9 @@ export const matchIncoming = internalMutation({
     ctx,
     args,
   ): Promise<
-    | { kind: "rate_limited" | "needs_pin" }
+    | { kind: "rate_limited" }
+    /** `admin`: an admin panel sign-in, which gets the admin code text. */
+    | { kind: "needs_pin"; admin: boolean }
     | { kind: "matched"; returnPath: string }
     /** `codeShaped`: the text could hold a code from another deployment. */
     | { kind: "no_match"; codeShaped: boolean }
@@ -439,6 +508,13 @@ export const matchIncoming = internalMutation({
     const doc = await findPendingByText(ctx, windows);
     if (!doc) return { kind: "no_match", codeShaped: windows.length > 0 };
 
+    if (doc.surface === "admin") {
+      await toAdminNeedsPin(ctx, doc, {
+        phone: args.phone,
+        pinHash: args.pinHash,
+      });
+      return { kind: "needs_pin", admin: true };
+    }
     const person = await personByPhone(ctx, args.phone);
     if (person) {
       await toNeedsPin(ctx, doc, {
@@ -446,7 +522,7 @@ export const matchIncoming = internalMutation({
         pinHash: args.pinHash,
         existingPersonId: person._id,
       });
-      return { kind: "needs_pin" };
+      return { kind: "needs_pin", admin: false };
     }
     // A fresh window to claim in, even if the message arrived at 9m59s.
     await ctx.db.patch(doc._id, {
@@ -521,6 +597,8 @@ export const confirmPinInternal = internalMutation({
       args.secretHash,
     );
     if (!doc || Date.now() >= doc.expiresAt) return { kind: "expired" };
+    // An admin panel code never opens a member session.
+    if (doc.surface === "admin") return { kind: "expired" };
     if (doc.status !== "needs_pin" || !doc.pinHash || !doc.phone) {
       return { kind: "expired" };
     }
