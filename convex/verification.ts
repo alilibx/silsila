@@ -32,6 +32,7 @@ import {
   accountCreatedAlert,
   env,
   isDev,
+  MAX_SCANNED_TEXT,
   pinReply,
   sendWhatsAppText,
   signInAlert,
@@ -43,8 +44,6 @@ const CODE_LENGTH = 10;
 const CODE_RE = /^[A-HJ-NP-Z2-9]{10}$/;
 /** Candidate codes per start; a collision among pending codes is ~1e-13 likely. */
 const CODE_CANDIDATES = 3;
-/** Only this much of an incoming message is scanned for a code. */
-const MAX_SCANNED_TEXT = 500;
 const MINUTE_MS = 60_000;
 const TEN_MIN_MS = 10 * MINUTE_MS;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -388,23 +387,28 @@ export const expire = internalMutation({
 // Incoming WhatsApp message
 
 /**
- * Finds the pending, unexpired verification whose code appears in `text`.
+ * Every distinct code-length run of code-alphabet characters in `text`.
  * Digits are normalized first (normalizeCode drops Arabic-Indic digits), then a
  * 10-character window slides across the code-alphabet characters.
  */
-async function findPendingByText(
-  ctx: QueryCtx,
-  text: string,
-): Promise<Doc<"verifications"> | null> {
+function codeWindows(text: string): string[] {
   const normalized = normalizeCode(
     normalizeDigits(text.slice(0, MAX_SCANNED_TEXT)),
   );
-  const now = Date.now();
-  const tried = new Set<string>();
+  const windows = new Set<string>();
   for (let i = 0; i + CODE_LENGTH <= normalized.length; i++) {
-    const window = normalized.slice(i, i + CODE_LENGTH);
-    if (tried.has(window)) continue;
-    tried.add(window);
+    windows.add(normalized.slice(i, i + CODE_LENGTH));
+  }
+  return [...windows];
+}
+
+/** Finds the pending, unexpired verification whose code appears in `windows`. */
+async function findPendingByText(
+  ctx: QueryCtx,
+  windows: string[],
+): Promise<Doc<"verifications"> | null> {
+  const now = Date.now();
+  for (const window of windows) {
     const doc = await ctx.db
       .query("verifications")
       .withIndex("by_code_status", (q) =>
@@ -427,8 +431,10 @@ export const matchIncoming = internalMutation({
     ctx,
     args,
   ): Promise<
-    | { kind: "rate_limited" | "no_match" | "needs_pin" }
+    | { kind: "rate_limited" | "needs_pin" }
     | { kind: "matched"; returnPath: string }
+    /** `codeShaped`: the text could hold a code from another deployment. */
+    | { kind: "no_match"; codeShaped: boolean }
   > => {
     const allowed = await checkRateLimit(
       ctx,
@@ -438,8 +444,9 @@ export const matchIncoming = internalMutation({
     );
     if (!allowed) return { kind: "rate_limited" };
 
-    const doc = await findPendingByText(ctx, args.text);
-    if (!doc) return { kind: "no_match" };
+    const windows = codeWindows(args.text);
+    const doc = await findPendingByText(ctx, windows);
+    if (!doc) return { kind: "no_match", codeShaped: windows.length > 0 };
 
     const person = await personByPhone(ctx, args.phone);
     if (person) {

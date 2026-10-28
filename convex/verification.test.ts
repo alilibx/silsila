@@ -998,3 +998,183 @@ test("device labels are sanitized before reaching the WhatsApp alert", async () 
   expect(Array.from(session!.deviceLabel).length).toBeLessThanOrEqual(40);
   expect(sent.at(-1)!.body).not.toContain("evil.example");
 });
+
+// ---------------------------------------------------------------------------
+// Staging shares production's number: production relays what it can't match
+
+const STAGING_SITE = "https://stg.wirdak.example";
+const RELAY_URL = "https://staging.example.convex.site/whatsapp/relay";
+
+/**
+ * Two deployments in one test: `prod` is the one Meta calls (the env from
+ * `beforeEach` plus the relay target), `stg` holds only the relay secret.
+ * `process.env` is global, so staging's env is swapped in around every call
+ * into `stg`. Relay calls reach `stg` unless `relayDown` is set, and every
+ * Graph API send is recorded in `sentBy` with the deployment that made it.
+ */
+function twoDeployments(opts: { relayDown?: boolean } = {}) {
+  vi.stubEnv("WHATSAPP_RELAY_URL", RELAY_URL);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "test-relay-secret-0123456789abcdef");
+  const prod = convexTest(schema, modules);
+  const stg = convexTest(schema, modules);
+  const sentBy: { from: "prod" | "stg"; to: string; body: string }[] = [];
+  let inStaging = false;
+  const asStaging = async <R>(fn: () => Promise<R>): Promise<R> => {
+    const saved = { ...process.env };
+    vi.stubEnv("WIRDAK_ENV", "staging");
+    vi.stubEnv("SITE_URL", STAGING_SITE);
+    vi.stubEnv("WHATSAPP_APP_SECRET", "");
+    vi.stubEnv("WHATSAPP_VERIFY_TOKEN", "");
+    vi.stubEnv("WHATSAPP_RELAY_URL", "");
+    inStaging = true;
+    try {
+      return await fn();
+    } finally {
+      inStaging = false;
+      for (const name of [
+        "WIRDAK_ENV",
+        "SITE_URL",
+        "WHATSAPP_APP_SECRET",
+        "WHATSAPP_VERIFY_TOKEN",
+        "WHATSAPP_RELAY_URL",
+      ]) {
+        vi.stubEnv(name, saved[name] ?? "");
+      }
+    }
+  };
+  const relayCalls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      if (url === RELAY_URL) {
+        relayCalls.push(String(init.body));
+        if (opts.relayDown) throw new TypeError("fetch failed");
+        return await asStaging(() => stg.fetch("/whatsapp/relay", init));
+      }
+      const payload = JSON.parse(String(init.body)) as {
+        to: string;
+        text: { body: string };
+      };
+      sentBy.push({
+        from: inStaging ? "stg" : "prod",
+        to: payload.to,
+        body: payload.text.body,
+      });
+      return new Response("{}", { status: 200 });
+    }),
+  );
+  return { prod, stg, asStaging, sentBy, relayCalls };
+}
+
+test("a code started on staging gets exactly one reply, from staging, linking to staging", async () => {
+  const { prod, stg, asStaging, sentBy } = twoDeployments();
+  const v = await asStaging(async () => {
+    const res = await stg.action(internal.verification.startInternal, {
+      displayName: "علي",
+      clientKey: "client-1",
+      ip: null,
+      returnPath: "/j/AbC-12_x",
+    });
+    if ("error" in res) throw new Error(res.error);
+    return res;
+  });
+
+  // Meta delivers the message to production, which has no such code.
+  await send(prod, v.message);
+
+  expect(sentBy).toEqual([
+    {
+      from: "stg",
+      to: PHONE,
+      body: `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${STAGING_SITE}/j/AbC-12_x`,
+    },
+  ]);
+  expect(await asStaging(() => status(stg, v))).toEqual({
+    status: "matched",
+    maskedPhone: "+971 50 ••• 4567",
+  });
+  expect(
+    await prod.run((ctx) => ctx.db.query("verifications").collect()),
+  ).toEqual([]);
+
+  // The sign-in finishes on staging, and its alert links to staging too.
+  const res = await asStaging(() => claim(stg, v));
+  expect(res).toHaveProperty("sessionToken");
+  expect(sentBy.at(-1)).toMatchObject({ from: "stg", to: PHONE });
+  expect(sentBy.at(-1)!.body).toContain(`${STAGING_SITE}/signout?t=`);
+});
+
+test("a staging code for an existing staging account gets staging's PIN only", async () => {
+  const { prod, stg, asStaging, sentBy } = twoDeployments();
+  await asStaging(() => addPerson(stg));
+  const v = await asStaging(() => addPending(stg, "K7Q29XMB4T"));
+  await send(prod, "رمز التحقق في وِردك: K7Q2-9XMB-4T");
+  expect(sentBy).toHaveLength(1);
+  expect(sentBy[0]).toMatchObject({ from: "stg", to: PHONE });
+  const pin = PIN_RE.exec(sentBy[0]!.body)?.[1];
+  expect(pin).toBeDefined();
+  // sent inline, so the PIN never sits in staging's scheduled-function args
+  const jobs = await asStaging(() =>
+    stg.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()),
+  );
+  expect(JSON.stringify(jobs.map((j) => j.args))).not.toContain(pin!);
+  expect(await asStaging(() => confirmPin(stg, v, pin!))).toHaveProperty(
+    "sessionToken",
+  );
+});
+
+test("a production code is answered by production and never relayed", async () => {
+  const { prod, sentBy, relayCalls } = twoDeployments();
+  const v = await start(prod);
+  await send(prod, v.message);
+  expect(relayCalls).toEqual([]);
+  expect(sentBy).toEqual([{ from: "prod", to: PHONE, body: MATCHED }]);
+});
+
+test("a code neither deployment has gets one no-match reply, from production", async () => {
+  const { prod, stg, asStaging, sentBy, relayCalls } = twoDeployments();
+  await send(prod, "رمز التحقق في وِردك: ZZZZ-2222-ZZ");
+  expect(relayCalls).toHaveLength(1);
+  expect(sentBy).toEqual([{ from: "prod", to: PHONE, body: NO_MATCH }]);
+  // staging recorded the message id, nothing else
+  expect(
+    await asStaging(() =>
+      stg.run((ctx) => ctx.db.query("verifications").collect()),
+    ),
+  ).toEqual([]);
+});
+
+test("a message with no code shape is answered by production without a relay", async () => {
+  const { prod, sentBy, relayCalls } = twoDeployments();
+  await send(prod, "السلام عليكم");
+  await send(prod, "K7Q2-9XMB-4"); // one character short
+  expect(relayCalls).toEqual([]);
+  expect(sentBy.map((s) => [s.from, s.body])).toEqual([
+    ["prod", NO_MATCH],
+    ["prod", NO_MATCH],
+  ]);
+});
+
+test("with staging unreachable production still answers once", async () => {
+  const { prod, stg, asStaging, sentBy, relayCalls } = twoDeployments({
+    relayDown: true,
+  });
+  const v = await asStaging(() => addPending(stg, "K7Q29XMB4T"));
+  await send(prod, "K7Q2-9XMB-4T");
+  expect(relayCalls).toHaveLength(1);
+  expect(sentBy).toEqual([{ from: "prod", to: PHONE, body: NO_MATCH }]);
+  expect((await asStaging(() => status(stg, v))).status).toBe("pending");
+});
+
+test("a rate-limited phone is neither relayed nor answered", async () => {
+  const { prod, sentBy, relayCalls } = twoDeployments();
+  // Production's own per-phone limit (10 an hour) stops relaying first.
+  for (let i = 0; i < 12; i++) {
+    await send(prod, `رمز التحقق في وِردك: ZZZZ-2222-Z${i % 2 ? "Y" : "Z"}`);
+  }
+  expect(relayCalls).toHaveLength(10);
+  expect(sentBy).toHaveLength(10);
+  expect(sentBy.every((s) => s.from === "prod" && s.body === NO_MATCH)).toBe(
+    true,
+  );
+});

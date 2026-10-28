@@ -3,7 +3,12 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import { hmacSha256Hex } from "./lib/crypto";
 import schema from "./schema";
-import { parseIncoming } from "./whatsapp";
+import {
+  parseIncoming,
+  relayIncoming,
+  relaySignature,
+  whatsappConfigured,
+} from "./whatsapp";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -460,4 +465,242 @@ test("simulateIncoming refuses to run outside dev", async () => {
   expect(
     await t.run((ctx) => ctx.db.query("inboundMessages").collect()),
   ).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Relay (production → staging)
+
+const RELAY_SECRET = "test-relay-secret-0123456789abcdef";
+const RELAY_URL = "https://staging.example.convex.site/whatsapp/relay";
+const relayed = {
+  waMessageId: "wamid.r1",
+  from: "971501234567",
+  text: "رمز التحقق في وِردك: ZZZZ-2222-ZZ",
+};
+
+/** Staging: no Meta webhook secrets, only the relay secret. */
+function asStaging() {
+  vi.stubEnv("WHATSAPP_APP_SECRET", "");
+  vi.stubEnv("WHATSAPP_VERIFY_TOKEN", "");
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
+}
+
+async function relayPost(
+  t: ReturnType<typeof convexTest>,
+  body: string,
+  opts: { secret?: string; timestamp?: number; signature?: string | null } = {},
+) {
+  const timestamp = String(opts.timestamp ?? Date.now());
+  const headers: Record<string, string> = {
+    "X-Wirdak-Relay-Timestamp": timestamp,
+  };
+  const signature =
+    opts.signature === undefined
+      ? await relaySignature(opts.secret ?? RELAY_SECRET, timestamp, body)
+      : opts.signature;
+  if (signature !== null) headers["X-Wirdak-Relay-Signature"] = signature;
+  return await t.fetch("/whatsapp/relay", { method: "POST", headers, body });
+}
+
+test("relay endpoint takes a signed, fresh message on staging", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const res = await relayPost(t, JSON.stringify(relayed));
+  expect(res.status).toBe(200);
+  // no pending code here: production must answer
+  expect(await res.json()).toEqual({ handled: false });
+  expect(sent).toEqual([]);
+
+  // a replay of the same message is taken (and stays silent)
+  const again = await relayPost(t, JSON.stringify(relayed));
+  expect(await again.json()).toEqual({ handled: true });
+  expect(sent).toEqual([]);
+});
+
+test("relay endpoint refuses bad, stale, or foreign signatures", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const body = JSON.stringify(relayed);
+  const refused = [
+    await relayPost(t, body, { signature: null }),
+    await relayPost(t, body, { signature: "sha256=00" }),
+    await relayPost(t, body, { secret: "other" }),
+    // Meta's signature scheme with the relay secret is not a relay signature
+    await relayPost(t, body, {
+      signature: `sha256=${await hmacSha256Hex(RELAY_SECRET, body)}`,
+    }),
+    await relayPost(t, body, { timestamp: NOW - 5 * 60_000 - 1 }),
+    await relayPost(t, body, { timestamp: NOW + 5 * 60_000 + 1 }),
+  ];
+  expect(refused.map((r) => r.status)).toEqual([401, 401, 401, 401, 401, 401]);
+  // a signature for one body doesn't cover another
+  const timestamp = String(NOW);
+  const forged = await t.fetch("/whatsapp/relay", {
+    method: "POST",
+    headers: {
+      "X-Wirdak-Relay-Timestamp": timestamp,
+      "X-Wirdak-Relay-Signature": await relaySignature(
+        RELAY_SECRET,
+        timestamp,
+        body,
+      ),
+    },
+    body: JSON.stringify({ ...relayed, from: "971509999999" }),
+  });
+  expect(forged.status).toBe(401);
+  expect(
+    await t.run((ctx) => ctx.db.query("inboundMessages").collect()),
+  ).toEqual([]);
+});
+
+test("relay endpoint is closed on a deployment Meta calls", async () => {
+  // production: has the app secret, so a relay secret alone opens nothing
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
+  const t = convexTest(schema, modules);
+  expect((await relayPost(t, JSON.stringify(relayed))).status).toBe(401);
+  // and a deployment with neither secret is closed too
+  vi.stubEnv("WHATSAPP_APP_SECRET", "");
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "");
+  expect((await relayPost(t, JSON.stringify(relayed))).status).toBe(401);
+  expect(
+    await t.run((ctx) => ctx.db.query("inboundMessages").collect()),
+  ).toEqual([]);
+});
+
+test("relay endpoint rejects malformed messages", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  for (const body of [
+    "not json",
+    JSON.stringify({ ...relayed, from: "+971501234567" }),
+    JSON.stringify({ ...relayed, waMessageId: "" }),
+    // production relays only the first 500 characters
+    JSON.stringify({ ...relayed, text: "x".repeat(501) }),
+    JSON.stringify({ waMessageId: "wamid.x", from: "971501234567" }),
+  ]) {
+    expect((await relayPost(t, body)).status).toBe(400);
+  }
+  expect((await relayPost(t, "x".repeat(8193))).status).toBe(413);
+});
+
+test("the Meta webhook is closed on staging", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const body = JSON.stringify(sampleWebhook);
+  const res = await t.fetch("/whatsapp/webhook", {
+    method: "POST",
+    headers: {
+      "X-Hub-Signature-256": `sha256=${await hmacSha256Hex(RELAY_SECRET, body)}`,
+    },
+    body,
+  });
+  expect(res.status).toBe(401);
+});
+
+test("relayIncoming signs the message and reads the answer", async () => {
+  vi.stubEnv("WHATSAPP_RELAY_URL", RELAY_URL);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
+  const calls: { url: string; headers: Headers; body: string }[] = [];
+  let answer: Response = Response.json({ handled: true });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({
+        url,
+        headers: new Headers(init.headers),
+        body: String(init.body),
+      });
+      return answer;
+    }),
+  );
+  expect(await relayIncoming(relayed)).toBe(true);
+  const call = calls[0]!;
+  expect(call.url).toBe(RELAY_URL);
+  expect(JSON.parse(call.body)).toEqual(relayed);
+  expect(call.headers.get("X-Wirdak-Relay-Timestamp")).toBe(String(NOW));
+  expect(call.headers.get("X-Wirdak-Relay-Signature")).toBe(
+    await relaySignature(RELAY_SECRET, String(NOW), call.body),
+  );
+  // the message carries the person's text, never any of our secrets
+  expect(call.body).not.toContain(RELAY_SECRET);
+  expect(call.body).not.toContain(APP_SECRET);
+  expect(call.body).not.toContain("test-access-token");
+
+  // only what staging scans leaves production
+  await relayIncoming({ ...relayed, text: "x".repeat(4096) });
+  expect(JSON.parse(calls.at(-1)!.body).text).toBe("x".repeat(500));
+
+  for (const res of [
+    Response.json({ handled: false }),
+    Response.json({ handled: "yes" }),
+    new Response("oops", { status: 200 }),
+    new Response(null, { status: 401 }),
+    new Response(null, { status: 500 }),
+  ]) {
+    answer = res;
+    expect(await relayIncoming(relayed)).toBe(false);
+  }
+});
+
+test("relayIncoming gives up after ten seconds", async () => {
+  vi.stubEnv("WHATSAPP_RELAY_URL", RELAY_URL);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
+  let called!: () => void;
+  const fetching = new Promise<void>((resolve) => (called = resolve));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          called();
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    ),
+  );
+  let settled = false;
+  const pending = relayIncoming(relayed).finally(() => (settled = true));
+  await fetching;
+  await vi.advanceTimersByTimeAsync(9_999);
+  expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await pending).toBe(false);
+});
+
+test("relayIncoming stays off unless this deployment is Meta's, over https", async () => {
+  const mock = vi.fn(async () => Response.json({ handled: true }));
+  vi.stubGlobal("fetch", mock);
+  // no relay configured
+  expect(await relayIncoming(relayed)).toBe(false);
+  // staging never relays onward, so two deployments can't loop
+  vi.stubEnv("WHATSAPP_RELAY_URL", RELAY_URL);
+  asStaging();
+  expect(await relayIncoming(relayed)).toBe(false);
+  // a short relay secret counts as unset, on both sides
+  vi.stubEnv("WHATSAPP_APP_SECRET", APP_SECRET);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "too-short");
+  expect(await relayIncoming(relayed)).toBe(false);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
+  // plain http is refused outside dev
+  vi.stubEnv("WHATSAPP_APP_SECRET", APP_SECRET);
+  vi.stubEnv("WIRDAK_ENV", "prod");
+  vi.stubEnv("WHATSAPP_RELAY_URL", "http://staging.example/whatsapp/relay");
+  expect(await relayIncoming(relayed)).toBe(false);
+  expect(mock).not.toHaveBeenCalled();
+});
+
+test("whatsappConfigured: Meta secrets on production, the relay secret on staging", () => {
+  expect(whatsappConfigured()).toBe(true);
+  vi.stubEnv("WHATSAPP_VERIFY_TOKEN", "");
+  expect(whatsappConfigured()).toBe(false);
+  asStaging();
+  expect(whatsappConfigured()).toBe(true);
+  vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
+  expect(whatsappConfigured()).toBe(false);
+  vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "test-access-token");
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "too-short");
+  expect(whatsappConfigured()).toBe(false);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "");
+  expect(whatsappConfigured()).toBe(false);
 });
