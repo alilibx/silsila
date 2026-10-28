@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isStandalone, pushSupport, syncPush } from "./push";
+import {
+  currentEndpoint,
+  dropSubscription,
+  enablePush,
+  isStandalone,
+  pushBlocked,
+  pushSupport,
+  syncPush,
+} from "./push";
 
 const m = vi.hoisted(() => ({
   query: vi.fn(),
@@ -186,5 +194,75 @@ describe("syncPush", () => {
     expect(m.mutation).not.toHaveBeenCalled();
     m.query.mockRejectedValue(new Error("offline"));
     await expect(syncPush("tok")).resolves.toBeUndefined();
+  });
+
+  describe("turning notifications off on this device", () => {
+    const getRegistration = vi.fn();
+
+    beforeEach(() => {
+      localStorage.clear();
+      getRegistration.mockReset().mockImplementation(async () => ({
+        pushManager: { getSubscription: async () => existing, subscribe },
+      }));
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        value: {
+          register,
+          getRegistration,
+          ready: Promise.resolve({
+            pushManager: { getSubscription: async () => existing, subscribe },
+          }),
+        },
+      });
+    });
+
+    it("reads this browser's current endpoint, or null", async () => {
+      expect(await currentEndpoint()).toBeNull();
+      existing = subscription([1, 2, 3]);
+      expect(await currentEndpoint()).toBe("https://push.example/abc");
+      getRegistration.mockResolvedValue(undefined);
+      expect(await currentEndpoint()).toBeNull();
+    });
+
+    it("drops the subscription and returns its endpoint", async () => {
+      existing = subscription([1, 2, 3]);
+      const sub = existing;
+      expect(await dropSubscription()).toBe("https://push.example/abc");
+      expect(sub.unsubscribe).toHaveBeenCalledTimes(1);
+      expect(await dropSubscription()).toBe("https://push.example/abc");
+    });
+
+    it("returns null when there was nothing to drop", async () => {
+      expect(await dropSubscription()).toBeNull();
+    });
+
+    it("keeps syncPush from quietly turning it back on", async () => {
+      existing = subscription([1, 2, 3]);
+      await dropSubscription();
+      existing = null;
+      await syncPush("tok");
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(m.mutation).not.toHaveBeenCalled();
+    });
+
+    it("enabling again lifts that, and syncPush resumes", async () => {
+      existing = subscription([1, 2, 3]);
+      await dropSubscription();
+      existing = null;
+      vi.stubGlobal("Notification", {
+        permission: "granted",
+        requestPermission: vi.fn().mockResolvedValue("granted"),
+      });
+      expect(await enablePush("tok")).toBe("granted");
+      await syncPush("tok");
+      expect(m.mutation).toHaveBeenCalledTimes(2);
+    });
+
+    it("pushBlocked is true only when permission is denied", () => {
+      vi.stubGlobal("Notification", { permission: "denied" });
+      expect(pushBlocked()).toBe(true);
+      vi.stubGlobal("Notification", { permission: "default" });
+      expect(pushBlocked()).toBe(false);
+    });
   });
 });

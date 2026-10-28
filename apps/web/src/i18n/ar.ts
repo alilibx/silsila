@@ -405,6 +405,33 @@ export const ar = {
     signOutOthers: "تسجيل الخروج من كل الأجهزة الأخرى",
     signedOutOthers: "سجّلنا خروج الأجهزة الأخرى.",
     signedOutOne: "سجّلنا خروج ذلك الجهاز.",
+    numbers: "أرقامي",
+    /** Whole juz' read: `جزءاً واحداً`, `جزأين`, `٤ أجزاء`, `١٢ جزءاً`. */
+    juzRead: (n: number) =>
+      `قرأتَ ${counted(n, {
+        one: "جزءاً واحداً",
+        two: "جزأين",
+        few: "أجزاء",
+        many: "جزءاً",
+      })}`,
+    noJuzYet: "لم تُتمّ جزءاً بعد",
+    /** Consecutive weeks with a finish, 2 or more. */
+    weekStreak: (n: number) => {
+      const digits = toArabicDigits(n);
+      if (n === 1) return "أسبوع واحد تقرأ فيه";
+      if (n === 2) return "أسبوعين متتاليين تقرأ فيهما";
+      return n <= 10
+        ? `${digits} أسابيع متتالية تقرأ فيها`
+        : `${digits} أسبوعاً متتالياً تقرأ فيه`;
+    },
+    pushHeading: "الإشعارات على هذا الجهاز",
+    pushLabel: "إشعارات هذا الجهاز",
+    pushInstallHint:
+      "على الآيفون تصلك الإشعارات بعد إضافة وِردك إلى الشاشة الرئيسية.",
+    pushInstall: "أرني خطوات الإضافة",
+    pushUnsupported: "هذا المتصفح لا يدعم الإشعارات.",
+    pushBlocked:
+      "الإشعارات محظورة لوِردك في إعدادات المتصفح. اسمح بها من هناك لتصلك.",
     signedOutPrompt:
       "لا يوجد حساب مسجّل على هذا الجهاز. ابدأ ختمة أو انضم إلى ختمة، وسنتحقق من رقمك عبر واتساب.",
     errors: {

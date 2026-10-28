@@ -3,6 +3,7 @@ import { convexHttp } from "./convexHttp";
 import { readStored, writeStored } from "./session";
 
 const ASKED_KEY = "wirdak.pushAsked";
+const OFF_KEY = "wirdak.pushOff";
 const WORKER_URL = "/sw.js";
 
 type Nav = Pick<Navigator, "userAgent" | "maxTouchPoints"> & {
@@ -41,6 +42,40 @@ export function pushSupport(
   const hasPush = "PushManager" in win && Boolean(win.PushManager);
   if (!hasWorker || !hasPush) return "unsupported";
   return "ready";
+}
+
+/** The person turned notifications off on this device, so loads must not quietly resubscribe. */
+function pushOff(): boolean {
+  return readStored(OFF_KEY) === "1";
+}
+
+/** The browser's own permission is "denied": only its settings can change that. */
+export function pushBlocked(): boolean {
+  return "Notification" in window && Notification.permission === "denied";
+}
+
+async function currentSubscription(): Promise<PushSubscription | null> {
+  if (pushSupport() !== "ready") return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return (await reg?.pushManager.getSubscription()) ?? null;
+}
+
+/** This browser's push endpoint, or null when it has no subscription. */
+export async function currentEndpoint(): Promise<string | null> {
+  return (await currentSubscription())?.endpoint ?? null;
+}
+
+/**
+ * Turns notifications off on this device: ends the browser's subscription and remembers the
+ * choice. Returns the endpoint that was dropped, for the server to forget, or null if none.
+ */
+export async function dropSubscription(): Promise<string | null> {
+  const sub = await currentSubscription();
+  writeStored(OFF_KEY, "1");
+  if (!sub) return null;
+  const endpoint = sub.endpoint;
+  await sub.unsubscribe();
+  return endpoint;
 }
 
 export function pushAsked(): boolean {
@@ -111,6 +146,7 @@ export async function enablePush(
   }
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return "denied";
+  writeStored(OFF_KEY, "0");
   const key = await convexHttp().query(api.push.publicKey, {});
   if (!key) return "unsupported";
   await subscribeAndStore(await registration(), key, sessionToken);
@@ -128,7 +164,8 @@ export async function syncPush(sessionToken: string): Promise<void> {
     if (
       pushSupport() !== "ready" ||
       !("Notification" in window) ||
-      Notification.permission !== "granted"
+      Notification.permission !== "granted" ||
+      pushOff()
     ) {
       return;
     }

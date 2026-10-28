@@ -12,12 +12,35 @@ const m = vi.hoisted(() => ({
   token: undefined as string | undefined,
   clear: vi.fn(),
   stored: null as string | null,
+  stats: null as unknown,
+  thisDevice: false,
+  support: "ready" as "ready" | "ios_install" | "unsupported",
+  blocked: false,
+  endpoint: null as string | null,
+  enablePush: vi.fn(),
+  dropSubscription: vi.fn(),
   fns: {
     updateDisplayName: vi.fn(),
     signOut: vi.fn(),
     signOutOne: vi.fn(),
     signOutOthers: vi.fn(),
+    unsubscribe: vi.fn(),
   },
+}));
+
+vi.mock("../lib/push", () => ({
+  pushSupport: () => m.support,
+  pushBlocked: () => m.blocked,
+  currentEndpoint: () => Promise.resolve(m.endpoint),
+  enablePush: (token: string) => m.enablePush(token),
+  dropSubscription: () => m.dropSubscription(),
+}));
+vi.mock("../components/InstallStepsSheet", () => ({
+  InstallStepsSheet: (props: { onClose: () => void }) => (
+    <div role="dialog" aria-label="install-steps">
+      <button onClick={props.onClose}>close-install</button>
+    </div>
+  ),
 }));
 
 vi.mock("../lib/session", () => ({
@@ -28,11 +51,21 @@ vi.mock("../lib/session", () => ({
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: (ref: never) =>
-      getFunctionName(ref) === "sessions:me" ? m.me : m.list,
+    useQuery: (ref: never, args: unknown) => {
+      const name = getFunctionName(ref);
+      if (name === "sessions:me") return m.me;
+      if (name === "people:myStats") return m.stats;
+      if (name === "push:mine")
+        return args === "skip" ? undefined : { thisDevice: m.thisDevice };
+      return m.list;
+    },
     useMutation: (ref: never) => {
       const name = getFunctionName(ref).split(":")[1] as
-        "updateDisplayName" | "signOut" | "signOutOne" | "signOutOthers";
+        | "updateDisplayName"
+        | "signOut"
+        | "signOutOne"
+        | "signOutOthers"
+        | "unsubscribe";
       return m.fns[name];
     },
   };
@@ -91,6 +124,13 @@ describe("SettingsPage", () => {
   beforeEach(() => {
     Object.values(m.fns).forEach((f) => f.mockReset().mockResolvedValue(null));
     m.clear.mockReset();
+    m.enablePush.mockReset().mockResolvedValue("granted");
+    m.dropSubscription.mockReset().mockResolvedValue("https://push/e1");
+    m.stats = { paceDays: null, juzRead: 0, weekStreak: null };
+    m.thisDevice = false;
+    m.support = "ready";
+    m.blocked = false;
+    m.endpoint = null;
     m.token = "tok";
     m.stored = "tok";
     m.me = { displayName: "أبو علي", maskedPhone: "+971 •• ••• 4567" };
@@ -253,6 +293,156 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("button", { name: "احفظ الاسم" }));
     await screen.findByText("تمّ حفظ الاسم");
     expect(input).toHaveValue("أم سلمى");
+  });
+
+  describe("my numbers", () => {
+    it("numbers block hides pace and streak when null", () => {
+      m.stats = { paceDays: null, juzRead: 4, weekStreak: null };
+      renderPage();
+      const block = screen.getByRole("region", { name: t.settings.numbers });
+      expect(block).toHaveTextContent("قرأتَ ٤ أجزاء");
+      expect(block).not.toHaveTextContent("عادةً تُتمّ الجزء");
+      expect(block).not.toHaveTextContent("متتالية");
+    });
+
+    it("shows pace and streak when known", () => {
+      m.stats = { paceDays: 3, juzRead: 12, weekStreak: 5 };
+      renderPage();
+      const block = screen.getByRole("region", { name: t.settings.numbers });
+      expect(block).toHaveTextContent("قرأتَ ١٢ جزءاً");
+      expect(block).toHaveTextContent(t.card.pace(3));
+      expect(block).toHaveTextContent("٥ أسابيع متتالية تقرأ فيها");
+    });
+
+    it.each([
+      [1, "قرأتَ جزءاً واحداً"],
+      [2, "قرأتَ جزأين"],
+      [10, "قرأتَ ١٠ أجزاء"],
+      [11, "قرأتَ ١١ جزءاً"],
+    ])("agrees the juz' count for %s", (juzRead, text) => {
+      m.stats = { paceDays: null, juzRead, weekStreak: null };
+      renderPage();
+      expect(screen.getByText(text)).toBeInTheDocument();
+    });
+
+    it.each([
+      [2, "أسبوعين متتاليين تقرأ فيهما"],
+      [3, "٣ أسابيع متتالية تقرأ فيها"],
+      [11, "١١ أسبوعاً متتالياً تقرأ فيه"],
+    ])("agrees the streak for %s weeks", (weekStreak, text) => {
+      m.stats = { paceDays: null, juzRead: 5, weekStreak };
+      renderPage();
+      expect(screen.getByText(text)).toBeInTheDocument();
+    });
+
+    it("says nothing is finished yet at zero", () => {
+      renderPage();
+      expect(screen.getByText("لم تُتمّ جزءاً بعد")).toBeInTheDocument();
+      expect(screen.queryByText(/قرأتَ/)).toBeNull();
+    });
+
+    it("shows no numbers block while loading or signed out", () => {
+      m.stats = undefined;
+      renderPage();
+      expect(
+        screen.queryByRole("region", { name: t.settings.numbers }),
+      ).toBeNull();
+    });
+  });
+
+  describe("notifications on this device", () => {
+    const section = () =>
+      screen.getByRole("region", { name: t.settings.pushHeading });
+
+    it("push section per support state", async () => {
+      m.support = "unsupported";
+      const view = renderPage();
+      expect(section()).toHaveTextContent("هذا المتصفح لا يدعم الإشعارات.");
+      expect(within(section()).queryByRole("button")).toBeNull();
+      view.unmount();
+
+      m.support = "ios_install";
+      const user = userEvent.setup();
+      renderPage();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await user.click(
+        within(section()).getByRole("button", { name: t.settings.pushInstall }),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "install-steps" }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "close-install" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("ready and off: a switch that turns notifications on", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      const sw = await within(section()).findByRole("switch");
+      expect(sw).toHaveAttribute("aria-checked", "false");
+      expect(sw).toHaveTextContent(t.khatmaSettings.off);
+      await user.click(sw);
+      expect(m.enablePush).toHaveBeenCalledWith("tok");
+    });
+
+    it("on: a switch that unsubscribes this browser and the server", async () => {
+      m.endpoint = "https://push/e1";
+      m.thisDevice = true;
+      const user = userEvent.setup();
+      renderPage();
+      const sw = await within(section()).findByRole("switch");
+      await vi.waitFor(() =>
+        expect(sw).toHaveAttribute("aria-checked", "true"),
+      );
+      expect(sw).toHaveTextContent(t.khatmaSettings.on);
+      await user.click(sw);
+      expect(m.dropSubscription).toHaveBeenCalledTimes(1);
+      expect(m.fns.unsubscribe).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        endpoint: "https://push/e1",
+      });
+      await vi.waitFor(() =>
+        expect(sw).toHaveAttribute("aria-checked", "false"),
+      );
+    });
+
+    it("a browser subscription the server does not know reads as off", async () => {
+      m.endpoint = "https://push/e1";
+      m.thisDevice = false;
+      renderPage();
+      const sw = await within(section()).findByRole("switch");
+      expect(sw).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("blocked in the browser: a plain line and no switch", async () => {
+      m.blocked = true;
+      renderPage();
+      expect(section()).toHaveTextContent(t.settings.pushBlocked);
+      expect(within(section()).queryByRole("switch")).toBeNull();
+      expect(within(section()).queryByRole("button")).toBeNull();
+    });
+
+    it("denying the permission shows the blocked line", async () => {
+      m.enablePush.mockResolvedValue("denied");
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await within(section()).findByRole("switch"));
+      expect(
+        await within(section()).findByText(t.settings.pushBlocked),
+      ).toBeInTheDocument();
+    });
+
+    it("a failed switch shows a network line and keeps the state", async () => {
+      m.enablePush.mockRejectedValue(new Error("offline"));
+      const user = userEvent.setup();
+      renderPage();
+      const sw = await within(section()).findByRole("switch");
+      await user.click(sw);
+      expect(await within(section()).findByRole("alert")).toHaveTextContent(
+        t.errors.network,
+      );
+      expect(sw).toHaveAttribute("aria-checked", "false");
+    });
   });
 
   describe("signing in on a new phone", () => {

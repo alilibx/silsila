@@ -3,12 +3,12 @@ import type { KhatmaView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
-import { useId } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
 import { NoteCard, takeTarget } from "../components/NoteCard";
 import { MainCard } from "../components/MainCard";
 import { InstallStepsSheet } from "../components/InstallStepsSheet";
+import { SwitchRow } from "../components/SwitchRow";
 import { PoolGrid } from "../components/PoolGrid";
 import { PushPromptSheet } from "../components/PushPromptSheet";
 import { ReleaseSheet } from "../components/ReleaseSheet";
@@ -280,7 +280,8 @@ function KhatmaContent({
         </div>
       )}
       {view.me.isMember && (
-        <NotificationsSwitch
+        <SwitchRow
+          label={t.khatmaSettings.notifications}
           on={view.me.notificationsOn !== false}
           disabled={busy}
           onChange={onSetNotifications}
@@ -302,44 +303,5 @@ function KhatmaContent({
         </p>
       )}
     </main>
-  );
-}
-
-/** A real switch: the state is announced, and also written out beside it. */
-function NotificationsSwitch({
-  on,
-  disabled,
-  onChange,
-}: {
-  on: boolean;
-  disabled: boolean;
-  onChange: (on: boolean) => void;
-}) {
-  const labelId = useId();
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-labelledby={labelId}
-      disabled={disabled}
-      onClick={() => onChange(!on)}
-      className="mt-3 flex min-h-14 w-full items-center justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 py-3 text-start font-medium disabled:opacity-50"
-    >
-      <span id={labelId}>{t.khatmaSettings.notifications}</span>
-      <span
-        className={`flex items-center gap-2.5 ${on ? "text-green-deep" : "text-ink-soft"}`}
-      >
-        {on ? t.khatmaSettings.on : t.khatmaSettings.off}
-        <span
-          aria-hidden="true"
-          className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${on ? "bg-green" : "bg-line"}`}
-        >
-          <span
-            className={`size-5 rounded-full bg-white transition-[margin] ${on ? "ms-auto" : "me-auto"}`}
-          />
-        </span>
-      </span>
-    </button>
   );
 }
