@@ -2,6 +2,7 @@ import type { Schedule } from "@convex/lib/schedule";
 
 /** Copy every feature shares for failures it cannot explain more precisely. */
 const commonErrors = {
+  maintenance: "وِردك في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
   network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
   generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
 } as const;
@@ -10,7 +11,7 @@ const commonErrors = {
 export const ar = {
   errors: commonErrors,
   app: {
-    name: "سلسلة",
+    name: "وِردك",
   },
   pages: {
     home: "ختماتي",
@@ -117,7 +118,7 @@ export const ar = {
       nameRequired: "اكتب اسمك ليعرفك أحبابك.",
       invalid_name: "لم نستطع قبول هذا الاسم. اكتب اسماً قصيراً بحروف عادية.",
       rate_limited: "حاولتَ مرات كثيرة. انتظر قليلاً ثم حاول مرة أخرى.",
-      maintenance: "سلسلة في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+      maintenance: commonErrors.maintenance,
       whatsapp_not_configured:
         "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه.",
       network: commonErrors.network,
@@ -162,7 +163,7 @@ export const ar = {
       shared: {
         blocked:
           "لا نستطيع تنفيذ ذلك الآن. تواصل مع صاحب الختمة إن احتجت مساعدة.",
-        maintenance: "سلسلة في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+        maintenance: commonErrors.maintenance,
         rate_limited: "ضغطتَ مرات كثيرة. انتظر قليلاً ثم حاول مرة أخرى.",
       },
       take: {
@@ -182,7 +183,7 @@ export const ar = {
     hello: (name: string) => `السلام عليكم، ${name}`,
     helloAnon: "السلام عليكم",
     signedOutIntro:
-      "سلسلة تجمع أحبابك على ختمة واحدة للقرآن، يأخذ كل واحد جزءاً واحداً في كل مرة. أنشئ ختمة وادعُ أهلك وأصحابك.",
+      "وِردك يجمع أحبابك على ختمة واحدة للقرآن، يأخذ كل واحد جزءاً واحداً في كل مرة. أنشئ ختمة وادعُ أهلك وأصحابك.",
     empty: "لا توجد ختمات بعد. ابدأ ختمة جديدة وادعُ أحبابك إليها.",
     startNew: "＋ ابدأ ختمة جديدة",
     startNewPlain: "ابدأ ختمة جديدة",
@@ -208,7 +209,7 @@ export const ar = {
     errors: {
       rate_limited:
         "أنشأتَ ختمات كثيرة اليوم. جرّب غداً بإذن الله، أو استخدم إحدى ختماتك.",
-      maintenance: "سلسلة في صيانة قصيرة الآن. حاول بعد قليل بإذن الله.",
+      maintenance: commonErrors.maintenance,
       network: commonErrors.network,
       generic: commonErrors.generic,
     },
@@ -271,7 +272,7 @@ export const ar = {
       "لا يوجد حساب مسجّل على هذا الجهاز. ابدأ ختمة أو انضم إلى ختمة، وسنتحقق من رقمك عبر واتساب.",
     errors: {
       invalid_name: "لم نستطع قبول هذا الاسم. اكتب اسماً قصيراً بحروف عادية.",
-      maintenance: "سلسلة في صيانة قصيرة الآن. احفظ اسمك بعد قليل بإذن الله.",
+      maintenance: "وِردك في صيانة قصيرة الآن. احفظ اسمك بعد قليل بإذن الله.",
       rate_limited:
         "غيّرتَ اسمك مرات كثيرة في وقت قصير. انتظر قليلاً ثم حاول مرة أخرى.",
       network: commonErrors.network,

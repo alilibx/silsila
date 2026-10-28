@@ -67,7 +67,7 @@ vi.mock("../features/verify/VerifySheet", () => ({
 
 const saveSignInProgress = () =>
   localStorage.setItem(
-    "silsila.verify",
+    "wirdak.verify",
     JSON.stringify({
       verificationId: "v1",
       secret: "sec",

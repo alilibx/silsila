@@ -16,14 +16,14 @@ let sent: Sent[];
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
-  vi.stubEnv("SILSILA_ENV", "dev");
+  vi.stubEnv("WIRDAK_ENV", "dev");
   vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", "971500000000");
   vi.stubEnv("WHATSAPP_PHONE_NUMBER_ID", "1234567890");
   vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "test-access-token");
   vi.stubEnv("WHATSAPP_APP_SECRET", APP_SECRET);
   vi.stubEnv("WHATSAPP_VERIFY_TOKEN", "test-verify-token");
   vi.stubEnv("WHATSAPP_GRAPH_VERSION", "v21.0");
-  vi.stubEnv("SITE_URL", "https://silsila.example");
+  vi.stubEnv("SITE_URL", "https://wirdak.example");
   sent = [];
   vi.stubGlobal(
     "fetch",
@@ -86,7 +86,7 @@ const sampleWebhook = webhook([
     id: "wamid.1",
     timestamp: "1800000000",
     type: "text",
-    text: { body: "رمز التحقق في سلسلة: K7Q2-9XMB-4T" },
+    text: { body: "رمز التحقق في وِردك: K7Q2-9XMB-4T" },
   },
 ]);
 
@@ -95,7 +95,7 @@ test("parseIncoming extracts text messages", () => {
     {
       waMessageId: "wamid.1",
       from: "971501234567",
-      text: "رمز التحقق في سلسلة: K7Q2-9XMB-4T",
+      text: "رمز التحقق في وِردك: K7Q2-9XMB-4T",
     },
   ]);
   expect(
@@ -197,23 +197,23 @@ test("sendText in dev without a token logs instead of sending", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   await t.action(internal.whatsapp.sendText, {
     to: "+971501234567",
-    body: "رمز الدخول إلى سلسلة: 123456",
+    body: "رمز الدخول إلى وِردك: 123456",
   });
   expect(sent).toEqual([]);
   expect(log.mock.calls.flat().join(" ")).toContain(
-    "رمز الدخول إلى سلسلة: 123456",
+    "رمز الدخول إلى وِردك: 123456",
   );
 });
 
 test("sendText in prod never logs message bodies", async () => {
   const t = convexTest(schema, modules);
-  vi.stubEnv("SILSILA_ENV", "prod");
+  vi.stubEnv("WIRDAK_ENV", "prod");
   const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) =>
     vi.spyOn(console, m).mockImplementation(() => {}),
   );
   const logged = () =>
     spies.flatMap((s) => s.mock.calls.flat().map(String)).join(" ");
-  const body = "رمز الدخول إلى سلسلة: 654321";
+  const body = "رمز الدخول إلى وِردك: 654321";
 
   // missing token: not sent, not logged
   vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
@@ -450,7 +450,7 @@ test("webhook verify handshake echoes the challenge only for the right token", a
 
 test("simulateIncoming refuses to run outside dev", async () => {
   const t = convexTest(schema, modules);
-  vi.stubEnv("SILSILA_ENV", "prod");
+  vi.stubEnv("WIRDAK_ENV", "prod");
   await expect(
     t.action(internal.dev.simulateIncoming, {
       from: "971501234567",

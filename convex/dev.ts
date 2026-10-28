@@ -12,7 +12,7 @@ export const simulateIncoming = internalAction({
   args: { from: v.string(), text: v.string() },
   handler: async (ctx, args): Promise<void> => {
     if (!isDev()) {
-      throw new Error("simulateIncoming runs only when SILSILA_ENV is dev");
+      throw new Error("simulateIncoming runs only when WIRDAK_ENV is dev");
     }
     await ctx.runAction(internal.whatsapp.handleIncoming, {
       waMessageId: `dev.${randomToken(12)}`,

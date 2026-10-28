@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadProgress, saveProgress, type Progress } from "./progress";
 
-const KEY = "silsila.verify";
+const KEY = "wirdak.verify";
 const base = () => ({
   verificationId: "v1",
   secret: "sec",
@@ -9,7 +9,13 @@ const base = () => ({
   expiresAt: Date.now() + 60_000,
 });
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  // A fixed clock: base() reads Date.now(), so two calls must agree.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-28T08:00:00Z"));
+  localStorage.clear();
+});
+afterEach(() => vi.useRealTimers());
 
 describe("progress intent", () => {
   it("round-trips each kind of intent", () => {

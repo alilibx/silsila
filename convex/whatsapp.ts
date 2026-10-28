@@ -30,11 +30,11 @@ export function env(name: EnvName): string | undefined {
 }
 
 /**
- * Only an explicit `SILSILA_ENV=dev` relaxes anything; an unset or unknown
+ * Only an explicit `WIRDAK_ENV=dev` relaxes anything; an unset or unknown
  * value behaves like prod (strict config, no message bodies in logs).
  */
 export function isDev(): boolean {
-  return process.env.SILSILA_ENV === "dev";
+  return process.env.WIRDAK_ENV === "dev";
 }
 
 export function whatsappConfigured(): boolean {
@@ -51,24 +51,24 @@ export function siteUrl(): string {
 // Message texts (sent verbatim)
 
 export const verificationMessage = (code: string) =>
-  `رمز التحقق في سلسلة: ${code}`;
+  `رمز التحقق في وِردك: ${code}`;
 export const NO_MATCH_REPLY =
-  "لم نجد رمز تحقق صالحاً. ارجع إلى سلسلة واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
+  "لم نجد رمز تحقق صالحاً. ارجع إلى وِردك واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
 /** Ends with a link back to the site (spec 5.2 step 5) when one is configured. */
 export const matchedReply = () => {
   const url = siteUrl();
   return url
-    ? `تمّ التحقق ✅ ارجع إلى سلسلة لتكمل:\n${url}`
-    : "تمّ التحقق ✅ ارجع إلى سلسلة لتكمل.";
+    ? `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${url}`
+    : "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.";
 };
 /** Says what the code is for, so a forwarded-link victim knows not to hand it over. */
 export const pinReply = (pin: string) =>
-  `رمز الدخول إلى سلسلة: ${pin}\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فسلسلة لا تطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
+  `رمز الدخول إلى وِردك: ${pin}\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
 export const signInAlert = (deviceLabel: string, alertToken: string) =>
-  `تسجيل دخول جديد إلى سلسلة من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: ${siteUrl()}/signout?t=${alertToken}`;
+  `تسجيل دخول جديد إلى وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: ${siteUrl()}/signout?t=${alertToken}`;
 /** Sent instead of `signInAlert` when the sign-in created the account. */
 export const accountCreatedAlert = (deviceLabel: string, alertToken: string) =>
-  `تمّ إنشاء حساب في سلسلة برقمك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: ${siteUrl()}/signout?t=${alertToken}`;
+  `تمّ إنشاء حساب في وِردك برقمك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: ${siteUrl()}/signout?t=${alertToken}`;
 
 // ---------------------------------------------------------------------------
 // Inbound parsing

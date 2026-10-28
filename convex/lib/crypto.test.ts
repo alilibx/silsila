@@ -34,7 +34,7 @@ describe("codes", () => {
   });
 
   it("normalizes messy input", () => {
-    expect(normalizeCode("رمز التحقق في سلسلة: k7q2 9xmb-4t ")).toBe(
+    expect(normalizeCode("رمز التحقق في وِردك: k7q2 9xmb-4t ")).toBe(
       "K7Q29XMB4T",
     );
     expect(normalizeCode("I O 0 1 l")).toBe("L");

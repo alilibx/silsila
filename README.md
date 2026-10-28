@@ -1,4 +1,4 @@
-# سلسلة · Silsila
+# وِردك · Wirdak
 
 ختمة جماعية للقرآن الكريم مع العائلة والأصدقاء والزملاء، بسيطة بما يكفي لطفل في العاشرة ولجدٍّ في الثمانين.
 
@@ -32,11 +32,11 @@ The cloud Convex project (region EU West, Ireland) is created at deploy time; no
 
 ## Development / e2e
 
-- `pnpm dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. In dev (`SILSILA_ENV=dev`) a WhatsApp message can be simulated with `pnpm exec convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
+- `pnpm dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. Mark the local backend as dev once with `pnpm exec convex env set WIRDAK_ENV dev` (a backend set up before the rename has the old `SILSILA_ENV`, which no longer counts; remove it with `pnpm exec convex env remove SILSILA_ENV`). In dev (`WIRDAK_ENV=dev`) a WhatsApp message can be simulated with `pnpm exec convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
 - `pnpm e2e` runs the Playwright smoke test (Chromium, 390×844) against a local backend and Vite server that it starts and stops itself, with no cloud project and no real WhatsApp. It plays two people through verifying, creating a khatma, taking, finishing, and joining by invite. Stop `pnpm dev` first (the ports must be free), and run `pnpm exec playwright install chromium` once. State lives in `.convex/local`, shared with `pnpm dev`.
 
 Deployment (Convex production, Vercel, WhatsApp) is described in [docs/deploy.md](docs/deploy.md).
 
-Sessions: after WhatsApp verification the backend issues a random session token, and the web app keeps it in `localStorage` (key `silsila.session`), falling back to memory when storage is blocked. Spec 5.2 asks for this choice to be documented: an HttpOnly cookie is impractical because the site (Vercel) and the backend (Convex) are on different domains. Only the token's SHA-256 hash is stored on the server, and every device can be signed out from the settings page or from the WhatsApp sign-in alert.
+Sessions: after WhatsApp verification the backend issues a random session token, and the web app keeps it in `localStorage` (key `wirdak.session`), falling back to memory when storage is blocked. Spec 5.2 asks for this choice to be documented: an HttpOnly cookie is impractical because the site (Vercel) and the backend (Convex) are on different domains. Only the token's SHA-256 hash is stored on the server, and every device can be signed out from the settings page or from the WhatsApp sign-in alert.
 
 Tests run with Vitest: `convex/**` in the `edge-runtime` environment (required by `convex-test`), `apps/web/**` in `jsdom`. CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, test, and the web build on Node 22 for every pull request and push to `main`. It deploys nothing: Vercel's build runs `convex deploy` and then the web build, so both ship together (see [docs/deploy.md](docs/deploy.md)).
