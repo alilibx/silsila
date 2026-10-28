@@ -14,17 +14,17 @@ Invite the people you love, take one juz' at a time, and when all 30 are done th
 
 ## Development
 
-Requirements: Node 22+ (`.nvmrc`), pnpm 11 (`corepack enable`).
+Requirements: Node 22+ (`.nvmrc`) and Bun 1.4+ ([bun.sh](https://bun.sh)). Bun installs packages and runs the scripts; the tools themselves (Vite, Vitest, Convex) run on Node.
 
 ```sh
-pnpm install
-CONVEX_AGENT_MODE=anonymous pnpm dev   # local Convex backend + web dev server
-pnpm typecheck
-pnpm lint
-pnpm test
+bun install
+CONVEX_AGENT_MODE=anonymous bun run dev   # local Convex backend + web dev server
+bun run typecheck
+bun run lint
+bun run test
 ```
 
-`pnpm dev` runs `convex dev` against a local anonymous backend (`http://127.0.0.1:3210`, no Convex account or cloud project needed). On first run Convex writes the deployment settings to `.env.local`, which is git-ignored. `pnpm dev` also starts the web app (`apps/web`) on `http://localhost:5173`; copy `apps/web/.env.example` to `apps/web/.env.local` first.
+`bun run dev` runs `convex dev` against a local anonymous backend (`http://127.0.0.1:3210`, no Convex account or cloud project needed). On first run Convex writes the deployment settings to `.env.local`, which is git-ignored. `bun run dev` also starts the web app (`apps/web`) on `http://localhost:5173`; copy `apps/web/.env.example` to `apps/web/.env.local` first.
 
 The celebration duas (Quran 2:127 and 2:201) are copied verbatim from the Tanzil Quran Text (Uthmani, Version 1.1) of the [Tanzil Project](https://tanzil.net), used under its licence, which asks for the source and a link.
 
@@ -32,10 +32,10 @@ The cloud Convex project is `manzilo:wirdak` (EU West, Ireland), with the deploy
 
 ## Development / e2e
 
-- `pnpm dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. Mark the local backend as dev once with `pnpm exec convex env set WIRDAK_ENV dev` (a backend set up before the rename has the old `SILSILA_ENV`, which no longer counts; remove it with `pnpm exec convex env remove SILSILA_ENV`). In dev (`WIRDAK_ENV=dev`) a WhatsApp message can be simulated with `pnpm exec convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
-- `pnpm e2e` runs the Playwright smoke test (Chromium, 390×844) against a local backend and Vite server that it starts and stops itself, with no cloud project and no real WhatsApp. It plays two people through verifying, creating a khatma, taking, finishing, and joining by invite. Stop `pnpm dev` first (the ports must be free), and run `pnpm exec playwright install chromium` once. State lives in `.convex/local`, shared with `pnpm dev`.
+- `bun run dev` starts the local anonymous Convex backend and the Vite dev server on `http://localhost:5173`. Mark the local backend as dev once with `bun run convex env set WIRDAK_ENV dev` (a backend set up before the rename has the old `SILSILA_ENV`, which no longer counts; remove it with `bun run convex env remove SILSILA_ENV`). In dev (`WIRDAK_ENV=dev`) a WhatsApp message can be simulated with `bun run convex run dev:simulateIncoming '{"from":"971500000001","text":"<the ready-made message>"}'`.
+- `bun run e2e` runs the Playwright smoke test (Chromium, 390×844) against a local backend and Vite server that it starts and stops itself, with no cloud project and no real WhatsApp. It plays two people through verifying, creating a khatma, taking, finishing, and joining by invite. Stop `bun run dev` first (the ports must be free), and run `bun run playwright install chromium` once. State lives in `.convex/local`, shared with `bun run dev`.
 
-- Plan 2 added grace periods, in-app notes, and Web Push. Real pushes need the VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, see [docs/deploy.md](docs/deploy.md)); without them the dev backend logs `push skipped (no VAPID)` and the in-app notes still appear. In dev, `pnpm exec convex run dev:forceGraceEnd '{"inviteCode":"<code>","juz":5}'` ends the grace of that juz' right now, as the scheduled job would, so you can see it open for help without waiting. It refuses unless `WIRDAK_ENV` is `dev`. `pnpm e2e` also covers it (a grace end and a release, seen from the organizer's side).
+- Plan 2 added grace periods, in-app notes, and Web Push. Real pushes need the VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, see [docs/deploy.md](docs/deploy.md)); without them the dev backend logs `push skipped (no VAPID)` and the in-app notes still appear. In dev, `bun run convex run dev:forceGraceEnd '{"inviteCode":"<code>","juz":5}'` ends the grace of that juz' right now, as the scheduled job would, so you can see it open for help without waiting. It refuses unless `WIRDAK_ENV` is `dev`. `bun run e2e` also covers it (a grace end and a release, seen from the organizer's side).
 
 Deployment (Convex production, Vercel, WhatsApp) is described in [docs/deploy.md](docs/deploy.md).
 

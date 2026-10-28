@@ -7,9 +7,9 @@
  * (output path under apps/web/public/, size, and the URL hash the page reads to pick a variant).
  * It then needs no render-size.
  *
- *   pnpm exec tsx scripts/render-images.ts
+ *   bun run tsx scripts/render-images.ts
  *
- * Needs Playwright's Chromium (`pnpm exec playwright install chromium`).
+ * Needs Playwright's Chromium (`bun run playwright install chromium`).
  */
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";

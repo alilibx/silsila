@@ -11,9 +11,9 @@ export function randomPhone(): string {
   return `97150${tail}`;
 }
 
-/** Runs an internal Convex function on the local backend (`npx convex run`). */
+/** Runs an internal Convex function on the local backend (`bun run convex run`). */
 async function convexRun(fn: string, args: object): Promise<void> {
-  await run("pnpm", ["exec", "convex", "run", fn, JSON.stringify(args)], {
+  await run("bun", ["run", "convex", "run", fn, JSON.stringify(args)], {
     cwd: new URL("..", import.meta.url).pathname,
   });
 }

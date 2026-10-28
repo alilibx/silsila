@@ -2,12 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * End-to-end smoke test against the LOCAL anonymous Convex backend (no cloud project, no login,
- * no real WhatsApp) and the Vite dev server. `pnpm e2e` starts both, runs the tests at phone
+ * no real WhatsApp) and the Vite dev server. `bun run e2e` starts both, runs the tests at phone
  * size in Chromium, and stops both.
  *
- * The backend keeps its state in `.convex/local` (git-ignored), shared with `pnpm dev`; the tests
+ * The backend keeps its state in `.convex/local` (git-ignored), shared with `bun run dev`; the tests
  * use fresh phone numbers so they never collide with earlier data. `reuseExistingServer` is
- * false: stop `pnpm dev` first, or the ports are busy and the run refuses to start.
+ * false: stop `bun run dev` first, or the ports are busy and the run refuses to start.
  */
 const WEB_PORT = 5173; // the verification endpoint's CORS allows http://localhost:5173 only
 const CONVEX_PORT = 3210;
@@ -42,7 +42,7 @@ export default defineConfig({
   webServer: [
     {
       // Local anonymous backend; ready once the functions are pushed.
-      command: "pnpm exec convex dev --tail-logs disable",
+      command: "bun run convex dev --tail-logs disable",
       env: { CONVEX_AGENT_MODE: "anonymous" },
       wait: { stderr: /Convex functions ready/ },
       timeout: 180_000,
@@ -51,7 +51,8 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGINT", timeout: 15_000 },
     },
     {
-      command: `pnpm --dir apps/web exec vite --host localhost --port ${WEB_PORT} --strictPort`,
+      command: `bun run vite --host localhost --port ${WEB_PORT} --strictPort`,
+      cwd: "apps/web",
       env: {
         VITE_CONVEX_URL: `http://127.0.0.1:${CONVEX_PORT}`,
         VITE_CONVEX_SITE_URL: `http://127.0.0.1:${CONVEX_SITE_PORT}`,
