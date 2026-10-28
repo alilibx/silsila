@@ -5,7 +5,7 @@
 - **Builds on:** `docs/superpowers/specs/2026-10-27-silsila-v1-design.md` (the "v1 spec"; written under the old name Silsila) and what plan 1 shipped (`docs/superpowers/plans/2026-10-27-silsila-v1-core-loop.md`, PR #5)
 - **Status:** draft, waiting for Ali's approval
 
-Items marked **[builder's call]** are decisions Claude made while writing this up. Ali didn't decide them and can overturn any of them. Everything else is Ali's, from the plan 2 brainstorm (2026-10-28) or from the v1 spec.
+Items marked **[builder's call]** are decisions made while writing this up, not by Ali. Ali didn't decide them and can overturn any of them. Everything else is Ali's, from the plan 2 brainstorm (2026-10-28) or from the v1 spec.
 
 ## 1. Intent
 
@@ -223,7 +223,7 @@ Every message in this plan reaches the person in two ways:
 iOS gives a site added to the home screen its own storage, separate from Safari. The session token lives in `localStorage`, so without help the home-screen app opens signed out. The person would then have to verify again, and an existing number needs the 6-digit WhatsApp code. That's too much for the 80-year-old this app is for, and push only works inside the home-screen app. So Wirdak carries the sign-in over:
 
 1. Just before showing the "add to home screen" steps, the signed-in Safari page asks the server for a **hand-off token**. It's random (generated in an action, like every other secret), stored only as a hash, tied to the current person and session, single use, and valid for 30 minutes.
-2. The address the home-screen app opens on first launch carries that token, for example `/handoff?t=…`. The builder confirms on a real iPhone which way iOS picks the launch address: from the manifest's `start_url` (which then needs a per-person manifest) or from the page that was open. The builder picks whichever works and documents it.
+2. The token rides only in the web app manifest's `start_url` (for example `/?h=…`), which the page swaps in just before showing the steps. It never goes into the page's own address. The steps start with the Share button, and someone who picks WhatsApp there by mistake would otherwise post a working sign-in link to the group. The builder confirms on a real iPhone that iOS uses `start_url` for the home-screen app. If it doesn't, the builder stops and brings it back to Ali instead of putting the token in the page address.
 3. On first launch, the home-screen app trades the token for a **new session** for the same person. The device shows in the signed-in devices list as "iPhone · الشاشة الرئيسية". The token is then used up, and the app removes it from the address bar. Then the app asks for push permission (5.2).
 4. **Fallbacks:**
    - A used or expired token on a later launch does nothing if the app already has a session.

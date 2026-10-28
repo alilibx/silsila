@@ -38,7 +38,7 @@
 - **Nudge cap:** one nudge (reminder or behind invite) per member per 24 hours.
 - **Organizer alert** (spec 3.3, 3.4, 5.3): the same wording whenever a juz' goes back to the pool by timeout or "I can't finish it". It never goes to the organizer when they're the one releasing or the one whose juz' it is, and never for a removal.
 - **Automatic handover:** organizer away 30 days. The successor is the earliest-joined active member seen in the last 7 days.
-- **Hand-off token:** `randomToken(32)`, single use, expires after 30 minutes, dead once its session is gone. Redeeming it creates a session with the device label `iPhone · الشاشة الرئيسية` and sends no WhatsApp alert.
+- **Hand-off token:** `randomToken(32)`, single use, expires after 30 minutes, dead once its session is gone. It travels only in the swapped-in manifest's `start_url`, never in the page's address bar or history. Redeeming it creates a session with the device label `iPhone · الشاشة الرئيسية` and sends no WhatsApp alert.
 - **Time-zone fallback:** a stored time zone that `Intl` rejects is treated as `Asia/Dubai`.
 - **No data migration.** Production has no data (ARQ-254). Schema fields may be required. Reset the local dev backend if old rows fail validation.
 
@@ -184,7 +184,7 @@ test("grace validation and defaults", () => {
       - `kind: "almostUp" | "openForHelp" | "thanks" | "reminder" | "behind" | "completed" | "nowOrganizer" | "organizerMoved"`
       - `juz: number[]`, `count: number | null`, `until: number | null`
       - `assignmentId: Id<"assignments"> | null`, `roundNumber: number | null`
-      - `createdAt`, `clearedAt: number | null`
+      - `createdAt`, `pushedAt: number | null`, `clearedAt: number | null`
     - indexes: `by_person_khatma` (`personId`, `khatmaId`, `clearedAt`), `by_khatma_kind` (`khatmaId`, `kind`, `clearedAt`), `by_assignment` (`assignmentId`), `by_createdAt`
   - New table `pushSubscriptions`: `personId`, `sessionId`, `endpoint`, `p256dh`, `auth`, `createdAt`. Indexes `by_person`, `by_session`, `by_endpoint`.
   - New table `handoffTokens`: `tokenHash`, `personId`, `sessionId`, `createdAt`, `expiresAt`, `usedAt: number | null`. Indexes `by_tokenHash`, `by_createdAt`.
@@ -256,7 +256,7 @@ test("setNotifications flips notificationsOn for a member only", async () => { /
     - `openForHelp` (several): `الأجزاء ${list} متاحة لمن يساعد. هل تأخذ أحدها أو ترسل الدعوة؟`, where `list` is joined with `، ` and ` و` before the last
     - `thanks`: `أحدهم يُكمل الجزء ${n} الآن. جزاكما الله خيراً.`
     - `reminder`: `الجزء ${n} في انتظارك، يسّر الله لك.`
-    - `behind`: `الختمة تحتاج ${count} أجزاء أخرى قبل ${weekday(until)}. هل تأخذ جزءاً؟`, or `الختمة تحتاج ${count} أجزاء أخرى. هل تأخذ جزءاً؟` once `until` has passed
+    - `behind`: `الختمة تحتاج ${ajzaa(count)} قبل ${when(until)}. هل تأخذ جزءاً؟`, or without `قبل …` once `until` has passed. `when` is the weekday (`الجمعة`) when `until` is within 6 days, else `formatDate`-style day and month (`١٢ نوفمبر`). `ajzaa(n)` agrees with the number: 1 `جزءاً واحداً`, 2 `جزأين`, 3 to 10 `${n} أجزاء`, 11 and up `${n} جزءاً`
     - `completed`: `ختمنا القرآن معاً، الحمد لله`
     - `nowOrganizer`: `أصبحتَ منظّم هذه الختمة. جزاك الله خيراً.`
     - `organizerMoved`: `مرّ وقت منذ زيارتك، فنقلنا تنظيم الختمة إلى أحد أعضائها ليستمر الخير. ما زلت عضواً فيها.`
@@ -273,7 +273,8 @@ test("setNotifications flips notificationsOn for a member only", async () => { /
   - `api.push.mine` (sessionQuery) → `{ thisDevice: boolean }` given `{ endpoint?: string }`.
   - `internal.push.deliveryPlan` (internal query, `{ noteId }`) → `{ subscriptions: { endpoint; p256dh; auth }[]; payload: { title: "وِردك"; body: string; url: string } } | null`. It returns null when the note is cleared, the membership is gone or notifications are off, or there are no subscriptions. `url` is `/j/${inviteCode}`.
   - `internal.push.removeGone` (internal mutation, `{ endpoints: string[] }`).
-  - `internal.pushNode.deliver` (internal action, `"use node"`, `{ noteId }`): runs `deliveryPlan` and sends with `web-push`, using `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and a TTL of 12 hours. Endpoints answering 404 or 410 go to `removeGone`. With VAPID unset in dev it logs `push skipped (no VAPID)` and returns.
+  - `internal.push.markPushed` (internal mutation, `{ noteId }`): sets `notes.pushedAt`.
+  - `internal.pushNode.deliver` (internal action, `"use node"`, `{ noteId }`): runs `deliveryPlan`, calls `markPushed`, and sends with `web-push`, using `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and a TTL of 12 hours. Endpoints answering 404 or 410 go to `removeGone`. With VAPID unset in dev it logs `push skipped (no VAPID)` and returns.
   - `deleteSession(ctx: MutationCtx, sessionId: Id<"sessions">): Promise<void>` in `sessions.ts`: deletes the session plus its push subscriptions and hand-off tokens. Every sign-out path uses it.
   - `maintenance.purge` also deletes notes older than `notesRetentionMs` and hand-off tokens older than 1 day.
 
@@ -283,6 +284,9 @@ test("setNotifications flips notificationsOn for a member only", async () => { /
 test("noteText covers every kind in Eastern digits", () => {
   expect(noteText({ kind: "almostUp", juz: [12], count: null, until: null })).toBe("مهلة الجزء ١٢ أوشكت على الانتهاء. هل تحتاج وقتاً أطول؟");
   expect(noteText({ kind: "openForHelp", juz: [12, 15], count: null, until: null })).toContain("١٢ و١٥");
+  expect(noteText({ kind: "behind", juz: [], count: 1, until: null })).toBe("الختمة تحتاج جزءاً واحداً. هل تأخذ جزءاً؟");
+  expect(noteText({ kind: "behind", juz: [], count: 2, until: null })).toContain("جزأين");
+  expect(noteText({ kind: "behind", juz: [], count: 12, until: null })).toContain("١٢ جزءاً");
 });
 test("notify inserts a note and schedules push at the next waking moment", async () => { /* person in Asia/Dubai with a subscription, now = 23:00 local → scheduled deliver at 07:00 local */ });
 test("notify schedules no push when notifications are off or there is no subscription", async () => {});
@@ -322,11 +326,11 @@ test("purge deletes notes older than 30 days", async () => {});
     - `isTaken` follows the same rule.
     - `buildTiles` shows such a row as `state: "reading"`, `isMine: true` to its reader only, and as `state: "open"`, `readerName: null` to everyone else.
   - `internal.grace.noticeDue({ assignmentId })`: if the row is held, not extended, not opened, and `noticeSentAt === null`, it sets `noticeSentAt` and sends `notify(reader, "almostUp", [juz], assignmentId)`.
-  - `internal.grace.endDue({ assignmentId, endsAt })`: a no-op unless the row is held, not opened, and `graceEndsAt === endsAt`. Otherwise it sets `openedForHelpAt = now`, clears the row's `almostUp` and `reminder` notes, and calls `alertOrganizer`.
+  - `internal.grace.endDue({ assignmentId, endsAt })`: does nothing unless the row is held (not finished, not released), not opened, and `graceEndsAt === endsAt`. Only when all three hold does it set `openedForHelpAt = now`, clears the row's `almostUp` and `reminder` notes, and calls `alertOrganizer`.
   - `alertOrganizer(ctx: MutationCtx, khatma: Doc<"khatmas">, juz: number, actorPersonId: Id<"people">): Promise<void>`:
     - Skips when `khatma.creatorPersonId === actorPersonId`.
-    - Otherwise appends `juz` to the organizer's uncleared `openForHelp` note in this khatma created within `openForHelpBatchMs`, or calls `notify` for a new one.
-    - A pending push reads the current list when it's delivered.
+    - Otherwise it appends `juz` to the organizer's uncleared `openForHelp` note in this khatma created within `openForHelpBatchMs`, or calls `notify` for a new one.
+    - If the note's push hasn't gone out yet, that pending push reads the current list when it's delivered. If it has (`pushedAt !== null`), it schedules another `deliver` for the note at the next waking moment, so every juz' reaches the organizer by push too.
   - `api.pool.stillReading` (sessionMutation, `{ inviteCode }`) → `{ ok: true } | { ok: false; reason: "not_holding" | "already_extended" | "opened" | "blocked" | "rate_limited" | "maintenance" }`:
     - sets `extended = true` and `graceEndsAt = addWakingMs(graceEndsAt, graceWakingMs, tz, quiet)`
     - schedules `endDue` with the new end
@@ -335,7 +339,11 @@ test("purge deletes notes older than 30 days", async () => {});
     - works on an open-for-help hold, and clears that row's notes and the organizer alert for the juz'
     - `FinishResult` failure reasons gain `"taken_over"`, returned when the caller holds nothing and their latest row in the round has `releasedBySystem && openedForHelpAt !== null`
   - **Release** (`api.pool.release`): also calls `alertOrganizer(ctx, khatma, juz, person._id)` and clears the row's notes.
-  - **Undo** (`api.pool.undoFinish`): restores the row as it was. If it isn't opened and `graceEndsAt <= now`, it schedules `endDue` right away. If it was opened, it re-adds the organizer alert.
+  - **Undo** (`api.pool.undoFinish`): restores the row as it was. Then, for a row that isn't opened:
+    - if `noticeSentAt === null`, it isn't extended, and `noticeAt <= now`, it schedules `noticeDue` right away (the original job ran while the row was finished and did nothing)
+    - if `graceEndsAt <= now`, it schedules `endDue` right away
+
+    If the row was opened, undo re-adds the organizer alert.
   - `view.me.hold`:
     - `openForHelp: openedForHelpAt !== null`
     - `canExtend: noticeSentAt !== null && !extended && openedForHelpAt === null`
@@ -350,6 +358,8 @@ test("opened juz looks open to members, viewers, and the organizer; reader still
 test("organizer alert on timeout and on release are identical", async () => { /* compare note kind and noteText for a timed-out juz and a released juz */ });
 test("no organizer alert when the organizer is the reader or the releaser", async () => {});
 test("two ajza opening within an hour make one alert listing both", async () => {});
+test("a juz added after the batched alert was pushed schedules another push", async () => {});
+test("undo after noticeAt passed while finished sends the almost-up note", async () => {});
 test("reader finishes after open: counts done and completion still works", async () => {});
 test("someone else takes it: old row released by system, one thanks note, reader's pace unchanged", async () => {});
 test("reader finishing after takeover gets taken_over", async () => {});
@@ -393,7 +403,8 @@ test("notifications off: no push scheduled, note still exists, juz still opens",
       - `capacity` = Σ over all active members of `floor(remainingMs / paceMs)`, minus 1 for each member holding a juz'
     - **Behind** means `open > 0` and either `open > capacity` or `remainingMs === 0`.
     - **Skip the round** if it isn't behind, or if `round.behindInvitedAt` is within `nudgeCooldownMs`.
-    - **Invite:** sort `free` by `paceMs` ascending, drop members already invited this round (a `behind` note with this `roundNumber`) and members inside the nudge cooldown, then take the first `open`. Send each `notify(m, "behind", count = open, until = targetEndAt, roundNumber)`, and set their `lastNudgeAt` and `round.behindInvitedAt`.
+    - **Shortfall:** `open` when `remainingMs === 0`, else `open - max(0, capacity)`.
+    - **Invite:** sort `free` by `paceMs` ascending, drop members already invited this round (a `behind` note with this `roundNumber`) and members inside the nudge cooldown, then take the first `shortfall`. Send each `notify(m, "behind", count = open, until = targetEndAt, roundNumber)`, and set their `lastNudgeAt` and `round.behindInvitedAt`.
   - **Completion note:** `onRoundCompleted` sends `notify(member, "completed", roundNumber)` to every active member, and clears that round's `behind` notes.
   - `api.people.myStats` (sessionQuery) → `{ paceDays: number | null; juzRead: number; weekStreak: number | null } | null`:
     - `paceDays` only when pace is known.
@@ -413,6 +424,7 @@ test("paceFrom", () => {
 test("reminder at 1.5x pace, once, never after almost-up, never inside the cooldown", async () => {});
 test("daily khatma: almost-up comes first and the reminder is skipped", async () => {});
 test("behind invite goes to the fastest free members first and never to holders", async () => {});
+test("behind invite reaches only as many members as the shortfall", async () => { /* open 20, capacity 18 → 2 notes */ });
 test("behind invite widens at most once a day and is off for no-deadline khatmas", async () => {});
 test("completion sends one completed note per active member", async () => {});
 test("myStats: pace hidden under 3 finishes; streak null under 2 weeks; juzRead counts finishes", async () => {});
@@ -513,12 +525,13 @@ test("the new session appears in sessions.list with the home-screen label", asyn
   - `previewTags(p: PreviewData | null, pageUrl: string): { title: string; description: string; image: string; url: string }`:
     - Title is the name or `ختمة ${formatDate(createdAt)}`, then ` · وِردك`.
     - Description is `تمّ ${done} من ٣٠ جزءاً · الختمة ${round}`, plus ` · دعاك ${inviterName}` when present.
-    - `null` gives title `وِردك`, description `نختم القرآن معاً، كل واحد يأخذ جزءاً.`, and `image` `/og.png`.
+    - `null` gives title `وِردك` and description `نختم القرآن معاً، كل واحد يأخذ جزءاً.`.
+    - `image` is always absolute: `new URL("/og.png", pageUrl).href`. WhatsApp ignores relative image paths.
   - `injectOg(html: string, tags): string`: replaces the block between `<!--og:start-->` and `<!--og:end-->` in `index.html` with `og:title`, `og:description`, `og:image`, `og:url`, `og:type=website`, `og:locale=ar_AR`, and a `<title>`. Every value is HTML-escaped.
   - `apps/web/api/invite.ts`: a Vercel Function, `export default { async fetch(request) }`. It:
     - reads `code` and `from`
     - fetches `${WIRDAK_CONVEX_SITE_URL}/api/preview` with the secret and `X-Visitor-Ip` (from `x-forwarded-for`), with a 1.5-second timeout
-    - fetches its own `/index.html`, injects the tags, and returns `text/html` with `Cache-Control: public, max-age=0, s-maxage=300`
+    - fetches its own `/index.html`, injects the tags, and returns `text/html` with `Cache-Control: public, max-age=0, s-maxage=300` for a real preview and `no-store` for the generic fallback, so a timeout or 429 is never cached at the edge
     - falls back to the generic tags on any error
   - `vercel.json` adds the rewrite `{ "source": "/j/:code", "destination": "/api/invite?code=:code" }` before the SPA catch-all. The query string, including `from`, passes through.
   - `scripts/render-images.ts` (run with `pnpm exec tsx scripts/render-images.ts`): renders each `scripts/images/*.html` at its declared size with Playwright and writes PNGs to `apps/web/public/`. `og.html` (1200x630) shows the misbaha ring and "وِردك" on the paper palette.
@@ -535,6 +548,7 @@ test("injectOg escapes hostile names", () => {
   expect(html).toContain("&quot;&gt;&lt;script&gt;");
 });
 test("generic tags for null", () => {});
+test("og:image is absolute in both cases", () => { /* previewTags(…, "https://wirdak.app/j/x").image === "https://wirdak.app/og.png" */ });
 test("preview endpoint: 401 without secret, 404 for unknown or reset codes, inviter only for a valid token, 429 over the limit", async () => {});
 ```
 
@@ -560,19 +574,20 @@ test("preview endpoint: 401 without secret, 404 for unknown or reset codes, invi
     - `notificationclick` focuses an open tab on `url` or opens one
     - `pushsubscriptionchange` re-subscribes and posts to the page
   - `pushSupport(nav = navigator, win = window): "ready" | "ios_install" | "unsupported"`:
-    - `"ios_install"` for an iPhone or iPad user agent that isn't standalone (`navigator.standalone !== true` and not `matchMedia("(display-mode: standalone)")`)
+    - `"ios_install"` for an iOS device that isn't standalone (`navigator.standalone !== true` and not `matchMedia("(display-mode: standalone)")`). An iOS device is an `iPhone`, `iPad`, or `iPod` user agent, or a `Macintosh` user agent with `navigator.maxTouchPoints > 1` (iPadOS Safari reports a desktop UA)
     - `"unsupported"` when `PushManager` or `serviceWorker` is missing
   - `isStandalone(): boolean`.
   - `enablePush(sessionToken: string): Promise<"granted" | "denied" | "unsupported">`: registers `/sw.js`, asks for permission, subscribes with the key from `api.push.publicKey`, and calls `api.push.subscribe`.
+  - `syncPush(sessionToken: string): Promise<void>`: runs on app load (with `useTouch`) when signed in and `Notification.permission === "granted"`. It gets the current subscription and re-subscribes if there's none or its `applicationServerKey` differs from `api.push.publicKey` (VAPID rotation). Then it calls `api.push.subscribe`, an idempotent upsert. That keeps a browser renewal (`pushsubscriptionchange`) or a key rotation from silently ending push.
   - `pushAsked(): boolean` and `markPushAsked(): void` (key `wirdak.pushAsked`).
   - **After the first successful take**, while `!pushAsked()`:
     - `"ready"` opens `PushPromptSheet` with `نرسل لك تذكيراً لطيفاً، ونخبرك حين نختم معاً.`, "فعّل الإشعارات", and "ليس الآن"
     - `"ios_install"` opens `InstallStepsSheet`
     - either way, `markPushAsked()`
   - **`InstallStepsSheet`:**
-    - On open it calls `api.handoff.create` and sets the URL with `history.replaceState` to the current path plus `?h=<token>`. It also replaces `<link rel="manifest">` with a `data:` manifest whose `start_url` is that same URL (both iOS behaviours then land on the token).
+    - On open it calls `api.handoff.create` and replaces `<link rel="manifest">` with a per-person manifest (a `blob:` or `data:` URL; use whichever iOS reads) whose `start_url` is `/?h=<token>`. The page's own address never changes, so sharing the page from the Share sheet can't leak the token.
     - Content: three illustrated steps (Share icon, "إضافة إلى الشاشة الرئيسية", "أضف"), with inline SVG and text labels.
-    - On close it removes `h` from the URL.
+    - On close it restores the original manifest link.
   - **`HandoffGate`:** wraps routes. If `?h=` is present and `isStandalone()`:
     - with a local session already, it strips `h` and does nothing else
     - otherwise it calls `redeem`, stores the token, strips `h`, then opens `PushPromptSheet`
@@ -584,12 +599,13 @@ test("preview endpoint: 401 without secret, 404 for unknown or reset codes, invi
 - [ ] **Step 1: Write the failing tests:**
 
 ```ts
-test("pushSupport", () => { /* iPhone Safari UA, not standalone → "ios_install"; iPhone standalone with PushManager → "ready"; no serviceWorker → "unsupported" */ });
+test("pushSupport", () => { /* iPhone Safari UA, not standalone → "ios_install"; Macintosh UA with maxTouchPoints 5 → "ios_install"; iPhone standalone with PushManager → "ready"; no serviceWorker → "unsupported" */ });
+test("syncPush re-subscribes when the key changed and upserts the subscription", async () => {});
 test("HandoffGate redeems only in standalone mode", async () => { /* Safari tab with ?h=tok → redeem not called; standalone → called once, token stored, h stripped */ });
 test("HandoffGate keeps an existing session and does not redeem", async () => {});
 test("HandoffGate on invalid token continues signed out", async () => {});
 test("push prompt appears once after the first take", async () => {});
-test("install sheet puts the token in the URL and the manifest, and removes it on close", async () => {});
+test("install sheet puts the token only in the manifest, never in location, and restores the manifest on close", async () => {});
 ```
 
 - [ ] **Step 2:** Run `pnpm --filter web test`. Expected: FAIL.
@@ -597,7 +613,7 @@ test("install sheet puts the token in the URL and the manifest, and removes it o
 - [ ] **Step 4:** Run tests. Expected: PASS. Then manually, against dev:
   - In desktop Chrome, enable push, take a juz', run `dev:forceGraceEnd` (Task 13) or wait for a short grace, and confirm a push arrives and tapping it opens the khatma.
   - **On a real iPhone (iOS 16.4 or later):** follow the install steps, open from the home screen, and confirm you're signed in without WhatsApp and the push prompt appears.
-  - Record in the PR which launch address iOS used (`start_url` or the current page). If neither carried the token, say so in the PR and stop for Ali.
+  - Confirm the home-screen app opened at the manifest's `start_url` with the token. If iOS ignored it, don't fall back to putting the token in the page address; say so in the PR and stop for Ali.
 - [ ] **Step 5: Commit** `feat: web push, iphone hand-off, icons, and activity touch`.
 
 ---
