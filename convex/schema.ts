@@ -194,7 +194,68 @@ export default defineSchema({
     /** null for the first admin, added from the command line. */
     addedBy: v.union(v.id("admins"), v.null()),
     addedAt: v.number(),
+    /** Push alerts for help requests; absent means on (spec 7). */
+    notifyHelp: v.optional(v.boolean()),
   }).index("by_phone", ["phone"]),
+
+  /** Admin push subscriptions belong to the admin, not to one admin session (spec 7). */
+  adminPushSubscriptions: defineTable({
+    adminId: v.id("admins"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_admin", ["adminId"])
+    .index("by_endpoint", ["endpoint"]),
+
+  /** A help conversation (spec 3). Exactly one of personId and reporterHash is set. */
+  helpRequests: defineTable({
+    personId: v.union(v.id("people"), v.null()),
+    /** sha256 of a signed-out visitor's reporter token */
+    reporterHash: v.union(v.string(), v.null()),
+    khatmaId: v.union(v.id("khatmas"), v.null()),
+    status: v.union(
+      v.literal("open"),
+      v.literal("answered"),
+      v.literal("closed"),
+    ),
+    context: v.object({
+      path: v.string(),
+      appVersion: v.string(),
+      userAgent: v.string(),
+      screen: v.string(),
+      timeZone: v.string(),
+    }),
+    createdAt: v.number(),
+    lastMessageAt: v.number(),
+    answeredAt: nullableNumber,
+    closedAt: nullableNumber,
+    /** the last time the person opened the conversation */
+    seenAt: nullableNumber,
+    attachmentsDeletedAt: nullableNumber,
+  })
+    .index("by_person", ["personId", "lastMessageAt"])
+    .index("by_reporter", ["reporterHash", "lastMessageAt"])
+    .index("by_status", ["status", "lastMessageAt"])
+    .index("by_status_answeredAt", ["status", "answeredAt"])
+    .index("by_closedAt", ["closedAt"])
+    .index("by_attachments_closedAt", ["attachmentsDeletedAt", "closedAt"]),
+
+  helpMessages: defineTable({
+    requestId: v.id("helpRequests"),
+    from: v.union(v.literal("person"), v.literal("visitor"), v.literal("team")),
+    text: v.union(v.string(), v.null()),
+    screenshotId: v.union(v.id("_storage"), v.null()),
+    voiceId: v.union(v.id("_storage"), v.null()),
+    voiceSeconds: nullableNumber,
+    /** Set when retention deleted this message's files, so admins see "deleted". */
+    filesDeletedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_request", ["requestId", "createdAt"])
+    .index("by_screenshot", ["screenshotId"])
+    .index("by_voice", ["voiceId"]),
 
   adminSessions: defineTable({
     adminId: v.id("admins"),
@@ -216,7 +277,11 @@ export default defineSchema({
     /** The actor's phone when the row was written, so it outlives the admin's removal. */
     adminPhone: v.union(v.string(), v.null()),
     action: auditActionValidator,
-    targetKind: v.union(v.literal("admin"), v.literal("setting")),
+    targetKind: v.union(
+      v.literal("admin"),
+      v.literal("setting"),
+      v.literal("help"),
+    ),
     targetId: v.string(),
     before: v.any(),
     after: v.any(),
@@ -226,6 +291,12 @@ export default defineSchema({
     .index("by_at", ["at"])
     .index("by_admin_at", ["adminId", "at"])
     .index("by_action_at", ["action", "at"]),
+
+  /** Where an incremental sweep got to, by name (e.g. the orphaned-upload sweep). */
+  sweepMarks: defineTable({
+    name: v.string(),
+    value: v.number(),
+  }).index("by_name", ["name"]),
 
   rateLimits: defineTable({
     key: v.string(),

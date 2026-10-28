@@ -8,7 +8,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 export type SettingGroup =
-  "pace" | "notifications" | "limits" | "sessions" | "switches";
+  "pace" | "notifications" | "limits" | "sessions" | "switches" | "help";
 
 export type SettingSpec = { group: SettingGroup } & (
   | { kind: "int"; min: number; max: number }
@@ -146,6 +146,23 @@ export const SETTING_SPECS: { [K in SettingKey]: SettingSpec } = {
   announcement: { kind: "text", maxLength: 200, group: "switches" },
   maintenanceMessage: { kind: "text", maxLength: 200, group: "switches" },
   minClientVersion: { kind: "version", group: "switches" },
+  helpRequestsPerPersonPerDay: { kind: "int", min: 1, max: 50, group: "help" },
+  helpRequestsPerVisitorPerDay: { kind: "int", min: 1, max: 50, group: "help" },
+  helpRequestsPerIpPerDay: { kind: "int", min: 1, max: 500, group: "help" },
+  helpMessagesPerHour: { kind: "int", min: 1, max: 200, group: "help" },
+  helpAutoCloseMs: { kind: "duration", min: DAY, max: 90 * DAY, group: "help" },
+  helpAttachmentRetentionMs: {
+    kind: "duration",
+    min: DAY,
+    max: 365 * DAY,
+    group: "help",
+  },
+  helpRetentionMs: {
+    kind: "duration",
+    min: 30 * DAY,
+    max: 730 * DAY,
+    group: "help",
+  },
 };
 
 export type SettingError =

@@ -42,6 +42,13 @@ const labels: Record<SettingKey, string> = {
   announcement: "إعلان أعلى الموقع",
   maintenanceMessage: "رسالة الصيانة",
   minClientVersion: "أقل إصدار مسموح للموقع",
+  helpRequestsPerPersonPerDay: "طلبات مساعدة لكل شخص / يوم",
+  helpRequestsPerVisitorPerDay: "طلبات مساعدة لكل زائر / يوم",
+  helpRequestsPerIpPerDay: "طلبات مساعدة لكل IP / يوم",
+  helpMessagesPerHour: "رسائل المساعدة / ساعة",
+  helpAutoCloseMs: "إغلاق تلقائي بعد الرد بلا جواب",
+  helpAttachmentRetentionMs: "الاحتفاظ بالصور والتسجيلات بعد الإغلاق",
+  helpRetentionMs: "الاحتفاظ بالمحادثة بعد الإغلاق",
 };
 
 const groups: Record<SettingGroup, string> = {
@@ -50,6 +57,7 @@ const groups: Record<SettingGroup, string> = {
   notifications: "التنبيهات وساعات الهدوء",
   limits: "الحدود",
   sessions: "الجلسات والاحتفاظ",
+  help: "طلبات المساعدة",
 };
 
 const actions: Record<AuditAction, string> = {
@@ -58,6 +66,8 @@ const actions: Record<AuditAction, string> = {
   "admin.remove": "حذف مشرفًا",
   "setting.set": "غيّر إعدادًا",
   "setting.reset": "أعاد إعدادًا للافتراضي",
+  "help.close": "أغلق طلب مساعدة",
+  "help.reopen": "أعاد فتح طلب مساعدة",
 };
 
 /** Every admin panel string lives here. Components never contain Arabic literals. */
@@ -66,6 +76,7 @@ export const ar = {
   badge: "الإدارة",
   nav: {
     home: "الرئيسية",
+    help: "المساعدة",
     settings: "الإعدادات",
     audit: "السجل",
     admins: "المشرفون",
@@ -157,6 +168,59 @@ export const ar = {
     empty: "لا تغييرات بعد.",
     note: "ملاحظة",
     beforeAfter: (before: string, after: string) => `${before} ← ${after}`,
+  },
+  help: {
+    title: "طلبات المساعدة",
+    tabs: { open: "مفتوحة", answered: "تم الرد", closed: "مغلقة" },
+    visitor: "زائر",
+    voice: "تسجيل صوتي",
+    screenshot: "صورة الشاشة",
+    empty: "لا طلبات هنا.",
+    more: "المزيد",
+    back: "كل الطلبات",
+    team: "فريق وِردك",
+    deleted: "حُذف",
+    openScreenshot: "فتح الصورة بحجمها",
+    closeScreenshot: "إغلاق الصورة",
+    context: {
+      title: "تفاصيل الجهاز",
+      path: "الصفحة",
+      appVersion: "الإصدار",
+      userAgent: "المتصفح",
+      screen: "الشاشة",
+      timeZone: "المنطقة الزمنية",
+    },
+    person: "الشخص",
+    khatma: "الختمة",
+    noKhatma: "—",
+    reply: "الرد",
+    send: "أرسل الرد",
+    close: "إغلاق الطلب",
+    reopen: "إعادة فتح الطلب",
+    confirmCloseTitle: "إغلاق هذا الطلب؟",
+    confirmCloseBody: "يبقى مقروءاً للشخص، وإن ردّ عليه يُفتح من جديد.",
+    confirmClose: "نعم، أغلق",
+    cancel: "إلغاء",
+    homeCard: "طلبات مساعدة مفتوحة",
+    oldest: (since: string) => `أقدمها منذ ${since}`,
+    manyOpen: "+٩٩",
+    errors: {
+      empty: "اكتب الرد أولاً.",
+      too_long: "الرد أطول من ١٠٠٠ حرف.",
+      not_found: "هذا الطلب لم يعد موجوداً.",
+      generic: "تعذّر الإرسال. حاول مرة أخرى.",
+    },
+  },
+  adminPush: {
+    title: "تنبيهات على هاتفك",
+    on: "شغّل التنبيهات على هذا الجهاز",
+    off: "أوقف التنبيهات على هذا الجهاز",
+    help: "تنبيه بطلبات المساعدة",
+    iosInstall:
+      "أضف لوحة الإدارة إلى الشاشة الرئيسية أولاً، ثم شغّل التنبيهات.",
+    unsupported: "هذا المتصفح لا يدعم التنبيهات.",
+    denied: "التنبيهات ممنوعة لهذا الموقع في إعدادات المتصفح.",
+    failed: "تعذّر تشغيل التنبيهات. حاول مرة أخرى.",
   },
   signOut: {
     button: "تسجيل الخروج",

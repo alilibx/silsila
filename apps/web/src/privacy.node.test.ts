@@ -25,3 +25,31 @@ describe("privacy policy", () => {
     expect(html).toContain("support@manzilo.com");
   });
 });
+
+/** The text between a heading and the next one. */
+function section(html: string, heading: string): string {
+  const start = html.indexOf(`<h2>${heading}</h2>`);
+  if (start < 0) return "";
+  const end = html.indexOf("<h2>", start + 1);
+  return html.slice(start, end < 0 ? undefined : end);
+}
+
+describe("privacy policy: help requests", () => {
+  const html = readFileSync(join(WEB, "public", "privacy.html"), "utf8");
+
+  it("explains help requests in Arabic, with their own retention", () => {
+    const ar = section(html, "طلبات المساعدة");
+    expect(ar).not.toBe("");
+    for (const words of ["صورة الشاشة", "تسجيل صوتي", "٣٠ يوماً", "١٨٠ يوماً"]) {
+      expect(ar).toContain(words);
+    }
+  });
+
+  it("explains help requests in English too", () => {
+    const en = section(html, "Help requests");
+    expect(en).not.toBe("");
+    for (const words of ["screenshot", "voice note", "30 days", "180 days"]) {
+      expect(en).toContain(words);
+    }
+  });
+});

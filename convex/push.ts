@@ -1,5 +1,14 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
+import { quietHours } from "./lib/settings";
+import { nextAwake } from "./lib/wakingTime";
 import { noteText } from "./lib/noteText";
 import { requirePerson, sessionMutation, sessionQuery } from "./lib/session";
 import { activeMembership } from "./khatmas";
@@ -157,3 +166,59 @@ export const markPushed = internalMutation({
     await ctx.db.patch(args.noteId, { pushedAt: Date.now() });
   },
 });
+
+/**
+ * What `pushNode.deliverHelpReply` sends for a team reply (plan 3 spec 3.4):
+ * null unless the person has a device subscribed and push on in some khatma.
+ */
+export const helpReplyPlan = internalQuery({
+  args: { messageId: v.id("helpMessages") },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message || message.from !== "team") return null;
+    const request = await ctx.db.get(message.requestId);
+    if (!request?.personId) return null;
+    const personId = request.personId;
+    const memberships = await ctx.db
+      .query("members")
+      .withIndex("by_person", (q) => q.eq("personId", personId))
+      .collect();
+    if (!memberships.some((m) => m.status === "active" && m.notificationsOn)) {
+      return null;
+    }
+    const rows = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_person", (q) => q.eq("personId", personId))
+      .collect();
+    if (rows.length === 0) return null;
+    return {
+      subscriptions: rows.map((r) => ({
+        endpoint: r.endpoint,
+        p256dh: r.p256dh,
+        auth: r.auth,
+      })),
+      payload: {
+        title: "وِردك" as const,
+        body: "رد من فريق وِردك على طلب المساعدة",
+        url: `/?help=${request._id}`,
+        // one notification per conversation: a newer reply replaces it
+        tag: `help-${request._id}`,
+      },
+    };
+  },
+});
+
+/** Schedules the reply push for the next waking moment in the person's zone. Visitors get none. */
+export async function scheduleHelpReplyPush(
+  ctx: MutationCtx,
+  messageId: Id<"helpMessages">,
+  personId: Id<"people"> | null,
+): Promise<void> {
+  if (personId === null) return;
+  const person = await ctx.db.get(personId);
+  if (!person) return;
+  const at = nextAwake(Date.now(), person.timeZone, await quietHours(ctx));
+  await ctx.scheduler.runAt(at, internal.pushNode.deliverHelpReply, {
+    messageId,
+  });
+}

@@ -85,3 +85,11 @@ test("every default passes its own spec", () => {
     expect(SETTING_SPECS[key]).toBeDefined();
   }
 });
+
+test("help settings have their own ranges", () => {
+  expect(validateSetting("helpAutoCloseMs", 12 * 3_600_000)).toBe(
+    "out_of_range",
+  );
+  expect(validateSetting("helpRequestsPerIpPerDay", 10)).toBeNull();
+  expect(SETTING_SPECS.helpMessagesPerHour.group).toBe("help");
+});
