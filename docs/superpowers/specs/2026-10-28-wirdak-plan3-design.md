@@ -79,7 +79,7 @@ Every request carries, without the person typing it:
 
 - Who they are, if signed in: their person record and display name.
 - Which khatma, if they were on a khatma page (or its organizer page).
-- The page path, the app version (the release, from `package.json` at build time), the browser's user agent, the screen size, and the time zone.
+- The page path, the app version, the browser's user agent, the screen size, and the time zone. The app version is the release from the **root** `package.json`, which release-please bumps, baked in at build time. `apps/web/package.json` stays at 0.0.0 and must not be used.
 
 Nothing else. In particular, no list of their other khatmas, no reading history, and no session token **[builder's call]**.
 
@@ -114,6 +114,7 @@ Signed-out requests get tighter limits (section 3.6), because nobody is accounta
 - Screenshot: one per request, JPEG or PNG, at most 2 MB. Voice note: at most 2 minutes and 3 MB. The server checks type and size after upload and deletes anything that doesn't fit **[builder's call]**.
 - Limits, all settings (section 9) **[builder's call: the numbers]**:
   - New requests: 5 per person per day; 3 per reporter token per day and 10 per IP per day when signed out.
+  - Convex only exposes the client IP to HTTP actions (`ctx.meta.getRequestMetadata()`, as `/api/verification/start` uses it), not to mutations. So a signed-out request is created through an HTTP endpoint on the Convex site, with the same CORS rule as `/api/verification/start`, and that endpoint applies the per-IP limit. Signed-in requests can be normal mutations **[builder's call]**.
   - Messages in a conversation: 20 per person or reporter token per hour.
   - Uploads that are never attached to a message are deleted after an hour.
 - Retention **[builder's call]**: screenshots and voice notes are deleted 30 days after the request closes. The conversation itself is deleted 180 days after it closes. The admin panel says "deleted" where an attachment used to be.
@@ -135,6 +136,8 @@ Admins sign in with the same WhatsApp verification as the website (Ali, v1 spec 
 - **The 6-digit code step is always required**, even on a browser that has signed in before, and even if the number has no member account. The WhatsApp reply is the code message, worded for the admin panel ("رمز الدخول إلى لوحة إدارة وِردك"). Like today's code message, it has no link, because the admin page that started the sign-in is already waiting for the code **[builder's call]**.
 - **Only phone numbers on the admin allowlist can finish.** A number that isn't on it gets the same generic failure as an expired code. The admin panel never reveals whether a number is an admin **[builder's call]**.
 - **A verification records which app started it** (website or admin). The member flow (`matchIncoming`, `takeIncoming`, and the production-to-staging relay) keeps its current behavior for website sign-ins.
+- **An admin verification never touches `people`.** Today's code step (`toNeedsPin`) needs an existing member (`existingPersonId`). An admin verification points at the `admins` row for its phone instead, and signing in makes an admin session, never a member account. A number that's an admin but not a member stays not a member **[builder's call]**.
+- **Admin codes are relayed like member codes.** Staging shares production's number, so a sign-in started on `stg-admin.wirdak.app` reaches production first. Production relays it to staging the same way (`docs/deploy.md`, "WhatsApp on staging"), and staging's relay handler must recognize admin verifications and send the admin code reply itself.
 - **Every admin sign-in sends a WhatsApp alert**, like the member "new sign-in" alert, with its own one-tap link that ends all of that admin's sessions. The link goes to the admin app (`/signout?t=…`) and uses its own token, separate from the member alert token **[builder's call: the most powerful accounts get at least the warning members get]**.
 - **Admin sign-in works during maintenance mode**, which today refuses every new verification. Otherwise nobody could sign in to turn maintenance off.
 
@@ -183,8 +186,8 @@ In this order (Ali approved the brainstorm mockup):
    - Members: verified people.
    - Ajza' finished today, against the 7-day average.
    - Khatmas completed (rounds completed) this week.
-   - **Stalled khatmas** (recommended in the brainstorm and accepted): khatmas whose current round is open, with at least one member, and no juz' finished in 14 days. It's the early sign that a group gave up, and a reason to look at the rounds, not at people.
-   - **Days per round** (recommended and accepted): the median number of days to complete a round, over rounds completed in the last 30 days.
+   - **Stalled khatmas** **[builder's call: recommended in the brainstorm when Ali asked for another number; not yet confirmed]**: khatmas whose current round is open, with at least one member, and no juz' finished in 14 days. It's the early sign that a group gave up, and a reason to look at the rounds, not at people.
+   - **Days per round** **[builder's call: recommended the same way]**: the median number of days to complete a round, over rounds completed in the last 30 days.
 3. **A trend chart** with a switch for 7 days, 30 days, and a year: ajza' finished per day by default, with a picker for new members, new khatmas, and rounds completed.
 4. **Sign-in success:** of the WhatsApp verifications started in the last 7 days, the share that ended signed in. A sudden drop means sign-in broke.
 
@@ -194,7 +197,8 @@ Days are counted in the app's default zone, `Asia/Dubai`, like the note text.
 
 - **A daily rollup** **[builder's call]**: a cron just after midnight (Dubai) writes one `dailyStats` row for the day that ended, with that day's counts and the running totals. The trend charts read these rows. Today's numbers are computed live.
 - **Verifications are purged after a day** (`convex/maintenance.ts`), so sign-in counts must be taken when they happen (a counter bumped on start and on claim), not reconstructed later.
-- **No unbounded scans.** Totals like "members" and "active khatmas" are kept as counters that the existing mutations update in the same transaction, or with the Convex Aggregate component. A query must never read every person or every assignment to draw a number. Which of the two is left to the builder.
+- **No unbounded scans.** Running totals like "members" are kept as counters that the existing mutations update in the same transaction, or with the Convex Aggregate component. A query must never read every person or every assignment to draw a number. Which of the two is left to the builder.
+- **Sliding windows need indexes, not counters.** "Active", "stalled", and "days per round" look back 14 or 30 days, which a running counter can't answer. They read `rounds` through new indexes on `lastFinishedAt` and `completedAt` (section 10), so each reads only the rounds inside its window. "Stalled" is the open current rounds whose `lastFinishedAt` (or `startedAt`, if nothing is finished yet) is older than 14 days.
 - **Privacy:** the rollup stores counts only, never person IDs.
 - **History at launch** **[builder's call]**: a one-off backfill fills `dailyStats` for past days from the timestamps that already exist (people `verifiedAt`, khatmas `createdAt`, assignments `finishedAt`, rounds `completedAt`). Sign-in success can't be backfilled, so its chart starts on launch day. Milestones the totals have already passed are marked as sent, so launch doesn't fire a burst of old ones.
 
@@ -257,7 +261,7 @@ Plan 3 adds a banner at the top of every screen while maintenance is on, which c
 
 ### 9.4 Minimum client version
 
-The website reports its version (from `package.json` at build time). When `minClientVersion` is newer, the website reloads once to pick up the new release. If it's still too old after the reload (a stale cache), it shows "حدّث الصفحة" with a button, and doesn't loop **[builder's call]**.
+The website reports its version (the root `package.json` release, as in 3.3). When `minClientVersion` is newer, the website reloads once to pick up the new release. If it's still too old after the reload (a stale cache), it shows "حدّث الصفحة" with a button, and doesn't loop **[builder's call]**.
 
 The version only changes at a release, so on staging, where every push to `main` deploys, `minClientVersion` can't tell two builds of the same release apart. That's accepted: it's a production tool.
 
@@ -276,7 +280,8 @@ The website reads `announcement`, `maintenanceMode` and its message, and `minCli
 - **blockedPhones:** phone, blocked by, at, note.
 - **dailyStats:** day (Dubai), the day's counts, running totals.
 - **Counters** or Aggregate component tables for the totals (section 6.2), and the milestones already sent.
-- **verifications** gains which app started it (website or admin).
+- **verifications** gains which app started it (website or admin), and an admin verification points at its `admins` row instead of `existingPersonId`.
+- **rounds** gains indexes on `lastFinishedAt` and `completedAt`, for the sliding-window numbers in 6.2.
 
 The help request tables and files follow the retention in 3.6, purged by the existing hourly maintenance job.
 
@@ -320,3 +325,6 @@ So Ali can check them while reading:
 18. Maintenance mode is a banner that can't be dismissed. Pages stay readable, and the existing message answers a refused tap (9.3).
 19. Deleting or correcting a person stays manual and becomes its own follow-up (2).
 20. The trend charts are backfilled at launch, and milestones already passed are marked as sent (6.2).
+21. Stalled khatmas and days per round are on the front page. I recommended them, and Ali hasn't confirmed them yet (6.1).
+22. An admin sign-in never creates a member account. Admin codes go through the staging relay (4.2).
+23. Signed-out help requests go through an HTTP endpoint so the per-IP limit can read the IP (3.6).
