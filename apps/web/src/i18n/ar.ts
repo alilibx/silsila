@@ -156,6 +156,40 @@ export const ar = {
     on: "مفعّلة",
     off: "متوقفة",
   },
+  organizer: {
+    back: "العودة إلى الختمة",
+    nameHeading: "الاسم",
+    save: "حفظ",
+    saved: "تمّ الحفظ",
+    cancel: "تراجع",
+    scheduleNote: "يبدأ التغيير من الختمة القادمة",
+    graceNote:
+      "إن احتاج القارئ وقتاً أطول يستطيع طلبه مرة واحدة، وبعدها يمكن لغيرك أن يساعد.",
+    suggested: (amount: string) => `المقترح لهذا الموعد: ${amount}`,
+    membersHeading: "الأعضاء",
+    organizerBadge: "المنظّم",
+    makeOrganizer: "اجعله المنظّم",
+    remove: "إزالة",
+    handoverTitle: (name: string) => `اجعل ${name} المنظّم؟`,
+    handoverBody:
+      "ستصبح عضواً عادياً، ولن تستطيع بعد ذلك تغيير إعدادات الختمة.",
+    removeTitle: (name: string) => `إزالة ${name}؟`,
+    removeBody:
+      "سيعود جزؤه إلى الختمة، ولن يستطيع الانضمام مرة أخرى حتى تسمح له.",
+    blockedHeading: "من أُزيلوا",
+    allow: "السماح بالعودة",
+    resetHeading: "رابط الدعوة",
+    reset: "غيّر رابط الدعوة",
+    resetTitle: "تغيير رابط الدعوة؟",
+    resetBody:
+      "الروابط القديمة ستتوقف عن العمل. أرسل الرابط الجديد إلى المجموعة.",
+    resetConfirm: "غيّر الرابط",
+    errors: {
+      maintenance: commonErrors.maintenance,
+      network: commonErrors.network,
+      generic: commonErrors.generic,
+    },
+  },
   device: {
     unknownDevice: "جهاز",
     unknownBrowser: "متصفح",

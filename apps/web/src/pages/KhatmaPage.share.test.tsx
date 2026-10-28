@@ -108,6 +108,14 @@ describe("KhatmaPage invite and remind", () => {
     ).toBeInTheDocument();
   });
 
+  it("arriving after an invite reset opens the plain invite sheet once", async () => {
+    renderAt({ pathname: "/j/CODE", state: { openInvite: true } });
+    expect(
+      await screen.findByRole("dialog", { name: "ادعُ أحبابك" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("state")).toHaveTextContent("null");
+  });
+
   it("uses a dated name when the khatma has none", async () => {
     m.view = member({ name: null });
     const user = userEvent.setup();
