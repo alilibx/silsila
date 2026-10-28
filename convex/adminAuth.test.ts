@@ -14,9 +14,10 @@ const ADMIN_SITE = "https://admin.wirdak.example";
 const ADMIN_PHONE = "971500000001";
 const SECRET = "known-secret";
 
-const ADMIN_PIN_RE = /^رمز الدخول إلى لوحة إدارة وِردك: (\d{6})\n/;
+/** Admin and member PINs both go out as the PIN template. */
+const ADMIN_PIN_RE = /^\[wirdak_pin\] (\d{6}) \| \1$/;
 const ALERT_RE = new RegExp(
-  `^تسجيل دخول إلى لوحة إدارة وِردك من iPhone Safari\\. إن لم تكن أنت، اضغط هنا لإنهاء كل جلسات الإدارة: ${ADMIN_SITE.replace(/\./g, "\\.")}/signout\\?t=([A-Za-z0-9_-]+)$`,
+  `^تسجيل دخول إلى لوحة إدارة وِردك من iPhone Safari\\. إن لم تكن أنت، اضغط «لستُ أنا» لإنهاء كل جلسات الإدارة\\.\\n\\[لستُ أنا\\] ${ADMIN_SITE.replace(/\./g, "\\.")}/signout\\?t=([A-Za-z0-9_-]+)$`,
 );
 
 type T = TestConvexForDataModel<DataModel>;
@@ -85,10 +86,7 @@ async function adminAtPin(t: T, from = ADMIN_PHONE, admin = true) {
     text: code,
   });
   const body = sent[before]?.body ?? "";
-  // An admin code is text; a member code is the PIN template (`[wirdak_pin] 123456 | 123456`).
-  const pin =
-    (ADMIN_PIN_RE.exec(body) ?? /^\[wirdak_pin\] (\d{6}) \|/.exec(body))?.[1] ??
-    "";
+  const pin = ADMIN_PIN_RE.exec(body)?.[1] ?? "";
   return { verificationId, pin };
 }
 

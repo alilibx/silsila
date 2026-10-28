@@ -13,8 +13,8 @@ const ADMIN_PHONE = "971500000001";
 const OTHER_PHONE = "971500000002";
 const CODE = "ABCDEFGH23";
 
-const ADMIN_PIN_RE =
-  /^رمز الدخول إلى لوحة إدارة وِردك: (\d{6})\nلا تعطه لأحد\. إن لم تطلبه الآن فتجاهل هذه الرسالة\.$/;
+/** Admin codes go out as the PIN template, the same as member codes. */
+const ADMIN_PIN_RE = /^\[wirdak_pin\] (\d{6}) \| \1$/;
 
 type T = TestConvexForDataModel<DataModel>;
 type Sent = { to: string; body: string };

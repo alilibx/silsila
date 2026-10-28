@@ -114,8 +114,8 @@ const VERIFIED = "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.
 /** The code for an admin panel sign-in. No link: the admin page is already waiting for it. */
 export const adminPinReply = (pin: string) =>
   `رمز الدخول إلى لوحة إدارة وِردك: ${pin}\nلا تعطه لأحد. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
-export const adminSignInAlert = (deviceLabel: string, alertToken: string) =>
-  `تسجيل دخول إلى لوحة إدارة وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لإنهاء كل جلسات الإدارة: ${adminSiteUrl()}/signout?t=${alertToken}`;
+const adminSignInAlert = (deviceLabel: string) =>
+  `تسجيل دخول إلى لوحة إدارة وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط «لستُ أنا» لإنهاء كل جلسات الإدارة.`;
 const signInAlert = (deviceLabel: string) =>
   `تسجيل دخول جديد إلى وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من الأجهزة الأخرى.`;
 /** Sent instead of `signInAlert` when the sign-in created the account. */
@@ -130,15 +130,20 @@ export const PIN_TEMPLATE = "wirdak_pin";
  * takes the PIN too. Falls back to the text reply if Graph refuses the
  * template (paused, or not approved yet), so a sign-in never waits on Meta.
  * Not when the request got no answer: the template may have gone out, and a
- * second PIN message would only confuse.
+ * second PIN message would only confuse. `fallback` words the text reply
+ * (the admin panel has its own).
  */
-export async function sendPin(to: string, pin: string): Promise<boolean> {
+export async function sendPin(
+  to: string,
+  pin: string,
+  fallback: (pin: string) => string = pinReply,
+): Promise<boolean> {
   const outcome = await postTemplate(to, {
     name: PIN_TEMPLATE,
     body: [pin],
     buttonParam: pin,
   });
-  if (outcome === "refused") return await sendWhatsAppText(to, pinReply(pin));
+  if (outcome === "refused") return await sendWhatsAppText(to, fallback(pin));
   return outcome === "sent";
 }
 
@@ -157,6 +162,18 @@ export async function sendVerified(
   return await sendWhatsAppLink(to, VERIFIED, {
     label: "ارجع إلى وِردك",
     url: `${url}${path}`,
+  });
+}
+
+/** The admin panel sign-in alert, whose button ends every admin session of this admin. */
+export async function sendAdminSignInAlert(
+  to: string,
+  deviceLabel: string,
+  alertToken: string,
+): Promise<boolean> {
+  return await sendWhatsAppLink(to, adminSignInAlert(deviceLabel), {
+    label: "لستُ أنا",
+    url: `${adminSiteUrl()}/signout?t=${alertToken}`,
   });
 }
 
@@ -588,9 +605,8 @@ export async function takeIncoming(
       await sendVerified(phone, result.returnPath);
       return "taken";
     case "needs_pin":
-      // Admin codes keep their own wording (plan 3a); members get the template.
-      if (result.admin) await sendWhatsAppText(phone, adminPinReply(pin));
-      else await sendPin(phone, pin);
+      // The same template for both; only the fallback text differs.
+      await sendPin(phone, pin, result.admin ? adminPinReply : pinReply);
       return "taken";
   }
 }

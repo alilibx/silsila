@@ -5,6 +5,7 @@ import { hmacSha256Hex } from "./lib/crypto";
 import { cleanParam } from "./lib/whatsappTemplates";
 import schema from "./schema";
 import {
+  adminPinReply,
   describeMessage,
   parseIncoming,
   relayIncoming,
@@ -483,6 +484,25 @@ test("sendPin falls back to text when the template fails", async () => {
     "[wirdak_pin] 123456 | 123456",
     "رمز الدخول إلى وِردك: 123456\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.",
   ]);
+});
+
+test("an admin PIN falls back to the admin panel wording", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const bodies: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const payload = JSON.parse(String(init.body)) as { type: string };
+      bodies.push(payload);
+      return new Response("{}", {
+        status: payload.type === "template" ? 400 : 200,
+      });
+    }),
+  );
+  expect(await sendPin("+971501234567", "123456", adminPinReply)).toBe(true);
+  expect(describeMessage(bodies[1])).toMatch(
+    /^رمز الدخول إلى لوحة إدارة وِردك: 123456\n/,
+  );
 });
 
 test("sendPin doesn't send a second PIN when the template got no answer", async () => {
