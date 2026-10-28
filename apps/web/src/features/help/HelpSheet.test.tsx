@@ -24,7 +24,7 @@ vi.mock("convex/react", () => ({
   useMutation: () => m.markSeen,
 }));
 vi.mock("../../lib/session", () => ({ useSessionToken: () => "member" }));
-vi.mock("./reporterToken", () => ({ getReporterToken: () => null }));
+vi.mock("./reporterToken", () => ({ useReporterToken: () => null }));
 vi.mock("./sendHelp", () => ({
   sendHelp: (args: unknown) => m.sendHelp(args),
   helpContext: () => ({

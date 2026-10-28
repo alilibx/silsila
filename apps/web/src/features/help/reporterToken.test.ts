@@ -25,3 +25,17 @@ describe("reporter token", () => {
     expect(getReporterToken()).toBeNull();
   });
 });
+
+describe("useReporterToken", () => {
+  it("re-renders when the token is created", async () => {
+    const { renderHook, act } = await import("@testing-library/react");
+    const { useReporterToken } = await import("./reporterToken");
+    const { result } = renderHook(() => useReporterToken());
+    expect(result.current).toBeNull();
+    let token = "";
+    act(() => {
+      token = ensureReporterToken();
+    });
+    expect(result.current).toBe(token);
+  });
+});

@@ -7,7 +7,7 @@ import { HelpReplyCard } from "./HelpReplyCard";
 const m = vi.hoisted(() => ({ mine: [] as unknown[], open: vi.fn() }));
 vi.mock("convex/react", () => ({ useQuery: () => m.mine }));
 vi.mock("../../lib/session", () => ({ useSessionToken: () => "member" }));
-vi.mock("./reporterToken", () => ({ getReporterToken: () => null }));
+vi.mock("./reporterToken", () => ({ useReporterToken: () => null }));
 vi.mock("./helpUi", () => ({ useHelpUi: () => ({ openSheet: m.open }) }));
 
 const request = (unread: boolean) => ({

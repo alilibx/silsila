@@ -244,12 +244,14 @@ export const purge = internalMutation({
     ].some(Boolean);
 
     if (more) await ctx.scheduler.runAfter(0, internal.maintenance.purge, {});
-    // Help has its own job: a backlog there must never fail this purge.
-    await ctx.scheduler.runAfter(0, internal.maintenance.purgeHelpData, {});
   },
 });
 
-/** Help retention and orphaned uploads, in small batches (plan 3 spec 3.6). */
+/**
+ * Help retention and orphaned uploads, in small batches (plan 3 spec 3.6).
+ * Its own hourly cron, apart from `purge`, so a help backlog can never fail
+ * the purge, and only one chain runs at a time.
+ */
 export const purgeHelpData = internalMutation({
   args: {},
   handler: async (ctx) => {

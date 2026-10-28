@@ -7,7 +7,7 @@ import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { useSessionToken } from "../../lib/session";
-import { getReporterToken } from "./reporterToken";
+import { useReporterToken } from "./reporterToken";
 import { helpContext, sendHelp, type HelpErrorCode } from "./sendHelp";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 
@@ -38,7 +38,7 @@ function seconds(s: number): string {
 /** The help sheet (spec 3.2 to 3.4): the person's requests, a composer, and conversations. */
 export function HelpSheet({ requestId, screenshot, onClose }: Props) {
   const sessionToken = useSessionToken();
-  const reporterToken = getReporterToken() ?? undefined;
+  const reporterToken = useReporterToken() ?? undefined;
   const mine = useQuery(api.help.mine, { sessionToken, reporterToken });
   const [view, setView] = useState<View>(
     requestId ? { kind: "conversation", id: requestId } : { kind: "list" },

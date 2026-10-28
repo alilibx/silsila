@@ -18,6 +18,14 @@ crons.hourly(
   {},
 );
 
+// Hourly: delete old help files and conversations, and uploads never attached.
+crons.hourly(
+  "purge old help files and orphaned uploads",
+  { minuteUTC: 45 },
+  internal.maintenance.purgeHelpData,
+  {},
+);
+
 // Hourly: close answered help requests nobody answered back (plan 3 spec 3.4).
 crons.hourly(
   "close answered help requests with no word back",

@@ -167,8 +167,7 @@ test("purge does not reschedule when nothing is left over", async () => {
   const scheduled = await t.run(async (ctx) =>
     ctx.db.system.query("_scheduled_functions").collect(),
   );
-  // Only the separate help job, never another purge.
-  expect(scheduled.map((s) => s.name)).toEqual(["maintenance:purgeHelpData"]);
+  expect(scheduled).toHaveLength(0);
 });
 
 type Base = {
@@ -432,11 +431,19 @@ test("purge leaves help to its own job, so a backlog can't fail the hourly purge
   await t.mutation(internal.maintenance.purge, {});
   // Nothing of help is touched inline...
   expect(await t.run((ctx) => ctx.db.system.get(old.shot))).not.toBeNull();
-  // ...the help job is scheduled instead.
+  // ...help has its own hourly cron, so purge starts no help chains of its own.
   const scheduled = await t.run((ctx) =>
     ctx.db.system.query("_scheduled_functions").collect(),
   );
-  expect(scheduled.map((s) => s.name)).toContain("maintenance:purgeHelpData");
+  expect(scheduled.map((s) => s.name)).not.toContain(
+    "maintenance:purgeHelpData",
+  );
+  const crons = (await import("./crons")).default as unknown as {
+    crons: Record<string, { name: string }>;
+  };
+  expect(Object.values(crons.crons).map((c) => c.name)).toContain(
+    "maintenance:purgeHelpData",
+  );
 });
 
 test("after the files sweep each message remembers its files were deleted, and a reopened request is swept again", async () => {

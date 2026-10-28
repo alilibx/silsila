@@ -4,14 +4,14 @@ import { buttonClass } from "../../components/Button";
 import { t } from "../../i18n/ar";
 import { useSessionToken } from "../../lib/session";
 import { useHelpUi } from "./helpUi";
-import { getReporterToken } from "./reporterToken";
+import { useReporterToken } from "./reporterToken";
 
 const PREVIEW = 140;
 
 /** On the home page: a team reply nobody has read yet (spec 3.4). */
 export function HelpReplyCard() {
   const sessionToken = useSessionToken();
-  const reporterToken = getReporterToken() ?? undefined;
+  const reporterToken = useReporterToken() ?? undefined;
   const mine = useQuery(api.help.mine, { sessionToken, reporterToken });
   const { openSheet } = useHelpUi();
   const unread = mine?.find((r) => r.unread);
