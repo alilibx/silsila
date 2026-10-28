@@ -13,49 +13,51 @@ export const HOME_SCREEN_LABEL = "iPhone · الشاشة الرئيسية";
 const MINUTE_MS = 60_000;
 
 /**
- * Stores a hand-off token's hash for the session behind `sessionTokenHash`.
- * `false` when that session doesn't exist.
+ * Stores a hand-off token's hash for the session behind `sessionTokenHash`
+ * and returns how long it lives. `null` when that session doesn't exist.
  */
 export const store = internalMutation({
   args: { sessionTokenHash: v.string(), tokenHash: v.string() },
-  handler: async (ctx, args): Promise<boolean> => {
+  handler: async (ctx, args): Promise<number | null> => {
     const session = await ctx.db
       .query("sessions")
       .withIndex("by_tokenHash", (q) =>
         q.eq("tokenHash", args.sessionTokenHash),
       )
       .first();
-    if (!session) return false;
+    if (!session) return null;
     const now = Date.now();
+    const ttlMs = await getSetting(ctx, "handoffTtlMs");
     await ctx.db.insert("handoffTokens", {
       tokenHash: args.tokenHash,
       personId: session.personId,
       sessionId: session._id,
       createdAt: now,
-      expiresAt: now + (await getSetting(ctx, "handoffTtlMs")),
+      expiresAt: now + ttlMs,
       usedAt: null,
     });
-    return true;
+    return ttlMs;
   },
 });
 
 /**
  * Just before the "add to home screen" steps: a single-use token that lets the
  * home-screen app (separate storage) sign in as this person without WhatsApp.
- * The raw token is returned once and only its hash is kept.
+ * The raw token is returned once and only its hash is kept. `ttlMs` tells the
+ * page when to make a new one (the TTL is a live setting).
  */
 export const create = action({
   args: { sessionToken: v.string() },
   handler: async (
     ctx,
     args,
-  ): Promise<{ token: string } | { error: "not_signed_in" }> => {
+  ): Promise<{ token: string; ttlMs: number } | { error: "not_signed_in" }> => {
     const token = randomToken(32);
-    const stored = await ctx.runMutation(internal.handoff.store, {
+    const ttlMs = await ctx.runMutation(internal.handoff.store, {
       sessionTokenHash: await sha256Hex(args.sessionToken),
       tokenHash: await sha256Hex(token),
     });
-    return stored ? { token } : { error: "not_signed_in" };
+    return ttlMs === null ? { error: "not_signed_in" } : { token, ttlMs };
   },
 });
 

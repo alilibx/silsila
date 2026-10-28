@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router";
 import { HandoffGate } from "./features/handoff/HandoffGate";
+import { useHandoffManifest } from "./features/handoff/useHandoffManifest";
 import { useTouch } from "./lib/useTouch";
 import { CreatePage } from "./pages/CreatePage";
 import { HomePage } from "./pages/HomePage";
@@ -11,6 +12,7 @@ import { SignOutPage } from "./pages/SignOutPage";
 
 export function App() {
   useTouch();
+  useHandoffManifest();
   return (
     <HandoffGate>
       <Routes>

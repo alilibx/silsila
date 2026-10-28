@@ -21,7 +21,7 @@ export function isStandalone(
   );
 }
 
-function isIos(nav: Nav): boolean {
+export function isIos(nav: Nav = navigator): boolean {
   // iPadOS Safari reports a desktop (Macintosh) user agent, but only it has a touch screen.
   return (
     /iPhone|iPad|iPod/.test(nav.userAgent) ||

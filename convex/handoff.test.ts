@@ -57,6 +57,8 @@ async function signedIn(t: T, token = "tok_safari") {
 async function mint(t: T, sessionToken: string): Promise<string> {
   const res = await t.action(api.handoff.create, { sessionToken });
   if ("error" in res) throw new Error(res.error);
+  // the page renews on this, so it follows the live setting
+  expect(res.ttlMs).toBe(30 * MIN);
   return res.token;
 }
 

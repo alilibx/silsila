@@ -13,15 +13,15 @@ function manifestLink(): HTMLLinkElement | null {
   return document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
 }
 
-/** A single-use token for the home-screen app, or null when it can't be made. */
+/** A single-use token for the home-screen app and how long it lives, or null when it can't be made. */
 export async function createHandoffToken(
   sessionToken: string,
-): Promise<string | null> {
+): Promise<{ token: string; ttlMs: number } | null> {
   try {
     const result = await convexHttp().action(api.handoff.create, {
       sessionToken,
     });
-    return "token" in result ? result.token : null;
+    return "token" in result ? result : null;
   } catch {
     return null;
   }

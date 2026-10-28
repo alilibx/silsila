@@ -1,7 +1,5 @@
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { t } from "../i18n/ar";
-import { createHandoffToken, installHandoffManifest } from "../lib/handoff";
-import { useSessionToken } from "../lib/session";
 import { Button } from "./Button";
 import { Sheet } from "./Sheet";
 
@@ -61,32 +59,11 @@ function Step({
 }
 
 /**
- * The iPhone steps for putting Wirdak on the home screen. While it is open the page's manifest is
- * swapped for one whose `start_url` carries a hand-off token, so the home-screen app opens signed
- * in. The page's own address never changes, so sharing it from the Share sheet can't leak the token.
- * The token is made when the sheet opens and the manifest goes back when it closes, so the sheet
- * works wherever it is opened from (after a take, or from settings) and again on every reopen.
+ * The iPhone steps for putting Wirdak on the home screen. The sign-in hand-off doesn't depend on
+ * this sheet: `useHandoffManifest` keeps the token-carrying manifest in place the whole time a
+ * signed-in iPhone Safari tab is open, so adding straight from the Share menu works too.
  */
 export function InstallStepsSheet({ onClose }: { onClose: () => void }) {
-  const sessionToken = useSessionToken();
-
-  useEffect(() => {
-    if (!sessionToken) return;
-    let cancelled = false;
-    let restore = () => {};
-    void (async () => {
-      const token = await createHandoffToken(sessionToken);
-      if (!token || cancelled) return;
-      const undo = await installHandoffManifest(token);
-      if (cancelled) undo();
-      else restore = undo;
-    })();
-    return () => {
-      cancelled = true;
-      restore();
-    };
-  }, [sessionToken]);
-
   return (
     <Sheet title={t.install.title} onClose={onClose}>
       <p className="leading-relaxed text-ink-soft">{t.install.intro}</p>
