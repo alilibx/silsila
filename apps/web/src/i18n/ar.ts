@@ -157,6 +157,8 @@ export const ar = {
   actions: {
     errors: {
       notHolding: "ليس معك جزء الآن.",
+      /** The session ended on another device (signed out from there, say). */
+      signedOut: "خرجتَ من حسابك على هذا الجهاز. سجّل دخولك من جديد لتكمل.",
       shared: {
         blocked:
           "لا نستطيع تنفيذ ذلك الآن. تواصل مع صاحب الختمة إن احتجت مساعدة.",

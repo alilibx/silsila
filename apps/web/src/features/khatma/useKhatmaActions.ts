@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { UNDO_WINDOW_MS, type ToastData } from "../../components/Toast";
 import { pendingIntent } from "../verify/progress";
 import { t } from "../../i18n/ar";
+import { errorCode } from "../../lib/errors";
 import { clearSessionToken, useSessionToken } from "../../lib/session";
 
 type Failure<R> = R extends { ok: false; reason: infer Reason }
@@ -142,16 +143,31 @@ export function useKhatmaActions(
   const showToast = (text: string, undoMs?: number) =>
     setToast({ id: ++toastId.current, text, undoMs });
 
-  /** One server call at a time. A thrown call is a network failure: toast it and let the user retry. */
-  async function run<T>(work: () => Promise<T>): Promise<T | undefined> {
+  const askToSignInAgain = () => showToast(t.actions.errors.signedOut);
+
+  /**
+   * One server call at a time. A thrown call without a server code is a network failure: toast it
+   * and let the user retry. `not_signed_in` means the session ended elsewhere, and retrying never
+   * helps: forget the dead token and hand over to `onSignedOut`. Any other code gets generic copy.
+   */
+  async function run<T>(
+    work: () => Promise<T>,
+    onSignedOut: () => void = askToSignInAgain,
+  ): Promise<T | undefined> {
     setLostJuz(null); // any user action ends the wait for a suggestion
     if (busyRef.current) return undefined;
     busyRef.current = true;
     setBusy(true);
     try {
       return await work();
-    } catch {
-      showToast(t.errors.network);
+    } catch (caught) {
+      const code = errorCode(caught);
+      if (code === "not_signed_in") {
+        clearSessionToken();
+        onSignedOut();
+      } else {
+        showToast(code === null ? t.errors.network : t.errors.generic);
+      }
       return undefined;
     } finally {
       busyRef.current = false;
@@ -198,7 +214,14 @@ export function useKhatmaActions(
   }
 
   async function confirmTake(juz: number) {
-    const result = await run(() => takeMutation({ ...args, juz }));
+    // A dead session takes the signed-out path: verify, then take the same juz'.
+    const result = await run(
+      () => takeMutation({ ...args, juz }),
+      () => {
+        setSheet(null);
+        setPendingJuz(juz);
+      },
+    );
     if (!result) return;
     setSheet(null);
     if (result.ok) return showToast(t.toast.taken(toArabicDigits(juz)));

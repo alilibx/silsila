@@ -1,5 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { KhatmaView } from "@convex/khatmas";
@@ -250,6 +251,64 @@ describe("take", () => {
     expect(m.take).toHaveBeenCalledTimes(1);
     await act(async () => finish({ ok: true }));
     expect(toast()).toHaveTextContent("لك الآن");
+  });
+});
+
+describe("a session revoked elsewhere", () => {
+  const signedOutError = () => new ConvexError({ code: "not_signed_in" });
+  const holding = () =>
+    makeView({ me: signedIn({ holding: 5, suggestion: null }) });
+
+  it("a take forgets the dead token and opens verification for the same juz'", async () => {
+    m.take.mockRejectedValue(signedOutError());
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
+    await user.click(screen.getByRole("button", { name: t.take.confirm }));
+    expect(m.cleared).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "الجزء ٩" })).toBeNull();
+    const verify = screen.getByRole("dialog", { name: t.verify.beforeTake });
+    expect(JSON.parse(verify.dataset.intent ?? "null")).toEqual({
+      kind: "take",
+      inviteCode: "CODE",
+      juz: 9,
+    });
+    expect(toast()).not.toHaveTextContent(t.errors.network);
+  });
+
+  it("a finish forgets the dead token and asks to sign in again", async () => {
+    m.finish.mockRejectedValue(signedOutError());
+    const { user } = setup(holding());
+    await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
+    expect(m.cleared).toHaveBeenCalledTimes(1);
+    expect(toast()).toHaveTextContent(t.actions.errors.signedOut);
+  });
+
+  it("an undo forgets the dead token and asks to sign in again", async () => {
+    m.finish.mockResolvedValue({ ok: true, undoUntil: NOW + 10_000 });
+    m.undoFinish.mockRejectedValue(signedOutError());
+    const { user } = setup(holding());
+    await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
+    await user.click(within(toast()).getByRole("button", { name: "تراجع" }));
+    expect(m.cleared).toHaveBeenCalledTimes(1);
+    expect(toast()).toHaveTextContent(t.actions.errors.signedOut);
+  });
+
+  it("a release forgets the dead token and asks to sign in again", async () => {
+    m.release.mockRejectedValue(signedOutError());
+    const { user } = setup(holding());
+    await user.click(screen.getByRole("button", { name: "لا أستطيع إكماله" }));
+    await user.click(screen.getByRole("button", { name: "أعِده إلى الختمة" }));
+    expect(m.cleared).toHaveBeenCalledTimes(1);
+    expect(toast()).toHaveTextContent(t.actions.errors.signedOut);
+  });
+
+  it("another server error shows the generic copy, not the network copy", async () => {
+    m.take.mockRejectedValue(new ConvexError({ code: "not_found" }));
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    await user.click(screen.getByRole("button", { name: t.take.confirm }));
+    expect(toast()).toHaveTextContent(t.errors.generic);
+    expect(m.cleared).not.toHaveBeenCalled();
   });
 });
 
