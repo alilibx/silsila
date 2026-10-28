@@ -11,7 +11,9 @@ import {
   RELAY_MAX_SKEW_MS,
   RELAY_SIGNATURE_HEADER,
   RELAY_TIMESTAMP_HEADER,
+  relaySecret,
   relaySignature,
+  sendWhatsAppText,
   siteUrl,
   takeIncoming,
 } from "./whatsapp";
@@ -243,14 +245,14 @@ http.route({
 // (`relayIncoming` in whatsapp.ts). Open only on a deployment whose messages
 // come from the relay (staging), never on one Meta calls (production).
 
-/** A relayed message is at most 4096 characters plus a little JSON. */
-const MAX_RELAY_BODY = 20_000;
+/** A relayed message is at most 500 characters (each at most 6 bytes as JSON) and its IDs. */
+const MAX_RELAY_BODY = 8192;
 
 http.route({
   path: "/whatsapp/relay",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    const secret = env("WHATSAPP_RELAY_SECRET");
+    const secret = relaySecret();
     if (inboundSource() !== "relay" || secret === undefined) {
       return new Response(null, { status: 401 });
     }
@@ -275,11 +277,9 @@ http.route({
     }
     const message = parseRelayed(payload);
     if (message === null) return json(400, { error: "bad_request" }, {});
-    // Answered before the reply goes out, so production learns quickly that
-    // it must stay silent.
-    const outcome = await takeIncoming(ctx, message, (to, body) =>
-      ctx.scheduler.runAfter(0, internal.whatsapp.sendText, { to, body }),
-    );
+    // Sent inline, not scheduled: a scheduled reply would store a PIN in the
+    // clear in `_scheduled_functions`.
+    const outcome = await takeIncoming(ctx, message, sendWhatsAppText);
     return json(200, { handled: outcome === "taken" }, {});
   }),
 });

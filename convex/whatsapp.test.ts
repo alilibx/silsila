@@ -470,7 +470,7 @@ test("simulateIncoming refuses to run outside dev", async () => {
 // ---------------------------------------------------------------------------
 // Relay (production → staging)
 
-const RELAY_SECRET = "test-relay-secret";
+const RELAY_SECRET = "test-relay-secret-0123456789abcdef";
 const RELAY_URL = "https://staging.example.convex.site/whatsapp/relay";
 const relayed = {
   waMessageId: "wamid.r1",
@@ -574,12 +574,13 @@ test("relay endpoint rejects malformed messages", async () => {
     "not json",
     JSON.stringify({ ...relayed, from: "+971501234567" }),
     JSON.stringify({ ...relayed, waMessageId: "" }),
-    JSON.stringify({ ...relayed, text: "x".repeat(4097) }),
+    // production relays only the first 500 characters
+    JSON.stringify({ ...relayed, text: "x".repeat(501) }),
     JSON.stringify({ waMessageId: "wamid.x", from: "971501234567" }),
   ]) {
     expect((await relayPost(t, body)).status).toBe(400);
   }
-  expect((await relayPost(t, "x".repeat(20_001))).status).toBe(413);
+  expect((await relayPost(t, "x".repeat(8193))).status).toBe(413);
 });
 
 test("the Meta webhook is closed on staging", async () => {
@@ -625,6 +626,10 @@ test("relayIncoming signs the message and reads the answer", async () => {
   expect(call.body).not.toContain(APP_SECRET);
   expect(call.body).not.toContain("test-access-token");
 
+  // only what staging scans leaves production
+  await relayIncoming({ ...relayed, text: "x".repeat(4096) });
+  expect(JSON.parse(calls.at(-1)!.body).text).toBe("x".repeat(500));
+
   for (const res of [
     Response.json({ handled: false }),
     Response.json({ handled: "yes" }),
@@ -637,7 +642,7 @@ test("relayIncoming signs the message and reads the answer", async () => {
   }
 });
 
-test("relayIncoming gives up after five seconds", async () => {
+test("relayIncoming gives up after ten seconds", async () => {
   vi.stubEnv("WHATSAPP_RELAY_URL", RELAY_URL);
   vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
   let called!: () => void;
@@ -657,7 +662,7 @@ test("relayIncoming gives up after five seconds", async () => {
   let settled = false;
   const pending = relayIncoming(relayed).finally(() => (settled = true));
   await fetching;
-  await vi.advanceTimersByTimeAsync(4_999);
+  await vi.advanceTimersByTimeAsync(9_999);
   expect(settled).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(await pending).toBe(false);
@@ -672,6 +677,11 @@ test("relayIncoming stays off unless this deployment is Meta's, over https", asy
   vi.stubEnv("WHATSAPP_RELAY_URL", RELAY_URL);
   asStaging();
   expect(await relayIncoming(relayed)).toBe(false);
+  // a short relay secret counts as unset, on both sides
+  vi.stubEnv("WHATSAPP_APP_SECRET", APP_SECRET);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "too-short");
+  expect(await relayIncoming(relayed)).toBe(false);
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", RELAY_SECRET);
   // plain http is refused outside dev
   vi.stubEnv("WHATSAPP_APP_SECRET", APP_SECRET);
   vi.stubEnv("WIRDAK_ENV", "prod");
@@ -689,6 +699,8 @@ test("whatsappConfigured: Meta secrets on production, the relay secret on stagin
   vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
   expect(whatsappConfigured()).toBe(false);
   vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "test-access-token");
+  vi.stubEnv("WHATSAPP_RELAY_SECRET", "too-short");
+  expect(whatsappConfigured()).toBe(false);
   vi.stubEnv("WHATSAPP_RELAY_SECRET", "");
   expect(whatsappConfigured()).toBe(false);
 });

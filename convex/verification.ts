@@ -32,6 +32,7 @@ import {
   accountCreatedAlert,
   env,
   isDev,
+  MAX_SCANNED_TEXT,
   pinReply,
   sendWhatsAppText,
   signInAlert,
@@ -43,8 +44,6 @@ const CODE_LENGTH = 10;
 const CODE_RE = /^[A-HJ-NP-Z2-9]{10}$/;
 /** Candidate codes per start; a collision among pending codes is ~1e-13 likely. */
 const CODE_CANDIDATES = 3;
-/** Only this much of an incoming message is scanned for a code. */
-const MAX_SCANNED_TEXT = 500;
 const MINUTE_MS = 60_000;
 const TEN_MIN_MS = 10 * MINUTE_MS;
 const HOUR_MS = 60 * MINUTE_MS;

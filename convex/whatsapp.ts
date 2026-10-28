@@ -50,6 +50,17 @@ export function isDev(): boolean {
   return process.env.WIRDAK_ENV === "dev";
 }
 
+/** Shorter relay secrets are treated as unset (`openssl rand -hex 32` is 64). */
+const MIN_RELAY_SECRET = 32;
+
+/** `WHATSAPP_RELAY_SECRET`, if it is long enough to trust. */
+export function relaySecret(): string | undefined {
+  const secret = env("WHATSAPP_RELAY_SECRET");
+  return secret !== undefined && secret.length >= MIN_RELAY_SECRET
+    ? secret
+    : undefined;
+}
+
 /**
  * Where this deployment's incoming messages come from: Meta's webhook when it
  * holds the app secret (production), else production's relay when it holds
@@ -58,7 +69,7 @@ export function isDev(): boolean {
  */
 export function inboundSource(): "meta" | "relay" | null {
   if (env("WHATSAPP_APP_SECRET") !== undefined) return "meta";
-  if (env("WHATSAPP_RELAY_SECRET") !== undefined) return "relay";
+  if (relaySecret() !== undefined) return "relay";
   return null;
 }
 
@@ -116,6 +127,8 @@ export const WA_PHONE = /^[1-9]\d{6,14}$/;
 const MAX_MESSAGE_ID = 256;
 /** WhatsApp caps text messages at 4096 characters. */
 const MAX_TEXT = 4096;
+/** Only this much of an incoming message is scanned for a code (or relayed). */
+export const MAX_SCANNED_TEXT = 500;
 
 export type IncomingMessage = {
   waMessageId: string;
@@ -125,6 +138,25 @@ export type IncomingMessage = {
 
 function isObject(x: unknown): x is Record<string, unknown> {
   return typeof x === "object" && x !== null;
+}
+
+/** A message from untrusted fields, or `null` unless all three are well-formed. */
+function toMessage(
+  id: unknown,
+  from: unknown,
+  text: unknown,
+): IncomingMessage | null {
+  if (
+    typeof id !== "string" ||
+    id.length === 0 ||
+    id.length > MAX_MESSAGE_ID ||
+    typeof from !== "string" ||
+    !WA_PHONE.test(from) ||
+    typeof text !== "string"
+  ) {
+    return null;
+  }
+  return { waMessageId: id, from, text };
 }
 
 /**
@@ -155,24 +187,10 @@ export function parseIncoming(
       const messages = change.value.messages;
       if (!Array.isArray(messages)) continue;
       for (const m of messages) {
-        if (
-          !isObject(m) ||
-          m.type !== "text" ||
-          typeof m.id !== "string" ||
-          m.id.length === 0 ||
-          m.id.length > MAX_MESSAGE_ID ||
-          typeof m.from !== "string" ||
-          !WA_PHONE.test(m.from) ||
-          !isObject(m.text) ||
-          typeof m.text.body !== "string"
-        ) {
-          continue;
-        }
-        out.push({
-          waMessageId: m.id,
-          from: m.from,
-          text: m.text.body.slice(0, MAX_TEXT),
-        });
+        if (!isObject(m) || m.type !== "text" || !isObject(m.text)) continue;
+        const message = toMessage(m.id, m.from, m.text.body);
+        if (message === null) continue;
+        out.push({ ...message, text: message.text.slice(0, MAX_TEXT) });
       }
     }
   }
@@ -181,23 +199,11 @@ export function parseIncoming(
 
 /** The message in a relay call (`relayIncoming` below), or `null` if malformed. */
 export function parseRelayed(payload: unknown): IncomingMessage | null {
-  if (
-    !isObject(payload) ||
-    typeof payload.waMessageId !== "string" ||
-    payload.waMessageId.length === 0 ||
-    payload.waMessageId.length > MAX_MESSAGE_ID ||
-    typeof payload.from !== "string" ||
-    !WA_PHONE.test(payload.from) ||
-    typeof payload.text !== "string" ||
-    payload.text.length > MAX_TEXT
-  ) {
-    return null;
-  }
-  return {
-    waMessageId: payload.waMessageId,
-    from: payload.from,
-    text: payload.text,
-  };
+  if (!isObject(payload)) return null;
+  const message = toMessage(payload.waMessageId, payload.from, payload.text);
+  return message !== null && message.text.length <= MAX_SCANNED_TEXT
+    ? message
+    : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,13 +286,15 @@ export const sendText = internalAction({
 // production. A message production has no pending code for is relayed to
 // staging, which answers whether one of its own codes took it. Staging then
 // sends its own reply (with its own `SITE_URL`); production replies only if
-// staging didn't take it.
+// staging didn't take it, couldn't be reached, or took too long. Staging sends
+// before it answers, so its reply is never left waiting in a queue (a PIN
+// would be stored there in the clear); the timeout leaves room for that.
 
 export const RELAY_TIMESTAMP_HEADER = "X-Wirdak-Relay-Timestamp";
 export const RELAY_SIGNATURE_HEADER = "X-Wirdak-Relay-Signature";
 /** Relays older or newer than this are refused (replays are deduped anyway). */
 export const RELAY_MAX_SKEW_MS = 5 * 60_000;
-const RELAY_TIMEOUT_MS = 5_000;
+const RELAY_TIMEOUT_MS = 10_000;
 
 /** `sha256=<hex>` of HMAC-SHA256(secret, `<timestamp>.<body>`). */
 export async function relaySignature(
@@ -306,7 +314,7 @@ export async function relayIncoming(
   message: IncomingMessage,
 ): Promise<boolean> {
   const url = env("WHATSAPP_RELAY_URL");
-  const secret = env("WHATSAPP_RELAY_SECRET");
+  const secret = relaySecret();
   if (url === undefined || secret === undefined) return false;
   // Only a deployment that Meta calls relays, so two can't relay in a loop.
   if (inboundSource() !== "meta") return false;
@@ -314,7 +322,11 @@ export async function relayIncoming(
     console.error("whatsapp relay: WHATSAPP_RELAY_URL is not https");
     return false;
   }
-  const body = JSON.stringify(message);
+  // Staging scans no further than this, so nothing more leaves production.
+  const body = JSON.stringify({
+    ...message,
+    text: message.text.slice(0, MAX_SCANNED_TEXT),
+  });
   const timestamp = String(Date.now());
   const signature = await relaySignature(secret, timestamp, body);
   const controller = new AbortController();
