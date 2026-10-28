@@ -10,6 +10,7 @@ import type {
   UndoResult,
 } from "@convex/pool";
 import { useMutation } from "convex/react";
+import posthog from "posthog-js";
 import { useEffect, useRef, useState } from "react";
 import { UNDO_WINDOW_MS, type ToastData } from "../../components/Toast";
 import { pendingIntent } from "../verify/progress";
@@ -253,6 +254,7 @@ export function useKhatmaActions(
     if (!result) return;
     setSheet(null);
     if (result.ok) {
+      posthog.capture("juz_taken", { juz_number: juz });
       showToast(t.toast.taken(toArabicDigits(juz)));
       return offerPush();
     }
@@ -265,6 +267,7 @@ export function useKhatmaActions(
     const result = await run(() => finishMutation(args));
     if (!result) return;
     if (result.ok) {
+      posthog.capture("juz_finished", { juz_number: held });
       showToast(t.toast.finished, undoWindowMs(result.undoUntil, Date.now()));
     } else if (result.reason === "taken_over") {
       // Someone else is finishing it: thank them for it, and offer no undo (nothing was finished).
@@ -281,6 +284,7 @@ export function useKhatmaActions(
   async function stillReading() {
     const result = await run(() => stillReadingMutation(args));
     if (!result) return;
+    if (result.ok) posthog.capture("reading_extended");
     showToast(
       result.ok ? t.toast.stillReading : stillReadingCopy[result.reason],
     );
@@ -299,6 +303,7 @@ export function useKhatmaActions(
   async function undo() {
     const result = await run(() => undoMutation(args));
     if (!result) return;
+    if (result.ok) posthog.capture("juz_finish_undone");
     showToast(result.ok ? t.toast.undone : undoCopy[result.reason]);
   }
 
@@ -306,12 +311,14 @@ export function useKhatmaActions(
     const result = await run(() => releaseMutation(args));
     if (!result) return;
     setSheet(null);
+    if (result.ok) posthog.capture("juz_released");
     showToast(result.ok ? t.toast.released : releaseCopy[result.reason]);
   }
 
   async function continueToKhatma() {
     const result = await run(() => celebratedMutation(args));
     // On success the view flips `celebrateRound` to null by itself.
+    if (result?.ok) posthog.capture("khatma_round_continued");
     if (result && !result.ok) showToast(t.errors.generic);
   }
 
