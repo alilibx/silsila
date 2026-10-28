@@ -130,7 +130,10 @@ http.route({
     } catch {
       body = null;
     }
-    const { displayName, clientKey } = (body ?? {}) as Record<string, unknown>;
+    const { displayName, clientKey, returnPath } = (body ?? {}) as Record<
+      string,
+      unknown
+    >;
     if (
       typeof displayName !== "string" ||
       typeof clientKey !== "string" ||
@@ -145,6 +148,8 @@ http.route({
       displayName,
       clientKey,
       ip: await callerIp(ctx, req),
+      // Optional and never refused: a bad path just links to the home page.
+      ...(typeof returnPath === "string" ? { returnPath } : {}),
     });
     if ("error" in res) {
       return json(START_ERROR_STATUS[res.error], { error: res.error }, headers);
