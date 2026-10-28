@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/alilibx/wirdak/compare/v0.2.0...v0.2.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* link the WhatsApp verified reply back to the page the sign-in started on ([#15](https://github.com/alilibx/wirdak/issues/15)) ([e414d75](https://github.com/alilibx/wirdak/commit/e414d7575a13340d61d5d84dba690b94ae50bd43))
+* relay WhatsApp codes started on staging through production ([#17](https://github.com/alilibx/wirdak/issues/17)) ([3f9a71f](https://github.com/alilibx/wirdak/commit/3f9a71f812cf4f6da414b4da5d8d190a8b3a14cc))
+
 ## [0.2.0](https://github.com/alilibx/wirdak/compare/v0.1.0...v0.2.0) (2026-10-28)
 
 
