@@ -21,7 +21,44 @@ function wasDismissed(): boolean {
  * copy of the link. Hidden once someone is signed in here, or for this visit
  * after "not now".
  */
+// TEMP (ARQ-275): what this browser reports, to tune inAppBrowser(); remove after.
+function Diag() {
+  if (!window.location.search.includes("diag=ua")) return null;
+  const nav = navigator as Navigator & { standalone?: boolean };
+  const w = window as unknown as Record<string, unknown>;
+  return (
+    <pre
+      dir="ltr"
+      className="mx-4 mt-3 overflow-x-auto rounded-ui bg-white p-3 text-xs whitespace-pre-wrap"
+    >
+      {JSON.stringify(
+        {
+          ua: nav.userAgent,
+          standalone:
+            nav.standalone === undefined ? "undefined" : nav.standalone,
+          webkitHandlers: typeof (
+            w.webkit as { messageHandlers?: unknown } | undefined
+          )?.messageHandlers,
+          share: typeof nav.share,
+          detected: inAppBrowser(),
+        },
+        null,
+        1,
+      )}
+    </pre>
+  );
+}
+
 export function OpenInBrowser() {
+  return (
+    <>
+      <Diag />
+      <Banner />
+    </>
+  );
+}
+
+function Banner() {
   const sessionToken = useSessionToken();
   const [kind] = useState(() => inAppBrowser());
   const [dismissed, setDismissed] = useState(wasDismissed);
