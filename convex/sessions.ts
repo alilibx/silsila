@@ -71,6 +71,7 @@ export const me = sessionQuery({
     return {
       displayName: ctx.person.displayName,
       maskedPhone: maskPhone(ctx.person.phone),
+      whatsappNotes: ctx.person.whatsappNotes === true,
     };
   },
 });

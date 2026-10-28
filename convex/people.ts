@@ -37,6 +37,19 @@ export const updateDisplayName = sessionMutation({
 });
 
 /**
+ * Turns WhatsApp notifications on or off for the caller (every khatma whose
+ * notifications they have on). Signed-out callers get `{ ok: false }`.
+ */
+export const setWhatsappNotes = sessionMutation({
+  args: { on: v.boolean() },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    if (!ctx.person) return { ok: false };
+    await ctx.db.patch(ctx.person._id, { whatsappNotes: args.on });
+    return { ok: true };
+  },
+});
+
+/**
  * Records that `person` was just here (at most once an hour, the same as the
  * session's `lastUsedAt`) and keeps their time zone current. Writes only when
  * one of the two changed.

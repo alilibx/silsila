@@ -28,6 +28,7 @@ import type * as lib_session from "../lib/session.js";
 import type * as lib_settings from "../lib/settings.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_wakingTime from "../lib/wakingTime.js";
+import type * as lib_whatsappTemplates from "../lib/whatsappTemplates.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notes from "../notes.js";
 import type * as nudges from "../nudges.js";
@@ -41,6 +42,7 @@ import type * as rounds from "../rounds.js";
 import type * as sessions from "../sessions.js";
 import type * as verification from "../verification.js";
 import type * as whatsapp from "../whatsapp.js";
+import type * as whatsappNotes from "../whatsappNotes.js";
 
 import type {
   ApiFromModules,
@@ -69,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   "lib/settings": typeof lib_settings;
   "lib/text": typeof lib_text;
   "lib/wakingTime": typeof lib_wakingTime;
+  "lib/whatsappTemplates": typeof lib_whatsappTemplates;
   maintenance: typeof maintenance;
   notes: typeof notes;
   nudges: typeof nudges;
@@ -82,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   sessions: typeof sessions;
   verification: typeof verification;
   whatsapp: typeof whatsapp;
+  whatsappNotes: typeof whatsappNotes;
 }>;
 
 /**

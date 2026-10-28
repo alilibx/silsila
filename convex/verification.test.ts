@@ -430,6 +430,7 @@ test("new number: start → message → matched → claim → session", async ()
   ).toEqual({
     displayName: "أم أحمد",
     maskedPhone: "+971 50 ••• 4567",
+    whatsappNotes: false,
   });
   const person = await t.run((ctx) =>
     ctx.db
@@ -549,6 +550,7 @@ test("existing number needs the PIN from the WhatsApp reply", async () => {
   ).toEqual({
     displayName: "سعيد",
     maskedPhone: "+971 50 ••• 4567",
+    whatsappNotes: false,
   });
   // no second person for the same phone
   expect(

@@ -12,6 +12,8 @@ export default defineSchema({
     verifiedAt: v.number(),
     timeZone: v.string(),
     lastSeenAt: v.number(),
+    // Opted in to notifications on WhatsApp (missing means no).
+    whatsappNotes: v.optional(v.boolean()),
   }).index("by_phone", ["phone"]),
 
   sessions: defineTable({
@@ -142,6 +144,8 @@ export default defineSchema({
     roundNumber: nullableNumber,
     createdAt: v.number(),
     pushedAt: nullableNumber,
+    // When its WhatsApp message went out; at most one per note.
+    whatsappSentAt: v.optional(nullableNumber),
     clearedAt: nullableNumber,
   })
     .index("by_person_khatma", ["personId", "khatmaId", "clearedAt"])
