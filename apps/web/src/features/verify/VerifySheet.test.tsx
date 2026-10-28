@@ -90,6 +90,13 @@ describe("VerifySheet", () => {
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
   });
 
+  it("name step links to the privacy policy in a new tab, outside the router", () => {
+    ui();
+    const link = screen.getByRole("link", { name: t.verify.privacy });
+    expect(link).toHaveAttribute("href", "/privacy");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("name step: a blank name shows the error and sends nothing", async () => {
     const user = userEvent.setup();
     ui();
