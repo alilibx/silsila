@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { isOlder, versionGate } from "./versionGate";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { isOlder, lastingStorage, versionGate } from "./versionGate";
 
 function memoryStorage() {
   const map = new Map<string, string>();
   return {
     get: (k: string) => map.get(k) ?? null,
-    set: (k: string, v: string) => void map.set(k, v),
+    set: (k: string, v: string) => (map.set(k, v), true),
   };
 }
 
@@ -39,5 +39,37 @@ describe("versionGate", () => {
     versionGate("0.2.1", "0.3.0", s);
     expect(versionGate("0.2.1", "0.3.0", s)).toBe("stuck");
     expect(versionGate("0.2.1", "0.4.0", s)).toBe("reload");
+  });
+});
+
+describe("versionGate without lasting storage", () => {
+  it("stops at the button instead of reloading when the marker can't be kept", () => {
+    const forgetful = { get: () => null, set: () => false };
+    expect(versionGate("0.2.1", "0.3.0", forgetful)).toBe("stuck");
+    expect(versionGate("0.2.1", "0.3.0", forgetful)).toBe("stuck");
+  });
+});
+
+describe("lastingStorage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("falls back to sessionStorage when localStorage refuses", () => {
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(lastingStorage.set("k", "v")).toBe(true);
+    expect(lastingStorage.get("k")).toBe("v");
+  });
+
+  it("reports failure when neither storage keeps the value", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(lastingStorage.set("k", "v")).toBe(false);
+    expect(versionGate("0.2.1", "0.3.0", lastingStorage)).toBe("stuck");
   });
 });

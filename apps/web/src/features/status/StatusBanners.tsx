@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { t } from "../../i18n/ar";
 import { readStored, writeStored } from "../../lib/session";
 import { reloadPage } from "./reload";
-import { versionGate } from "./versionGate";
+import { lastingStorage, versionGate } from "./versionGate";
 
 const DISMISSED = "wirdak.announcementDismissed";
-
-const storage = { get: readStored, set: writeStored };
 
 /**
  * The banners the admin panel controls (spec 9.2 to 9.4): maintenance, the
@@ -26,7 +24,7 @@ export function StatusBanners() {
 
   useEffect(() => {
     if (settings === undefined || gate.required === required) return;
-    const result = versionGate(__APP_VERSION__, required, storage);
+    const result = versionGate(__APP_VERSION__, required, lastingStorage);
     setGate({ required, result });
     if (result === "reload") reloadPage();
   }, [settings, required, gate.required]);

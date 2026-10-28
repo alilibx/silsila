@@ -32,6 +32,8 @@ function settings(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   m.settings = undefined;
   m.stored.clear();
+  localStorage.clear();
+  sessionStorage.clear();
   m.reload.mockReset();
 });
 
