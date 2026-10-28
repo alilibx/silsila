@@ -70,9 +70,18 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       # Runs the buildCommand in apps/web/vercel.json: `convex deploy` first, then the Vite build.
-      - run: vercel build --target="$TARGET"
+      # It needs no VERCEL_TOKEN: `vercel pull` already wrote the project settings it reads.
+      - run: |
+          set -o pipefail
+          vercel build --target="$TARGET" 2>&1 | tee "$RUNNER_TEMP/vercel-build.log"
+          if grep -q "Installing dependencies" "$RUNNER_TEMP/vercel-build.log"; then
+            echo "::error::vercel build installed dependencies with CONVEX_DEPLOY_KEY set (see docs/deploy.md)"
+            exit 1
+          fi
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # The function builder for api/ ignores the empty installCommand in vercel.json and runs its
+          # own install. This tells it the workflow's install already ran, so it skips that.
+          VERCEL_INSTALL_COMPLETED: "1"
           # Environment secret: each GitHub environment holds the key of its own Convex deployment.
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           # Staging is a production-type Convex deployment served from a non-production Vercel

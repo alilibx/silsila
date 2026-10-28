@@ -42,7 +42,7 @@ vercel build --target=<staging|production>
 vercel deploy --prebuilt --target=<staging|production>
 ```
 
-`VERCEL_TOKEN` reaches only these three steps and `CONVEX_DEPLOY_KEY` only the build, never `bun install`. The empty `installCommand` in `apps/web/vercel.json` stops `vercel build` from installing again with those secrets set; the workflow's `bun install --frozen-lockfile` is the only install. Production checks out `refs/tags/<ref>`, so a branch named like a tag cannot be deployed.
+`VERCEL_TOKEN` reaches only `vercel pull` and `vercel deploy`, and `CONVEX_DEPLOY_KEY` only `vercel build`, never an install. The workflow's `bun install --frozen-lockfile` is the only install. Inside `vercel build`, two builders could install again with the deploy key set: the empty `installCommand` in `apps/web/vercel.json` stops the static build's install, and `VERCEL_INSTALL_COMPLETED=1` stops the install that the function builder (`@vercel/node`, for `api/`) runs on its own, since it ignores `installCommand`. The step fails if its log still shows "Installing dependencies", so a Vercel CLI upgrade that drops that variable can't bring the install back unnoticed. Production checks out `refs/tags/<ref>`, so a branch named like a tag cannot be deployed.
 
 Every push to `main` gets its own run. Deploys to one environment queue one at a time (`concurrency: deploy-<environment>`); when several pile up, GitHub keeps only the newest waiting one, so staging always ends on the latest commit.
 

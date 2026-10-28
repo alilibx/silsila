@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.node.json",
+  // Vercel's function builder type-checks api/ against the nearest tsconfig.json to the entrypoint.
+  // Without this file that is ../tsconfig.json, the browser config, which has no Node globals.
+  "include": ["**/*.ts"]
+}
