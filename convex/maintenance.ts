@@ -21,6 +21,138 @@ const HANDOFF_TTL_MS = DAY_MS;
 /** Audit rows are kept 2 years (spec 4.5). */
 export const AUDIT_TTL_MS = 2 * 365 * DAY_MS;
 
+/**
+ * Help requests per run. Each one reads and writes all its messages (up to
+ * MAX_MESSAGES_PER_REQUEST), so the batch is far smaller than BATCH.
+ */
+const HELP_BATCH = 20;
+const ORPHAN_BATCH = 200;
+
+/** Uploads younger than this may still be on their way into a message. */
+const ORPHAN_AGE_MS = HOUR_MS;
+const ORPHAN_MARK = "helpOrphans";
+
+async function deleteFiles(
+  ctx: MutationCtx,
+  ids: (Id<"_storage"> | null)[],
+): Promise<void> {
+  for (const id of ids) {
+    if (id !== null && (await ctx.db.system.get(id))) {
+      await ctx.storage.delete(id);
+    }
+  }
+}
+
+/**
+ * Help retention (plan 3 spec 3.6): files go `helpAttachmentRetentionMs`
+ * after a request closes, the whole conversation `helpRetentionMs` after.
+ * Returns true when more are due.
+ */
+async function purgeHelp(ctx: MutationCtx, now: number): Promise<boolean> {
+  const fileCutoff = now - (await getSetting(ctx, "helpAttachmentRetentionMs"));
+  const allCutoff = now - (await getSetting(ctx, "helpRetentionMs"));
+
+  // Whole conversations first, so their files go with them. `gt(0)` keeps the
+  // null of a request that isn't closed out of the range.
+  const expired = await ctx.db
+    .query("helpRequests")
+    .withIndex("by_closedAt", (q) =>
+      q.gt("closedAt", 0).lt("closedAt", allCutoff),
+    )
+    .take(BATCH + 1);
+  for (const request of expired.slice(0, BATCH)) {
+    const messages = await messagesOf(ctx, request._id);
+    await deleteFiles(
+      ctx,
+      messages.flatMap((m) => [m.screenshotId, m.voiceId]),
+    );
+    for (const m of messages) await ctx.db.delete(m._id);
+    await ctx.db.delete(request._id);
+  }
+
+  // Then files only, for requests whose files are still there.
+  const withFiles = await ctx.db
+    .query("helpRequests")
+    .withIndex("by_attachments_closedAt", (q) =>
+      q
+        .eq("attachmentsDeletedAt", null)
+        .gt("closedAt", 0)
+        .lt("closedAt", fileCutoff),
+    )
+    .take(HELP_BATCH + 1);
+  for (const request of withFiles.slice(0, HELP_BATCH)) {
+    const messages = await messagesOf(ctx, request._id);
+    await deleteFiles(
+      ctx,
+      messages.flatMap((m) => [m.screenshotId, m.voiceId]),
+    );
+    for (const m of messages) {
+      if (m.screenshotId !== null || m.voiceId !== null) {
+        await ctx.db.patch(m._id, {
+          screenshotId: null,
+          voiceId: null,
+          filesDeletedAt: now,
+        });
+      }
+    }
+    await ctx.db.patch(request._id, { attachmentsDeletedAt: now });
+  }
+  return expired.length > HELP_BATCH || withFiles.length > HELP_BATCH;
+}
+
+function messagesOf(ctx: MutationCtx, requestId: Id<"helpRequests">) {
+  return ctx.db
+    .query("helpMessages")
+    .withIndex("by_request", (q) => q.eq("requestId", requestId))
+    .collect();
+}
+
+/**
+ * Deletes uploads no help message references, once they're an hour old. Help
+ * is the only user of file storage. Walks `_storage` from a saved mark so each
+ * file is checked once.
+ */
+async function purgeOrphanUploads(
+  ctx: MutationCtx,
+  now: number,
+): Promise<boolean> {
+  const markRow = await ctx.db
+    .query("sweepMarks")
+    .withIndex("by_name", (q) => q.eq("name", ORPHAN_MARK))
+    .first();
+  const mark = markRow?.value ?? 0;
+  const files = await ctx.db.system
+    .query("_storage")
+    .withIndex("by_creation_time", (q) =>
+      q.gt("_creationTime", mark).lt("_creationTime", now - ORPHAN_AGE_MS),
+    )
+    .take(ORPHAN_BATCH + 1);
+  const batch = files.slice(0, ORPHAN_BATCH);
+  for (const file of batch) {
+    const used =
+      (await ctx.db
+        .query("helpMessages")
+        .withIndex("by_screenshot", (q) => q.eq("screenshotId", file._id))
+        .first()) ??
+      (await ctx.db
+        .query("helpMessages")
+        .withIndex("by_voice", (q) => q.eq("voiceId", file._id))
+        .first());
+    if (!used) await ctx.storage.delete(file._id);
+  }
+  const last = batch.at(-1);
+  if (last) {
+    if (markRow) await ctx.db.patch(markRow._id, { value: last._creationTime });
+    else {
+      await ctx.db.insert("sweepMarks", {
+        name: ORPHAN_MARK,
+        value: last._creationTime,
+      });
+    }
+  }
+  return files.length > ORPHAN_BATCH;
+}
+
 /** Deletes up to BATCH rows; returns true when more old rows remain. */
 async function deleteBatch(
   ctx: MutationCtx,
@@ -112,5 +244,24 @@ export const purge = internalMutation({
     ].some(Boolean);
 
     if (more) await ctx.scheduler.runAfter(0, internal.maintenance.purge, {});
+  },
+});
+
+/**
+ * Help retention and orphaned uploads, in small batches (plan 3 spec 3.6).
+ * Its own hourly cron, apart from `purge`, so a help backlog can never fail
+ * the purge, and only one chain runs at a time.
+ */
+export const purgeHelpData = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const more = [
+      await purgeHelp(ctx, now),
+      await purgeOrphanUploads(ctx, now),
+    ].some(Boolean);
+    if (more) {
+      await ctx.scheduler.runAfter(0, internal.maintenance.purgeHelpData, {});
+    }
   },
 });

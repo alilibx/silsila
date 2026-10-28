@@ -1,6 +1,7 @@
 import type { TileView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import { buttonClass } from "../components/Button";
+import { useHideHelpButton } from "../features/help/helpUi";
 import { Ring } from "../components/Ring";
 import { t } from "../i18n/ar";
 import { waShareLink } from "../lib/whatsapp";
@@ -25,6 +26,8 @@ export function CelebrationPage({
   busy,
   onContinue,
 }: Props) {
+  // The celebration fills the screen; the help button would only get in the way.
+  useHideHelpButton();
   const roundText = toArabicDigits(round);
   // The round just ended, so every bead is done, whatever state the next round shows.
   const done = tiles.map((tile) => ({

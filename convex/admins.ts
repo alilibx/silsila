@@ -124,6 +124,12 @@ export const remove = adminMutation({
     const others = await ctx.db.query("admins").take(2);
     if (others.length < 2) return { error: "last_admin" };
     await deleteAdminSessions(ctx, target._id);
+    // Pushes stop with the role (spec 4.3).
+    const subscriptions = await ctx.db
+      .query("adminPushSubscriptions")
+      .withIndex("by_admin", (q) => q.eq("adminId", target._id))
+      .collect();
+    for (const s of subscriptions) await ctx.db.delete(s._id);
     await ctx.db.delete(target._id);
     await writeAudit(ctx, {
       actor: ctx.admin,

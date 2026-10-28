@@ -195,3 +195,19 @@ test("a member session token can't list admins", async () => {
     t.query(api.admins.list, { adminToken: "member" }),
   ).rejects.toThrow(/not_admin/);
 });
+
+test("removing an admin deletes their push subscriptions", async () => {
+  const t = convexTest(schema, modules);
+  await signedInAdmin(t, "+971500000001", "ali");
+  const sara = await signedInAdmin(t, "+971500000002", "sara");
+  await t.mutation(api.adminPush.subscribe, {
+    adminToken: "sara",
+    endpoint: "https://push.example/sara",
+    p256dh: "p",
+    auth: "a",
+  });
+  await t.mutation(api.admins.remove, { adminToken: "ali", adminId: sara });
+  expect(
+    await t.run((ctx) => ctx.db.query("adminPushSubscriptions").collect()),
+  ).toHaveLength(0);
+});

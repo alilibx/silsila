@@ -9,6 +9,8 @@
  */
 
 import type * as adminAuth from "../adminAuth.js";
+import type * as adminHelp from "../adminHelp.js";
+import type * as adminPush from "../adminPush.js";
 import type * as adminSettings from "../adminSettings.js";
 import type * as admins from "../admins.js";
 import type * as audit from "../audit.js";
@@ -16,6 +18,7 @@ import type * as crons from "../crons.js";
 import type * as dev from "../dev.js";
 import type * as grace from "../grace.js";
 import type * as handoff from "../handoff.js";
+import type * as help from "../help.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as khatmas from "../khatmas.js";
@@ -24,6 +27,8 @@ import type * as lib_audit from "../lib/audit.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_digits from "../lib/digits.js";
 import type * as lib_grace from "../lib/grace.js";
+import type * as lib_help from "../lib/help.js";
+import type * as lib_helpFiles from "../lib/helpFiles.js";
 import type * as lib_juz from "../lib/juz.js";
 import type * as lib_khatma from "../lib/khatma.js";
 import type * as lib_noteText from "../lib/noteText.js";
@@ -58,6 +63,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   adminAuth: typeof adminAuth;
+  adminHelp: typeof adminHelp;
+  adminPush: typeof adminPush;
   adminSettings: typeof adminSettings;
   admins: typeof admins;
   audit: typeof audit;
@@ -65,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   dev: typeof dev;
   grace: typeof grace;
   handoff: typeof handoff;
+  help: typeof help;
   hooks: typeof hooks;
   http: typeof http;
   khatmas: typeof khatmas;
@@ -73,6 +81,8 @@ declare const fullApi: ApiFromModules<{
   "lib/crypto": typeof lib_crypto;
   "lib/digits": typeof lib_digits;
   "lib/grace": typeof lib_grace;
+  "lib/help": typeof lib_help;
+  "lib/helpFiles": typeof lib_helpFiles;
   "lib/juz": typeof lib_juz;
   "lib/khatma": typeof lib_khatma;
   "lib/noteText": typeof lib_noteText;

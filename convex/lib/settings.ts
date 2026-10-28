@@ -55,6 +55,18 @@ export const SETTING_DEFAULTS = {
   maintenanceMessage: null as string | null,
   /** A release (`x.y.z`); older websites reload once to pick up the new one. */
   minClientVersion: null as string | null,
+  // Help requests (plan 3 spec 3.6)
+  helpRequestsPerPersonPerDay: 5,
+  helpRequestsPerVisitorPerDay: 3,
+  helpRequestsPerIpPerDay: 10,
+  /** messages and uploads in conversations, per person or visitor */
+  helpMessagesPerHour: 20,
+  /** an answered request with no word from the person closes after this */
+  helpAutoCloseMs: 14 * DAY,
+  /** screenshots and voice notes are deleted this long after a request closes */
+  helpAttachmentRetentionMs: 30 * DAY,
+  /** the whole conversation is deleted this long after it closes */
+  helpRetentionMs: 180 * DAY,
 };
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

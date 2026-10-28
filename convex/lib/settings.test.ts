@@ -83,6 +83,13 @@ test("defaults match the spec", () => {
     announcement: null,
     maintenanceMessage: null,
     minClientVersion: null,
+    helpRequestsPerPersonPerDay: 5,
+    helpRequestsPerVisitorPerDay: 3,
+    helpRequestsPerIpPerDay: 10,
+    helpMessagesPerHour: 20,
+    helpAutoCloseMs: 14 * 86_400_000,
+    helpAttachmentRetentionMs: 30 * 86_400_000,
+    helpRetentionMs: 180 * 86_400_000,
   });
 });
 

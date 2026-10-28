@@ -9,6 +9,8 @@ export const auditActionValidator = v.union(
   v.literal("admin.remove"),
   v.literal("setting.set"),
   v.literal("setting.reset"),
+  v.literal("help.close"),
+  v.literal("help.reopen"),
 );
 
 export type AuditAction = Infer<typeof auditActionValidator>;
@@ -23,7 +25,7 @@ export async function writeAudit(
     /** The admin who made the change; null for the command line. */
     actor: Doc<"admins"> | null;
     action: AuditAction;
-    targetKind: "admin" | "setting";
+    targetKind: "admin" | "setting" | "help";
     targetId: string;
     before: unknown;
     after: unknown;

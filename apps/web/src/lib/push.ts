@@ -87,7 +87,7 @@ export function markPushAsked(): void {
 }
 
 /** The VAPID public key (URL-safe base64) as the bytes `subscribe` wants. */
-function keyBytes(key: string): Uint8Array<ArrayBuffer> {
+export function keyBytes(key: string): Uint8Array<ArrayBuffer> {
   const padded = key.replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));

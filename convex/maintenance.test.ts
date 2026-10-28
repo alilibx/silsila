@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { addMessage } from "./lib/help";
 import { checkRateLimit } from "./lib/rateLimit";
 import schema from "./schema";
 
@@ -336,4 +337,137 @@ test("purge deletes audit rows after two years and expired admin sessions", asyn
     expect(await ctx.db.get(expired)).toBeNull();
     expect(await ctx.db.get(live)).not.toBeNull();
   });
+});
+
+async function closedHelpRequest(
+  t: ReturnType<typeof convexTest>,
+  closedAt: number,
+) {
+  return await t.run(async (ctx) => {
+    const shot = await ctx.storage.store(
+      new Blob([new Uint8Array(10)], { type: "image/png" }),
+    );
+    const requestId = await ctx.db.insert("helpRequests", {
+      personId: null,
+      reporterHash: "h",
+      khatmaId: null,
+      status: "closed",
+      context: {
+        path: "/",
+        appVersion: "",
+        userAgent: "",
+        screen: "",
+        timeZone: "",
+      },
+      createdAt: closedAt - 1000,
+      lastMessageAt: closedAt - 1000,
+      answeredAt: null,
+      closedAt,
+      seenAt: null,
+      attachmentsDeletedAt: null,
+    });
+    const messageId = await ctx.db.insert("helpMessages", {
+      requestId,
+      from: "visitor",
+      text: "نص",
+      screenshotId: shot,
+      voiceId: null,
+      voiceSeconds: null,
+      createdAt: closedAt - 1000,
+    });
+    return { requestId, messageId, shot };
+  });
+}
+
+test("purge deletes help files after 30 days and conversations after 180", async () => {
+  const t = convexTest(schema, modules);
+  const now = Date.now();
+  const DAY_MS = 86_400_000;
+  const recent = await closedHelpRequest(t, now - 29 * DAY_MS);
+  const filesGone = await closedHelpRequest(t, now - 30 * DAY_MS - 60_000);
+  const allGone = await closedHelpRequest(t, now - 180 * DAY_MS - 60_000);
+
+  await t.mutation(internal.maintenance.purgeHelpData, {});
+
+  await t.run(async (ctx) => {
+    expect(await ctx.db.system.get(recent.shot)).not.toBeNull();
+
+    expect(await ctx.db.system.get(filesGone.shot)).toBeNull();
+    expect(await ctx.db.get(filesGone.messageId)).toMatchObject({
+      text: "نص",
+      screenshotId: null,
+    });
+    expect(
+      (await ctx.db.get(filesGone.requestId))?.attachmentsDeletedAt,
+    ).not.toBeNull();
+
+    expect(await ctx.db.get(allGone.requestId)).toBeNull();
+    expect(await ctx.db.get(allGone.messageId)).toBeNull();
+    expect(await ctx.db.system.get(allGone.shot)).toBeNull();
+  });
+});
+
+test("purge deletes uploads never attached, after an hour", async () => {
+  const t = convexTest(schema, modules);
+  const orphan = await t.run((ctx) =>
+    ctx.storage.store(new Blob([new Uint8Array(5)], { type: "image/png" })),
+  );
+  const attached = await closedHelpRequest(t, Date.now() + 1);
+
+  vi.setSystemTime(Date.now() + 59 * 60_000);
+  await t.mutation(internal.maintenance.purgeHelpData, {});
+  expect(await t.run((ctx) => ctx.db.system.get(orphan))).not.toBeNull();
+
+  vi.setSystemTime(Date.now() + 2 * 60_000);
+  await t.mutation(internal.maintenance.purgeHelpData, {});
+  expect(await t.run((ctx) => ctx.db.system.get(orphan))).toBeNull();
+  expect(await t.run((ctx) => ctx.db.system.get(attached.shot))).not.toBeNull();
+});
+
+test("purge leaves help to its own job, so a backlog can't fail the hourly purge", async () => {
+  const t = convexTest(schema, modules);
+  const DAY_MS = 86_400_000;
+  const old = await closedHelpRequest(t, Date.now() - 31 * DAY_MS);
+  await t.mutation(internal.maintenance.purge, {});
+  // Nothing of help is touched inline...
+  expect(await t.run((ctx) => ctx.db.system.get(old.shot))).not.toBeNull();
+  // ...help has its own hourly cron, so purge starts no help chains of its own.
+  const scheduled = await t.run((ctx) =>
+    ctx.db.system.query("_scheduled_functions").collect(),
+  );
+  expect(scheduled.map((s) => s.name)).not.toContain(
+    "maintenance:purgeHelpData",
+  );
+  const crons = (await import("./crons")).default as unknown as {
+    crons: Record<string, { name: string }>;
+  };
+  expect(Object.values(crons.crons).map((c) => c.name)).toContain(
+    "maintenance:purgeHelpData",
+  );
+});
+
+test("after the files sweep each message remembers its files were deleted, and a reopened request is swept again", async () => {
+  const t = convexTest(schema, modules);
+  const DAY_MS = 86_400_000;
+  const old = await closedHelpRequest(t, Date.now() - 31 * DAY_MS);
+  await t.mutation(internal.maintenance.purgeHelpData, {});
+  expect(
+    (await t.run((ctx) => ctx.db.get(old.messageId)))?.filesDeletedAt,
+  ).not.toBeUndefined();
+
+  const voice = await t.run((ctx) =>
+    ctx.storage.store(new Blob([new Uint8Array(10)], { type: "audio/mp4" })),
+  );
+  await t.run(async (ctx) => {
+    const request = await ctx.db.get(old.requestId);
+    if (!request) throw new Error("gone");
+    await addMessage(ctx, request, "visitor", {
+      text: "ما زالت",
+      screenshotId: null,
+      voiceId: voice,
+      voiceSeconds: 5,
+    });
+  });
+  const reopened = await t.run((ctx) => ctx.db.get(old.requestId));
+  expect(reopened?.attachmentsDeletedAt).toBeNull();
 });
