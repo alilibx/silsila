@@ -25,20 +25,22 @@ export function cleanParam(value: string): string {
 /**
  * The approved utility template for each note kind (Meta's names, `ar`).
  * Each has the khatma title as its header and an "open the khatma" button
- * on `https://wirdak.app/{{1}}`.
+ * on `https://wirdak.app/{{1}}`. The bodies are plain updates about the
+ * member's own khatma, not `noteText`'s wording, which Meta read as
+ * marketing; `_v2` because a deleted template's name stays taken for a while.
  */
 export const NOTE_TEMPLATES: Record<NoteKind, string> = {
   almostUp: "wirdak_almost_up",
-  openForHelp: "wirdak_open_for_help",
-  thanks: "wirdak_thanks",
-  reminder: "wirdak_reminder",
-  behind: "wirdak_behind",
-  completed: "wirdak_completed",
-  nowOrganizer: "wirdak_now_organizer",
-  organizerMoved: "wirdak_organizer_moved",
+  openForHelp: "wirdak_open_for_help_v2",
+  thanks: "wirdak_juz_helped",
+  reminder: "wirdak_reminder_v2",
+  behind: "wirdak_behind_v2",
+  completed: "wirdak_completed_v2",
+  nowOrganizer: "wirdak_now_organizer_v2",
+  organizerMoved: "wirdak_organizer_moved_v2",
 };
 /** "Open for help" with two or more ajza': Arabic agreement needs its own body. */
-export const OPEN_FOR_HELP_MANY = "wirdak_open_for_help_many";
+export const OPEN_FOR_HELP_MANY = "wirdak_open_for_help_many_v2";
 
 /** A template header holds at most 60 characters. */
 const MAX_HEADER = 60;

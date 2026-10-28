@@ -21,12 +21,12 @@ const note = (kind: NoteKind, juz = [12]) => ({
 test("every note kind maps to its template and body values", () => {
   const cases: [NoteKind, string, string[]][] = [
     ["almostUp", "wirdak_almost_up", ["١٢"]],
-    ["openForHelp", "wirdak_open_for_help", ["١٢"]],
-    ["thanks", "wirdak_thanks", ["١٢"]],
-    ["reminder", "wirdak_reminder", ["١٢"]],
-    ["completed", "wirdak_completed", []],
-    ["nowOrganizer", "wirdak_now_organizer", []],
-    ["organizerMoved", "wirdak_organizer_moved", []],
+    ["openForHelp", "wirdak_open_for_help_v2", ["١٢"]],
+    ["thanks", "wirdak_juz_helped", ["١٢"]],
+    ["reminder", "wirdak_reminder_v2", ["١٢"]],
+    ["completed", "wirdak_completed_v2", []],
+    ["nowOrganizer", "wirdak_now_organizer_v2", []],
+    ["organizerMoved", "wirdak_organizer_moved_v2", []],
   ];
   for (const [kind, name, body] of cases) {
     expect(noteTemplate(note(kind), khatma, "https://wirdak.app", NOW)).toEqual(

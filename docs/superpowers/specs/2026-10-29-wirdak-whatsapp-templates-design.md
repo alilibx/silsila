@@ -75,23 +75,23 @@ The alert token is a sign-out-only token, not a sign-in token, and it is unchang
 Each template has the khatma's title as its header, the note's own text as its body, a footer and one URL button. This matches what a push shows: the title, then the text.
 
 - Header: `{{1}}`, the khatma title exactly as the app shows it. That's the name, or `ختمة <date>` for an unnamed khatma (`t.khatma.untitled`, the same date format as the app). A header holds at most 60 characters, and `cleanKhatmaName` already caps names at 60. Putting the title in the header instead of the body means an unnamed khatma never reads "في ختمة «ختمة ٢٩ أكتوبر»" **[builder's call]**.
-- Footer: `أوقف رسائل واتساب من الإعدادات في وِردك` (how to opt out).
+- No footer (only `wirdak_almost_up` kept `أوقف رسائل واتساب من الإعدادات في وِردك`, see below). Settings and the privacy page say how to turn the messages off.
 - Button: `افتح الختمة`, URL `https://wirdak.app/{{1}}`. The suffix is `j/<inviteCode>` on production and `stg/j/<inviteCode>` on staging (see 3.4).
 - Send TTL: 1 hour **[builder's call]**. Sends happen only in waking hours (4.2), and a short TTL keeps a message to an offline phone from arriving deep in the night. An expired message is lost, but the in-app note stays.
 
 | Name | Note kind | Body |
 | --- | --- | --- |
 | `wirdak_almost_up` | almostUp | مهلة الجزء {{1}} أوشكت على الانتهاء. هل تحتاج وقتاً أطول؟ |
-| `wirdak_open_for_help` | openForHelp, 1 juz' | الجزء {{1}} متاح لمن يساعد. هل تأخذه أو ترسل الدعوة؟ |
-| `wirdak_open_for_help_many` | openForHelp, 2 or more | الأجزاء {{1}} متاحة لمن يساعد. هل تأخذ أحدها أو ترسل الدعوة؟ |
-| `wirdak_thanks` | thanks | أحدهم يُكمل الجزء {{1}} الآن. جزاكما الله خيراً. |
-| `wirdak_reminder` | reminder | الجزء {{1}} في انتظارك، يسّر الله لك. |
-| `wirdak_behind` | behind | الختمة تحتاج {{1}}. هل تأخذ جزءاً؟ |
-| `wirdak_completed` | completed | ختمنا القرآن معاً، الحمد لله |
-| `wirdak_now_organizer` | nowOrganizer | أصبحتَ منظّم هذه الختمة. جزاك الله خيراً. |
-| `wirdak_organizer_moved` | organizerMoved | مرّ وقت منذ زيارتك، فنقلنا تنظيم الختمة إلى أحد أعضائها ليستمر الخير. ما زلت عضواً فيها. |
+| `wirdak_open_for_help_v2` | openForHelp, 1 juz' | تحديث على الختمة التي تنظّمها: الجزء {{1}} لم يعد محجوزاً لأحد، وصار متاحاً لأي عضو. |
+| `wirdak_open_for_help_many_v2` | openForHelp, 2 or more | تحديث على الختمة التي تنظّمها: الأجزاء {{1}} لم تعد محجوزة لأحد، وصارت متاحة لأي عضو. |
+| `wirdak_juz_helped` | thanks | تحديث على حجزك: عضو آخر يُكمل الآن الجزء {{1}} الذي كان محجوزاً لك، فلم يعد عليك. |
+| `wirdak_reminder_v2` | reminder | تذكير بحجزك: الجزء {{1}} محجوز لك في هذه الختمة، ولم يُسجَّل أنك أتممته بعد. |
+| `wirdak_behind_v2` | behind | تحديث على الختمة: لتنتهي في موعدها تحتاج {{1}}، وهذه الأجزاء غير محجوزة الآن. |
+| `wirdak_completed_v2` | completed | تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين كلها. |
+| `wirdak_now_organizer_v2` | nowOrganizer | تغيير في دورك: أصبحت منظّم هذه الختمة. |
+| `wirdak_organizer_moved_v2` | organizerMoved | تغيير في دورك: انتقل تنظيم هذه الختمة إلى عضو آخر لأنك لم تفتح وِردك منذ مدة. ما زلت عضواً فيها. |
 
-The bodies are `noteText` word for word.
+**What review taught us (2026-10-29).** The first versions used `noteText` word for word, with the opt-out footer. Meta approved 8 of the 9 as MARKETING: it read the prayers ("يسّر الله لك", "جزاك الله خيراً"), the questions ("هل تأخذ…؟") and the opt-out footer as promotional. Only `wirdak_almost_up` passed as UTILITY. Ali approved neutral rewordings, written as updates on the member's own booking, role or khatma, with no footer. They're submitted under `_v2` names, because a deleted template's name stays taken. Every URL button has Meta's click tracking off, so invite codes don't pass through Meta's tracker. `wirdak_almost_up` keeps its first wording and footer.
 
 Body parameters:
 

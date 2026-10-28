@@ -328,7 +328,7 @@ test("sendText in dev survives an unreadable error body", async () => {
 test("sendWhatsAppTemplate posts a template with header, body and url button", async () => {
   expect(
     await sendWhatsAppTemplate("+971501234567", {
-      name: "wirdak_reminder",
+      name: "wirdak_reminder_v2",
       header: "ختمة رمضان",
       body: ["١٢"],
       buttonParam: "j/AB12CD",
@@ -340,7 +340,7 @@ test("sendWhatsAppTemplate posts a template with header, body and url button", a
       to: "971501234567",
       type: "template",
       template: {
-        name: "wirdak_reminder",
+        name: "wirdak_reminder_v2",
         language: { code: "ar" },
         components: [
           {
@@ -362,7 +362,7 @@ test("sendWhatsAppTemplate posts a template with header, body and url button", a
 
 test("sendWhatsAppTemplate leaves out empty components", async () => {
   await sendWhatsAppTemplate("+971501234567", {
-    name: "wirdak_completed",
+    name: "wirdak_completed_v2",
     body: [],
     buttonParam: "j/X",
   });
