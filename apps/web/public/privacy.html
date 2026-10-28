@@ -3,6 +3,7 @@
   Static on purpose: Meta's privacy-policy check and other crawlers read it without running
   JavaScript. vercel.json rewrites /privacy here, ahead of the SPA fallback. Keep the Arabic and
   English sections saying the same thing, and bump both dates on any change.
+  The fonts URL matches index.html so the browser reuses the app's cached stylesheet.
 -->
 <html lang="ar" dir="rtl">
   <head>
@@ -19,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=Readex+Pro:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Aref+Ruqaa:wght@400;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -138,8 +139,8 @@
             واتساب، فلا تحتاج إلى كلمة مرور.
           </li>
           <li>
-            منطقتك الزمنية، لنحسب المواعيد ونرسل التذكيرات في وقت مناسب، ولا
-            نرسل شيئاً بين العاشرة مساءً والسابعة صباحاً.
+            منطقتك الزمنية، لنحسب المواعيد ونرسل التذكيرات في وقت مناسب، فلا
+            تصلك تذكيرات بين العاشرة مساءً والسابعة صباحاً.
           </li>
           <li>
             ختماتك والأجزاء التي أخذتها، ومتى أخذتها وأتممتها أو تركتها، لنعرض
@@ -164,8 +165,8 @@
         <ul>
           <li>
             حين ترسل إلينا رمز التحقق، يصلنا من واتساب رقمك ونص الرسالة. نطابق
-            الرمز، ونحذف سجل التحقق وما فيه من رقم خلال ٢٤ ساعة. ونحتفظ بمعرّف
-            الرسالة وحده ٧ أيام، حتى لا نعالجها مرتين.
+            الرمز، ونحذف سجل التحقق وما فيه من رقم خلال ٤٨ ساعة. ونحتفظ بمعرّف
+            الرسالة وحده نحو أسبوع، حتى لا نعالجها مرتين.
           </li>
           <li>
             قد نرسل إليك على واتساب رمز دخول من ستة أرقام، أو تنبيهاً حين
@@ -215,7 +216,7 @@
         <h2>الحماية من الإساءة</h2>
         <p>
           نستخدم عنوان جهازك على الإنترنت للحد من المحاولات المتكررة، ونحذفه
-          خلال ٢٤ ساعة على الأكثر. يحفظ متصفحك رمز الدخول ليبقيك مسجّلاً، ولا
+          خلال ٤٨ ساعة على الأكثر. يحفظ متصفحك رمز الدخول ليبقيك مسجّلاً، ولا
           نستخدم ملفات تعريف الارتباط للتتبّع.
         </p>
 
@@ -277,7 +278,7 @@
           </li>
           <li>
             Your time zone, to work out due times and send reminders at a
-            sensible hour. Nothing is sent between 22:00 and 07:00.
+            sensible hour. No reminders are sent between 22:00 and 07:00.
           </li>
           <li>
             Your khatmas and the ajza' you took, with when you took, finished,
@@ -305,9 +306,9 @@
           <li>
             When you send us your verification code, WhatsApp gives us your
             number and the message text. We match the code, then delete the
-            verification record and the number in it within 24 hours. We keep
-            only the message ID for 7 days, so the same message isn't processed
-            twice.
+            verification record and the number in it within 48 hours. We keep
+            only the message ID for about a week, so the same message isn't
+            processed twice.
           </li>
           <li>
             We may send you a 6-digit sign-in code on WhatsApp, or an alert when
@@ -353,7 +354,7 @@
         <h2>Preventing abuse</h2>
         <p>
           We use your IP address to limit repeated attempts and delete it within
-          24 hours at most. Your browser stores a sign-in token to keep you
+          48 hours at most. Your browser stores a sign-in token to keep you
           signed in. We don't use tracking cookies.
         </p>
 
