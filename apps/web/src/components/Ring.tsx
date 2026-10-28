@@ -1,8 +1,8 @@
 import type { TileView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
+import { JUZ_COUNT } from "@convex/lib/juz";
 import { t } from "../i18n/ar";
 
-const TOTAL = 30;
 const CENTER = 125;
 const RADIUS = 108;
 
@@ -18,7 +18,7 @@ export function Ring({ tiles, gold = false }: Props) {
   return (
     <div
       role="img"
-      aria-label={t.ring.label(toArabicDigits(done), toArabicDigits(TOTAL))}
+      aria-label={t.ring.label(toArabicDigits(done), toArabicDigits(JUZ_COUNT))}
       className="relative mx-auto mt-3.5 mb-1.5 w-[250px]"
     >
       <svg
@@ -43,7 +43,7 @@ export function Ring({ tiles, gold = false }: Props) {
           strokeLinecap="round"
         />
         {tiles.map((tile, i) => {
-          const angle = -Math.PI / 2 + (i / TOTAL) * Math.PI * 2;
+          const angle = -Math.PI / 2 + (i / JUZ_COUNT) * Math.PI * 2;
           const base = {
             cx: (CENTER + RADIUS * Math.cos(angle)).toFixed(1),
             cy: (CENTER + RADIUS * Math.sin(angle)).toFixed(1),
@@ -79,7 +79,7 @@ export function Ring({ tiles, gold = false }: Props) {
             {toArabicDigits(done)}
           </div>
           <div className="mt-1.5 text-base text-ink-soft">
-            {t.ring.ofThirty(toArabicDigits(TOTAL))}
+            {t.ring.ofThirty(toArabicDigits(JUZ_COUNT))}
           </div>
         </div>
       )}

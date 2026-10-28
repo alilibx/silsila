@@ -7,10 +7,9 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { onRoundCompleted } from "./hooks";
+import { JUZ_COUNT } from "./lib/juz";
 import { targetEndFor } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
-
-const JUZ_COUNT = 30;
 
 /**
  * Inserts round `number` of a khatma, starting at `startedAt` with the target

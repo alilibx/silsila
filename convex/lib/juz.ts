@@ -1,3 +1,6 @@
+/** The Quran is read in 30 ajza'. */
+export const JUZ_COUNT = 30;
+
 export interface Juz {
   readonly number: number;
   /** Traditional name, taken from the opening words of the juz'. */

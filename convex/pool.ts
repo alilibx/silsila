@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { JUZ_COUNT } from "./lib/juz";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { getSetting } from "./lib/settings";
@@ -17,7 +18,6 @@ import {
   roundAssignments,
 } from "./rounds";
 
-const JUZ_COUNT = 30;
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 

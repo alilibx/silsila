@@ -1,7 +1,7 @@
+import { JUZ_COUNT } from "@convex/lib/juz";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 
 const KEY = "silsila.verify";
-const JUZ_COUNT = 30;
 
 /**
  * What the person was doing when they went to WhatsApp, so the page they come back to (even a

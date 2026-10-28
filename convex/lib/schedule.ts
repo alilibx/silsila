@@ -1,3 +1,5 @@
+import { v, type VLiteral } from "convex/values";
+
 export const SCHEDULES = [
   "daily",
   "every3days",
@@ -8,6 +10,17 @@ export const SCHEDULES = [
 ] as const;
 
 export type Schedule = (typeof SCHEDULES)[number];
+
+type ScheduleLiterals = [
+  VLiteral<Schedule>,
+  VLiteral<Schedule>,
+  ...VLiteral<Schedule>[],
+];
+
+/** Validator for a schedule, derived from `SCHEDULES` so the two can never drift. */
+export const scheduleValidator = v.union(
+  ...(SCHEDULES.map((s) => v.literal(s)) as ScheduleLiterals),
+);
 
 const DAY_MS = 86_400_000;
 

@@ -1,17 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
-import { v, type VLiteral } from "convex/values";
-import { SCHEDULES, type Schedule } from "./lib/schedule";
-
-type ScheduleLiterals = [
-  VLiteral<Schedule>,
-  VLiteral<Schedule>,
-  ...VLiteral<Schedule>[],
-];
-
-/** Derived from `SCHEDULES` so the validator can never drift from the helper module. */
-const scheduleValidator = v.union(
-  ...(SCHEDULES.map((s) => v.literal(s)) as ScheduleLiterals),
-);
+import { v } from "convex/values";
+import { scheduleValidator } from "./lib/schedule";
 
 const nullableNumber = v.union(v.number(), v.null());
 

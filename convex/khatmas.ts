@@ -1,4 +1,4 @@
-import { ConvexError, v, type VLiteral } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -9,10 +9,10 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { randomToken } from "./lib/crypto";
-import { JUZ } from "./lib/juz";
+import { JUZ, JUZ_COUNT } from "./lib/juz";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
-import { SCHEDULES, type Schedule } from "./lib/schedule";
+import { scheduleValidator, type Schedule } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
 import { resolveSession, sessionMutation, sessionQuery } from "./lib/session";
 import { cleanKhatmaName } from "./lib/text";
@@ -24,22 +24,11 @@ import {
   roundAssignments,
 } from "./rounds";
 
-const JUZ_COUNT = 30;
 const DAY_MS = 86_400_000;
 /** `randomToken(8)` is 11 base64url characters. */
 const SHARE_TOKEN_RE = /^[A-Za-z0-9_-]{11}$/;
 /** Attempts at drawing an unused invite code; a collision is ~1e-20 likely. */
 const INVITE_CODE_ATTEMPTS = 3;
-
-type ScheduleLiterals = [
-  VLiteral<Schedule>,
-  VLiteral<Schedule>,
-  ...VLiteral<Schedule>[],
-];
-/** Same union as the schema's `khatmas.schedule`, built from the same source list. */
-const scheduleArg = v.union(
-  ...(SCHEDULES.map((s) => v.literal(s)) as ScheduleLiterals),
-);
 
 export type TileView = {
   juz: number;
@@ -155,7 +144,7 @@ export const insertKhatma = internalMutation({
   args: {
     personId: v.id("people"),
     name: v.union(v.string(), v.null()),
-    schedule: scheduleArg,
+    schedule: scheduleValidator,
     inviteCode: v.string(),
     shareToken: v.string(),
   },
@@ -218,7 +207,7 @@ export const create = action({
   args: {
     sessionToken: v.optional(v.string()),
     name: v.union(v.string(), v.null()),
-    schedule: scheduleArg,
+    schedule: scheduleValidator,
   },
   handler: async (ctx, args): Promise<{ inviteCode: string }> => {
     const personId = await requirePersonId(ctx, args.sessionToken);

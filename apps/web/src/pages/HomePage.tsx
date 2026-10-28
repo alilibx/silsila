@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { toArabicDigits } from "@convex/lib/digits";
-import { JUZ } from "@convex/lib/juz";
+import { JUZ, JUZ_COUNT } from "@convex/lib/juz";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Link } from "react-router";
@@ -10,8 +10,6 @@ import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
 import { useSessionToken } from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
-
-const TOTAL = 30;
 
 export function HomePage() {
   const sessionToken = useSessionToken();
@@ -120,7 +118,7 @@ function HomeContent({
 type Card = FunctionReturnType<typeof api.khatmas.mine>[number];
 
 function KhatmaCard({ khatma }: { khatma: Card }) {
-  const total = toArabicDigits(TOTAL);
+  const total = toArabicDigits(JUZ_COUNT);
   const done = toArabicDigits(khatma.done);
   const name = khatma.name ?? t.khatma.untitled(formatDate(khatma.createdAt));
   const heldName =
@@ -139,13 +137,13 @@ function KhatmaCard({ khatma }: { khatma: Card }) {
         role="progressbar"
         aria-label={t.ring.label(done, total)}
         aria-valuemin={0}
-        aria-valuemax={TOTAL}
+        aria-valuemax={JUZ_COUNT}
         aria-valuenow={khatma.done}
         className="my-2.5 block h-3 overflow-hidden rounded-full bg-paper-2"
       >
         <span
           className="block h-full rounded-full bg-green"
-          style={{ width: `${(khatma.done / TOTAL) * 100}%` }}
+          style={{ width: `${(khatma.done / JUZ_COUNT) * 100}%` }}
         />
       </span>
       <span className="flex justify-between gap-3 text-base text-ink-soft">
