@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { HomePage } from "./HomePage";
@@ -66,6 +66,10 @@ const saveSignInProgress = () =>
       intent: { kind: "signin" },
     }),
   );
+
+function Where() {
+  return <p data-testid="where">{useLocation().pathname}</p>;
+}
 
 const renderHome = () =>
   render(
@@ -249,6 +253,43 @@ describe("HomePage", () => {
       expect(
         screen.getByRole("dialog", { name: t.signIn.title }),
       ).toBeInTheDocument();
+    });
+
+    it("sends an unfinished take or create back to its own page", () => {
+      const landedOn = (intent: unknown, entries = ["/"]) => {
+        localStorage.setItem(
+          "wirdak.verify",
+          JSON.stringify({
+            verificationId: "v1",
+            secret: "sec",
+            displayName: "أبو علي",
+            expiresAt: Date.now() + 5 * 60_000,
+            intent,
+          }),
+        );
+        const view = render(
+          <MemoryRouter
+            initialEntries={entries}
+            initialIndex={entries.length - 1}
+          >
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="*" element={<Where />} />
+            </Routes>
+          </MemoryRouter>,
+        );
+        const path =
+          screen.queryByTestId("where")?.textContent ?? "stayed home";
+        view.unmount();
+        return path;
+      };
+      const take = { kind: "take", inviteCode: "Ab-1_z", juz: 3 };
+      // Choosing home inside the app (not its first page) stays home.
+      expect(landedOn(take, ["/j/Ab-1_z", "/"])).toBe("stayed home");
+      expect(landedOn(take)).toBe("/j/Ab-1_z");
+      expect(
+        landedOn({ kind: "create", name: "ختمة", schedule: "daily" }),
+      ).toBe("/new");
     });
 
     it("is not offered when signed in", () => {

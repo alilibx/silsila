@@ -129,3 +129,16 @@ export function loadProgress(): Progress | null {
 export function pendingIntent(): VerifyIntent | null {
   return loadProgress()?.intent ?? null;
 }
+
+/**
+ * The page that resumes a verification still in flight, when that is not the home page: a take
+ * resumes on its khatma, a create on the create page. A sign-in resumes wherever it started.
+ */
+export function pendingResumePath(): string | null {
+  const intent = pendingIntent();
+  if (intent?.kind === "take") {
+    return `/j/${encodeURIComponent(intent.inviteCode)}`;
+  }
+  if (intent?.kind === "create") return "/new";
+  return null;
+}
