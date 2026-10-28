@@ -74,7 +74,7 @@ jobs:
       - run: |
           set -o pipefail
           vercel build --target="$TARGET" 2>&1 | tee "$RUNNER_TEMP/vercel-build.log"
-          if grep -q "Installing dependencies" "$RUNNER_TEMP/vercel-build.log"; then
+          if grep -qE 'Installing dependencies|Running "install" command' "$RUNNER_TEMP/vercel-build.log"; then
             echo "::error::vercel build installed dependencies with CONVEX_DEPLOY_KEY set (see docs/deploy.md)"
             exit 1
           fi

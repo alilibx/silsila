@@ -14,7 +14,7 @@
     "dev": "run-p dev:convex dev:web",
     "dev:convex": "convex dev",
     "dev:web": "bun --cwd apps/web run dev",
-    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p apps/web/api && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
