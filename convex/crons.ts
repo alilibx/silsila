@@ -42,4 +42,12 @@ crons.daily(
   {},
 );
 
+// Daily at 00:10 Dubai (20:10 UTC): roll up yesterday's stats, catching up any missed day.
+crons.daily(
+  "roll up yesterday's stats",
+  { hourUTC: 20, minuteUTC: 10 },
+  internal.stats.rollupYesterday,
+  {},
+);
+
 export default crons;

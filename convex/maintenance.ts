@@ -2,9 +2,13 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { getSetting } from "./lib/settings";
+import { dubaiDay } from "./lib/stats";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+
+/** Days a sign-in counter is kept after its day. */
+const SIGNIN_COUNTER_DAYS = 7;
 
 /** Max rows deleted per table per run, keeping each mutation well under Convex limits. */
 const BATCH = 500;
@@ -165,6 +169,7 @@ async function deleteBatch(
       | "handoffTokens"
       | "auditLog"
       | "adminSessions"
+      | "counters"
     >;
   }[],
 ): Promise<boolean> {
@@ -233,8 +238,20 @@ export const purge = internalMutation({
       .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
       .take(BATCH + 1);
 
+    // Sign-in counters are read by the nightly rollup; a week later they're spent.
+    const signInCutoff = dubaiDay(now) - SIGNIN_COUNTER_DAYS;
+    const signInCounters = (
+      await ctx.db
+        .query("counters")
+        .withIndex("by_key", (q) =>
+          q.gte("key", "signin:").lt("key", "signin;"),
+        )
+        .take(BATCH + 1)
+    ).filter((c) => Number(c.key.split(":")[1]) < signInCutoff);
+
     const more = [
       await deleteBatch(ctx, rateLimits),
+      await deleteBatch(ctx, signInCounters),
       await deleteBatch(ctx, inbound),
       await deleteBatch(ctx, verifications),
       await deleteBatch(ctx, notes),

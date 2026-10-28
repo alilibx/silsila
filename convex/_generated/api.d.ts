@@ -54,6 +54,7 @@ import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
 import type * as rounds from "../rounds.js";
 import type * as sessions from "../sessions.js";
+import type * as stats from "../stats.js";
 import type * as verification from "../verification.js";
 import type * as whatsapp from "../whatsapp.js";
 
@@ -110,6 +111,7 @@ declare const fullApi: ApiFromModules<{
   pushNode: typeof pushNode;
   rounds: typeof rounds;
   sessions: typeof sessions;
+  stats: typeof stats;
   verification: typeof verification;
   whatsapp: typeof whatsapp;
 }>;
