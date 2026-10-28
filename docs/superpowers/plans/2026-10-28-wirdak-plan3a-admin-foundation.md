@@ -54,7 +54,7 @@ The plan 3 spec covers three subsystems that ship independently. Each gets its o
 **Interfaces:**
 - Produces, in `convex/schema.ts`:
   - `admins`: `{ phone: string (E.164), addedBy: Id<"admins"> | null, addedAt: number }`, index `by_phone`.
-  - `adminSessions`: `{ adminId, tokenHash, alertTokenHash, deviceLabel, createdAt, expiresAt }`, indexes `by_tokenHash`, `by_alertTokenHash`, `by_admin`.
+  - `adminSessions`: `{ adminId, tokenHash, alertTokenHash, deviceLabel, createdAt, expiresAt }`, indexes `by_tokenHash`, `by_alertTokenHash`, `by_admin`, `by_expiresAt`.
   - `auditLog`: `{ adminId: Id<"admins"> | null, action: AuditAction, targetKind: "admin" | "setting", targetId: string, before: any, after: any, note: string | null, at: number }`, indexes `by_at` `["at"]`, `by_admin_at` `["adminId", "at"]`, `by_action_at` `["action", "at"]`.
   - `verifications` gains `surface: v.optional(v.literal("admin"))` (absent means the website) and `adminId: v.optional(v.id("admins"))`.
 - Produces, in `convex/lib/adminSession.ts`:
@@ -354,12 +354,13 @@ Refs: ARQ-270"
 - Consumes: `auditLog` and its indexes (Task 1).
 - Produces:
   - `audit.list` (`adminQuery`, args `{ paginationOpts: paginationOptsValidator, adminId?: Id<"admins">, action?: AuditAction }`) → a Convex pagination result of `{ _id, at, action, targetKind, targetId, before, after, note, adminPhone: string | null }`, newest first. With `adminId`, it uses `by_admin_at`. With `action`, it uses `by_action_at`. Passing both is refused with `ConvexError({ code: "one_filter" })`.
-  - `purge` also deletes `auditLog` rows older than `AUDIT_TTL_MS = 2 * 365 * DAY_MS`, in the same batched style as its other tables.
+  - `purge` also deletes `auditLog` rows older than `AUDIT_TTL_MS = 2 * 365 * DAY_MS`, and `adminSessions` rows whose `expiresAt` has passed, in the same batched style as its other tables. `adminSessions` gains an index `by_expiresAt` for this; add it in Task 1's schema change.
 
 - [ ] **Step 1: Write the failing tests.**
   - `list` returns rows newest first and filters by admin and by action.
   - `adminPhone` is null for `admin.bootstrap` rows.
-  - `purge` deletes a row at `NOW - AUDIT_TTL_MS - 1` and keeps one at `NOW - AUDIT_TTL_MS + 1`.
+  - `purge` deletes an audit row at `NOW - AUDIT_TTL_MS - 1` and keeps one at `NOW - AUDIT_TTL_MS + 1`.
+  - `purge` deletes an `adminSessions` row with `expiresAt` of `NOW - 1` and keeps one with `expiresAt` of `NOW + 1`.
 
 - [ ] **Step 2: Run them and see them fail**
 
@@ -463,7 +464,7 @@ Refs: ARQ-270"
   - `apps/admin/src/lib/adminSession.ts`: `getAdminToken()`, `setAdminToken(t)`, `clearAdminToken()`, and `useAdminToken(): string | null`, with storage key `wirdak.admin.session`, in the same style as `apps/web/src/lib/session.ts`.
   - `Layout`: the header (logo plus a "الإدارة" tag) and a bottom nav with الرئيسية `/`, الإعدادات `/settings`, السجل `/audit`, and المشرفون `/admins`. Plans 3b and 3c add المساعدة and بحث.
   - `App`: with no valid admin (`adminAuth.me` returns null), every route renders the sign-in page (Task 9). Otherwise routes render inside `Layout`. `/signout` always renders the alert sign-out page.
-  - `apps/admin/vercel.json`: `"installCommand": ""`, `"buildCommand": "bun run --filter admin build"`, `"outputDirectory": "dist"`, `"git": { "deploymentEnabled": false }`, an SPA rewrite to `/index.html`, the same security headers as `apps/web/vercel.json` except `Permissions-Policy`, which stays `camera=(), microphone=(), geolocation=()`, and `X-Robots-Tag: noindex, nofollow` on every path.
+  - `apps/admin/vercel.json`: `"installCommand": ""`, `"buildCommand": "bun run build"` (it runs inside the Root Directory `apps/admin`, and `bun install` already ran at the root in the workflow), `"outputDirectory": "dist"`, `"git": { "deploymentEnabled": false }`, an SPA rewrite to `/index.html`, the same security headers as `apps/web/vercel.json` except `Permissions-Policy`, which stays `camera=(), microphone=(), geolocation=()`, and `X-Robots-Tag: noindex, nofollow` on every path.
   - `index.html`: `lang="ar" dir="rtl"`, title `وِردك · الإدارة`, `<meta name="robots" content="noindex, nofollow">`, and the same Google Fonts link as the website.
 
 - [ ] **Step 1: Write the failing test** `App.test.tsx`:
@@ -593,7 +594,7 @@ Refs: ARQ-270"
   1. `vercel pull --yes --environment="$TARGET"`
   2. `vercel build --target="$TARGET"`, with no `CONVEX_DEPLOY_KEY`, because the website step already pushed the functions
   3. `vercel deploy --prebuilt --target="$TARGET"`, appending `Deployed admin …` to the step summary
-  The `.vercel` directory from the website's pull must not leak into the admin pull. Run the admin steps with `working-directory: apps/admin`, or delete `.vercel` between them.
+  Run them from the repository root, like the website's steps. Vercel applies the project's Root Directory (`apps/admin`) relative to where the CLI runs. Before the admin `vercel pull`, run `rm -rf .vercel`, so the website's project settings and build output don't leak into the admin build.
 - `docs/deploy.md`: a new "Admin app" section covering the domains (`admin.wirdak.app`, `stg-admin.wirdak.app`), the `wirdak-admin` Vercel project (root `apps/admin`, Git deploys off, Vercel Authentication off), the `VITE_CONVEX_URL` Vercel env var per environment, the `VERCEL_ADMIN_PROJECT_ID` repo variable, the `ADMIN_SITE_URL` Convex env var per deployment, and the bootstrap command:
 
 ```sh
@@ -602,12 +603,9 @@ bun run convex run admins:bootstrap '{"phone": "+9715XXXXXXXX"}' --deployment ma
 
   It also adds `ADMIN_SITE_URL` to the Convex env table.
 
-- [ ] **Step 1: Make the changes.** There's no unit test here. The check is the workflow lint below, then the first real deploy.
+- [ ] **Step 1: Make the changes.** There's no unit test here.
 
-- [ ] **Step 2: Lint the workflow**
-
-Run: `bunx --bun action-validator .github/workflows/deploy.yml || npx --yes @action-validator/cli .github/workflows/deploy.yml`
-Expected: no errors. If neither tool installs, check the YAML by eye against the existing steps and say so in the PR.
+- [ ] **Step 2: Check the workflow.** Once Ali's setup task (step 3) is done, run the Deploy workflow by hand for `environment: staging` with this branch as `ref`. `docs/deploy.md` allows that for staging. Expected: the website and admin steps both succeed, and `stg-admin.wirdak.app` serves the sign-in page. Until the setup is done, say in the PR that this check is pending.
 
 - [ ] **Step 3: Create Ali's Linear task.** Create it in project Wirdak, team ARQ, assigned to `me`, and `blocks` ARQ-270. Title: "[You] Set up the admin app on Vercel and Convex". Steps: create the `wirdak-admin` Vercel project with root `apps/admin`, Git deploys off, and Vercel Authentication off. Add the domains `admin.wirdak.app` (production) and `stg-admin.wirdak.app` (staging environment). Set `VITE_CONVEX_URL` for each environment. Set the repo variable `VERCEL_ADMIN_PROJECT_ID`. Set `ADMIN_SITE_URL` on both Convex deployments. After the first deploy, run the bootstrap on staging, then production.
 
