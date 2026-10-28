@@ -328,6 +328,16 @@ export const ar = {
     enable: "فعّل الإشعارات",
     notNow: "ليس الآن",
   },
+  /** Shown inside an app's own browser (WhatsApp, Facebook), which has its own sign-in. */
+  openInBrowser: {
+    body: "هذه الصفحة مفتوحة داخل التطبيق، لا في متصفحك. افتحها في متصفحك لتجد حسابك.",
+    open: "افتح في المتصفح",
+    iosHint:
+      "اضغط ⋯ أو زر المشاركة، ثم اختر الفتح في Safari. أو انسخ الرابط والصقه في Safari.",
+    copy: "انسخ الرابط",
+    copied: "تمّ نسخ الرابط",
+    dismiss: "ليس الآن",
+  },
   /** Notifications on WhatsApp, off until the person turns them on. */
   whatsappNotes: {
     heading: "رسائل واتساب",
