@@ -1,19 +1,78 @@
 import { useEffect } from "react";
-import { createHandoffToken, installHandoffManifest } from "../../lib/handoff";
+import {
+  createHandoffToken,
+  extendHandoffToken,
+  linkHandoffManifest,
+} from "../../lib/handoff";
 import { isIos, isStandalone } from "../../lib/push";
-import { useSessionToken } from "../../lib/session";
+import { getSessionToken, useSessionToken } from "../../lib/session";
 
-/** A token is renewed once this share of its lifetime (the live `handoffTtlMs`) has passed. */
+/** A token is extended once this share of its lifetime (the live `handoffTtlMs`) has passed. */
 const RENEW_AT = 2 / 3;
 const CHECK_MS = 60_000;
 
 /**
+ * The hand-off manifest this page linked. WebKit keeps the first manifest a page links, so there is
+ * at most one, and its token is extended rather than replaced. `dead` once the server refuses it.
+ */
+let linked: {
+  link: HTMLLinkElement;
+  token: string;
+  sessionToken: string;
+  dead: boolean;
+} | null = null;
+/** The check in progress, shared by every caller for the same session until it settles. */
+let inFlight: { sessionToken: string; check: Promise<number | null> } | null =
+  null;
+
+/** Joins this session's check in progress, or starts one after any other session's settles. */
+function check(sessionToken: string): Promise<number | null> {
+  if (inFlight?.sessionToken === sessionToken) return inFlight.check;
+  const previous = inFlight?.check ?? Promise.resolve(null);
+  const entry = {
+    sessionToken,
+    check: previous.then(() => keepAlive(sessionToken)),
+  };
+  inFlight = entry;
+  void entry.check.finally(() => {
+    if (inFlight === entry) inFlight = null;
+  });
+  return entry.check;
+}
+
+/**
+ * Links the hand-off manifest the first time, then extends its token. The token's lifetime, or
+ * null when there is nothing to do until the next check.
+ */
+async function keepAlive(sessionToken: string): Promise<number | null> {
+  if (linked?.link.isConnected) {
+    // A token from an earlier session on this page died with it; a new one would never be read.
+    if (linked.dead || linked.sessionToken !== sessionToken) return null;
+    const ttlMs = await extendHandoffToken(sessionToken, linked.token);
+    if (ttlMs === "invalid") {
+      linked.dead = true;
+      return null;
+    }
+    return ttlMs;
+  }
+  // Another manifest came first, so iOS would never read a hand-off one.
+  if (document.querySelector('link[rel="manifest"]')) return null;
+  const created = await createHandoffToken(sessionToken);
+  // Signed out while it was made: the token died with the session.
+  if (!created || getSessionToken() !== sessionToken) return null;
+  const link = await linkHandoffManifest(created.token);
+  if (!link) return null;
+  linked = { link, token: created.token, sessionToken, dead: false };
+  return created.ttlMs;
+}
+
+/**
  * While signed in in an iPhone or iPad browser tab (any iOS browser can add to the home screen),
- * keeps the page's manifest swapped for one whose `start_url` carries a fresh hand-off token. The
- * Share menu saves whatever manifest is in place, so the home-screen app opens signed in however
- * it was added: from Wirdak's install steps or straight from the Share menu. The home-screen app
- * itself redeems tokens instead (`HandoffGate`). A token is single-use and renewed before it expires; timers sleep in a
- * background tab, so a renewal is also checked whenever the page becomes visible again.
+ * gives the page a manifest whose `start_url` carries a hand-off token, so the home-screen app
+ * opens signed in however it was added: from Wirdak's install steps or straight from the Share
+ * menu. The home-screen app itself redeems tokens instead (`HandoffGate`). iOS keeps the first
+ * manifest a page links, so the token is linked once and extended before it expires; timers sleep
+ * in a background tab, so an extension is also checked whenever the page becomes visible again.
  */
 export function useHandoffManifest(): void {
   const sessionToken = useSessionToken();
@@ -21,29 +80,13 @@ export function useHandoffManifest(): void {
   useEffect(() => {
     if (!sessionToken || !isIos() || isStandalone()) return;
     let cancelled = false;
-    let restore = () => {};
-    // When the token in place is due for renewal; 0 until there is one.
+    // When the token in place is due for extension; 0 until there is one.
     let renewAt = 0;
-    let renewing = false;
 
     const renew = async () => {
-      if (renewing) return;
-      renewing = true;
-      try {
-        const created = await createHandoffToken(sessionToken);
-        if (!created || cancelled) return;
-        // Back to the static manifest first, so the new one is built from it.
-        restore();
-        restore = () => {};
-        const undo = await installHandoffManifest(created.token);
-        if (cancelled) {
-          undo();
-          return;
-        }
-        restore = undo;
-        renewAt = Date.now() + Math.max(CHECK_MS, created.ttlMs * RENEW_AT);
-      } finally {
-        renewing = false;
+      const ttlMs = await check(sessionToken);
+      if (ttlMs !== null && !cancelled) {
+        renewAt = Date.now() + Math.max(CHECK_MS, ttlMs * RENEW_AT);
       }
     };
     const renewIfDue = () => {
@@ -59,7 +102,6 @@ export function useHandoffManifest(): void {
       cancelled = true;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", renewIfDue);
-      restore();
     };
   }, [sessionToken]);
 }

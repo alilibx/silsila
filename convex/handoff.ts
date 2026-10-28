@@ -41,10 +41,10 @@ export const store = internalMutation({
 });
 
 /**
- * Just before the "add to home screen" steps: a single-use token that lets the
- * home-screen app (separate storage) sign in as this person without WhatsApp.
- * The raw token is returned once and only its hash is kept. `ttlMs` tells the
- * page when to make a new one (the TTL is a live setting).
+ * A single-use token that lets the home-screen app (separate storage) sign in
+ * as this person without WhatsApp. The raw token is returned once and only its
+ * hash is kept. `ttlMs` tells the page when to extend it (the TTL is a live
+ * setting).
  */
 export const create = action({
   args: { sessionToken: v.string() },
@@ -58,6 +58,54 @@ export const create = action({
       tokenHash: await sha256Hex(token),
     });
     return ttlMs === null ? { error: "not_signed_in" } : { token, ttlMs };
+  },
+});
+
+/**
+ * Pushes an unused token's expiry out by the live TTL, for the session that
+ * made it, and returns that TTL. An expired token that is not yet purged can
+ * be re-armed: whoever holds the session could make a new one anyway. `null`
+ * when the token is used, purged, unknown, or another session's.
+ */
+export const extendInternal = internalMutation({
+  args: { sessionTokenHash: v.string(), tokenHash: v.string() },
+  handler: async (ctx, args): Promise<number | null> => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_tokenHash", (q) =>
+        q.eq("tokenHash", args.sessionTokenHash),
+      )
+      .first();
+    if (!session) return null;
+    const row = await ctx.db
+      .query("handoffTokens")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
+      .first();
+    if (!row || row.usedAt !== null || row.sessionId !== session._id) {
+      return null;
+    }
+    const ttlMs = await getSetting(ctx, "handoffTtlMs");
+    await ctx.db.patch(row._id, { expiresAt: Date.now() + ttlMs });
+    return ttlMs;
+  },
+});
+
+/**
+ * Keeps the token in a browser tab's manifest alive. WebKit reads the first
+ * manifest a page links and keeps it, so the page can't swap in a new token
+ * and extends the one it linked instead.
+ */
+export const extend = action({
+  args: { sessionToken: v.string(), token: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ttlMs: number } | { error: "invalid" }> => {
+    const ttlMs = await ctx.runMutation(internal.handoff.extendInternal, {
+      sessionTokenHash: await sha256Hex(args.sessionToken),
+      tokenHash: await sha256Hex(args.token),
+    });
+    return ttlMs === null ? { error: "invalid" } : { ttlMs };
   },
 });
 
