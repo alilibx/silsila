@@ -151,7 +151,7 @@
   - `addMessage(ctx, request: Doc<"helpRequests">, from: "person" | "visitor", input: HelpInput): Promise<void>`. It inserts the message, sets `status: "open"`, `lastMessageAt`, and `closedAt: null`, then `notifyAdmins(ctx, request._id, "message")`.
 - Produces, in `convex/help.ts`:
   - `uploadUrl` (`sessionMutation`) → `string`. The person must be signed in. It counts against `helpMessagesPerHour` (key `helpUpload:person:<id>`).
-  - `uploadUrlAsVisitor` (`mutation`, args `{ reporterToken: string }`) → `string`. Key `helpUpload:visitor:<hash>`, 20 per hour. Task 3 also gives visitors an HTTP route for this. This mutation is for follow-up voice notes inside an existing conversation.
+  - `uploadUrlAsVisitor` (`mutation`, args `{ reporterToken: string, requestId: Id<"helpRequests"> }`) → `string | { error: "not_found" | "rate_limited" }`. This is for follow-up voice notes inside an existing conversation only. The request must exist and its `reporterHash` must match the token, otherwise `not_found`. Tokens cost nothing to mint, so a token alone mustn't buy upload URLs. Limits: `helpUpload:visitor:<hash>` 20 per hour, plus a global sharded `helpUpload:visitorGlobal` 300 per hour. New requests get their URL from Task 3's HTTP route, which has the per-IP limit.
   - `send` (`sessionMutation`, args `{ requestId?: Id<"helpRequests">, inviteCode?: string, text?: string, screenshotId?: Id<"_storage">, voiceId?: Id<"_storage">, voiceSeconds?: number, context: v.any() }`) → `{ requestId } | { error: "rate_limited" | "empty" | "bad_file" | "too_long" | "not_found" }`.
     - Without `requestId`, it creates a request, limited by `helpRequestsPerPersonPerDay` (key `helpCreate:person:<id>`, 24 hours) and `helpMessagesPerHour`.
     - With `requestId`, it adds a message, limited by `helpMessagesPerHour`. The request must belong to the person, otherwise `not_found`.
@@ -172,7 +172,7 @@
   - **Reused file.** A file already attached to one message can't be attached to another: `bad_file`.
   - **Limits.** The 6th request in a day gives `rate_limited`. The 21st message in an hour gives `rate_limited`.
   - **Khatma.** The khatma is set from an invite code the member belongs to. It's null for one they don't belong to.
-  - **Visitors (Review Focus 1).** `sendAsVisitor` with the wrong token gives `not_found`. `mine` with the wrong token is `[]`. `markSeen` with the wrong token changes nothing.
+  - **Visitors (Review Focus 1).** `sendAsVisitor` with the wrong token gives `not_found`. `uploadUrlAsVisitor` with a fresh token, or with a token that doesn't own the request, gives `not_found` and no URL. `mine` with the wrong token is `[]`. `markSeen` with the wrong token changes nothing.
   - **Reopening.** A follow-up on a `closed` request reopens it as `open`, with `closedAt` null.
   - **Unread.** `unread` is true after a team message (insert one directly), and false after `markSeen`.
   - **Claiming (Review Focus 3).** `claimVisitorRequests` moves two visitor requests to the person. `mine` with the session shows both, and `mine` with the old token shows none.
@@ -347,7 +347,8 @@
 ### Task 8: The help button, the help sheet, and replies (website)
 
 **Files:**
-- Create: `apps/web/src/features/help/HelpButton.tsx`, `HelpSheet.tsx`, `HelpConversation.tsx`, `HelpReplyCard.tsx`, `reporterToken.ts`, `useClaimVisitorHelp.ts`, `sendHelp.ts`
+- Create: `apps/web/src/features/help/HelpButton.tsx`, `HelpSheet.tsx`, `HelpConversation.tsx`, `HelpReplyCard.tsx`, `reporterToken.ts`, `useClaimVisitorHelp.ts`, `useHelpDeepLink.ts`, `helpButtonVisibility.tsx`, `sendHelp.ts`
+- Modify: `apps/web/src/pages/CelebrationPage.tsx` (calls `useHideHelpButton()`)
 - Modify: `apps/web/src/App.tsx` (mount `HelpButton` beside `StatusBanners`, and call `useClaimVisitorHelp()`), `apps/web/src/pages/HomePage.tsx` (render `HelpReplyCard` at the top), `apps/web/src/i18n/ar.ts` (`t.help`), `apps/web/src/styles.css`
 - Test: `HelpSheet.test.tsx`, `HelpReplyCard.test.tsx`, `useClaimVisitorHelp.test.tsx`, `reporterToken.test.ts`
 
@@ -358,7 +359,7 @@
   - It then calls `help.send`, `/api/help/request`, or `help.sendAsVisitor`.
   - `context` is built by `helpContext()` from `location.pathname`, `__APP_VERSION__`, `navigator.userAgent`, `${innerWidth}x${innerHeight}`, and `Intl.DateTimeFormat().resolvedOptions().timeZone`. The invite code is read from `/j/:code` paths.
 - `HelpButton`
-  - A 44 px round "؟" button with `aria-label={t.help.open}`. It's `fixed` at the top end of the screen (left in RTL), at `top: max(12px, env(safe-area-inset-top))`, on every route except `/celebrate`.
+  - A 44 px round "؟" button with `aria-label={t.help.open}`. It's `fixed` at the top end of the screen (left in RTL), at `top: max(12px, env(safe-area-inset-top))`, on every screen except the full-screen celebration. The website has no celebration route: `CelebrationPage` renders inside `KhatmaPage`. So `CelebrationPage` sets a flag through a small `HelpButtonVisibility` context (`useHideHelpButton()` in an effect) that `HelpButton` reads.
   - In `styles.css`, `main > header { padding-inline-end: 3.5rem }` keeps page headers clear of it.
   - On tap it awaits `captureScreen()`, then opens `HelpSheet` with the blob.
 - `HelpSheet` (`Sheet` titled `t.help.title`):
@@ -367,9 +368,8 @@
   - **Send.** Enabled only with text or a voice note. Then it shows the sent screen: `t.help.sentTitle`, `t.help.sentBody`, and a "تم" button.
   - **Errors** show `t.help.errors[code]` with `role="alert"`.
 - `HelpConversation`: messages in order, labeled `t.help.you` or `t.help.team` ("فريق وِردك"), with audio players for voice notes. A reply composer offers text and voice, without a screenshot. Opening it calls `help.markSeen`.
-- `HelpReplyCard`
-  - On the home page, when any request in `mine` is `unread`, it shows `t.help.replyCardTitle` ("رد من فريق وِردك"), the start of the reply, and a button that opens the sheet on that conversation.
-  - Opening `/?help=<id>` from a push opens that conversation directly.
+- `HelpReplyCard`: on the home page, when any request in `mine` is `unread`, it shows `t.help.replyCardTitle` ("رد من فريق وِردك"), the start of the reply, and a button that opens the sheet on that conversation.
+- `useHelpDeepLink()`, mounted in `App` beside `HelpButton`, not in `HomePage`. `HomePage` may redirect to a pending take or create (`pendingResumePath`) before it would see the query. It reads `?help=<id>` once on load, opens the sheet on that conversation, and removes the query with `history.replaceState`.
 - `useClaimVisitorHelp()`: when a session token and a reporter token both exist, it calls `help.claimVisitorRequests` once, then `forgetReporterToken()`.
 - Copy, verbatim:
 
@@ -408,6 +408,8 @@
   - **Voice hidden (Review Focus 4).** The voice control isn't rendered when `supported` is false or the state is `denied`.
   - **Sending.** It calls `sendHelp` with the context and shows the sent screen. An error code shows its copy.
   - **Reply card.** `HelpReplyCard` renders only with an unread request, and opens the conversation.
+  - **Deep link.** `useHelpDeepLink` opens the conversation from `?help=<id>` even when the route then changes, and removes the query.
+  - **Celebration.** `HelpButton` isn't rendered while a `CelebrationPage` is mounted.
   - **Claiming (Review Focus 3).** `useClaimVisitorHelp` calls `claimVisitorRequests` once and forgets the token. Without a reporter token it does nothing.
   - **Reporter token.** `ensureReporterToken` returns the same value twice.
 - [ ] **Step 2: Run them and see them fail.**
