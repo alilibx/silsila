@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/alilibx/wirdak/compare/v0.2.1...v0.2.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* link the hand-off manifest once, since iOS keeps a page's first manifest ([#20](https://github.com/alilibx/wirdak/issues/20)) ([649a477](https://github.com/alilibx/wirdak/commit/649a477c764fb5ee0471a3493785c9445d082bbd))
+* sign the home-screen app in when it is added from the Share menu ([#18](https://github.com/alilibx/wirdak/issues/18)) ([6164c8f](https://github.com/alilibx/wirdak/commit/6164c8fc872b415eeb95f510dd1b5ce3b31c4754))
+
 ## [0.2.1](https://github.com/alilibx/wirdak/compare/v0.2.0...v0.2.1) (2026-10-28)
 
 

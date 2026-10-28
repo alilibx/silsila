@@ -6,9 +6,11 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { linkPageManifest } from "./lib/handoff";
 import { initializePostHogLogging } from "./lib/posthogLogs";
 import "./styles.css";
 
+linkPageManifest();
 initializePostHogLogging();
 
 const root = createRoot(document.getElementById("root")!);

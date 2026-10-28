@@ -19,7 +19,10 @@
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ar_AR" />
     <!--og:end-->
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- No manifest link here: main.tsx links one (see linkPageManifest). These two let an iPhone
+         tab that has no manifest yet still add a standalone app with the right name. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="وِردك" />
     <link
       rel="apple-touch-icon"
       sizes="180x180"
