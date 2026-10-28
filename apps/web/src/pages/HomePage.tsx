@@ -150,6 +150,15 @@ function KhatmaCard({ khatma }: { khatma: Card }) {
         <span>{t.home.doneOf(done, total)}</span>
         <span>{t.schedules[khatma.schedule]}</span>
       </span>
+      {khatma.hasNote && (
+        <span className="mt-2 flex items-center gap-2 text-base font-semibold text-green-deep">
+          <span
+            aria-hidden="true"
+            className="size-3 shrink-0 rounded-full bg-saffron"
+          />
+          {t.notes.newMessage}
+        </span>
+      )}
       {khatma.holding !== null && (
         <span className="mt-2 inline-block rounded-full bg-saffron-soft px-3 py-1 text-base font-semibold text-saffron-ink">
           {t.home.yours(toArabicDigits(khatma.holding), heldName ?? "")}

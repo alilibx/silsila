@@ -18,11 +18,15 @@ vi.mock("../lib/session", () => ({
   clearSessionToken: () => {},
 }));
 vi.mock("../features/verify/VerifySheet", () => ({ VerifySheet: () => null }));
-vi.mock("convex/react", () => ({
-  useQuery: () => m.view,
-  useMutation: () => vi.fn(),
-  useAction: () => m.ensure,
-}));
+vi.mock("convex/react", async () => {
+  const { getFunctionName } = await import("convex/server");
+  return {
+    useQuery: (ref: never) =>
+      getFunctionName(ref) === "notes:forKhatma" ? [] : m.view,
+    useMutation: () => vi.fn(),
+    useAction: () => m.ensure,
+  };
+});
 
 function StateProbe() {
   const location = useLocation();

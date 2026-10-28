@@ -3,19 +3,25 @@ import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { KhatmaView } from "@convex/khatmas";
+import type { HoldView, KhatmaView } from "@convex/khatmas";
+import type { NoteView } from "@convex/notes";
 import { t } from "../i18n/ar";
 import { makeTiles, makeView } from "../test/fixtures";
 import { KhatmaPage } from "./KhatmaPage";
 
 const m = vi.hoisted(() => ({
   query: vi.fn(),
+  notes: [] as unknown[],
   take: vi.fn(),
   finish: vi.fn(),
   undoFinish: vi.fn(),
   release: vi.fn(),
   markCelebrated: vi.fn(),
   signOut: vi.fn(),
+  ensureShareToken: vi.fn(),
+  stillReading: vi.fn(),
+  dismiss: vi.fn(),
+  setNotifications: vi.fn(),
   cleared: vi.fn(),
   token: undefined as string | undefined,
 }));
@@ -48,7 +54,11 @@ vi.mock("../features/verify/VerifySheet", () => ({
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: (...args: unknown[]) => m.query(...args),
+    useAction: () => m.ensureShareToken,
+    useQuery: (ref: never, ...rest: unknown[]) =>
+      getFunctionName(ref) === "notes:forKhatma"
+        ? m.notes
+        : m.query(ref, ...rest),
     useMutation: (ref: never) => {
       const name = getFunctionName(ref).split(":")[1] as
         | "take"
@@ -56,7 +66,10 @@ vi.mock("convex/react", async () => {
         | "undoFinish"
         | "release"
         | "markCelebrated"
-        | "signOut";
+        | "signOut"
+        | "stillReading"
+        | "dismiss"
+        | "setNotifications";
       return m[name];
     },
   };
@@ -124,10 +137,15 @@ beforeEach(() => {
     m.release,
     m.markCelebrated,
     m.signOut,
+    m.stillReading,
+    m.dismiss,
+    m.setNotifications,
     m.cleared,
   ]) {
     fn.mockReset();
   }
+  m.notes = [];
+  m.ensureShareToken.mockResolvedValue({ shareToken: "SHARE9" });
 });
 
 afterEach(() => {
@@ -835,5 +853,229 @@ describe("celebration", () => {
     const text = decodeURIComponent(href.split("text=")[1] ?? "");
     expect(text).not.toMatch(/سارة|أحمد|العائلة/);
     expect(text).toContain("ختمنا القرآن معاً");
+  });
+});
+
+const note = (over: Partial<NoteView> = {}): NoteView => ({
+  noteId: "n1" as NoteView["noteId"],
+  kind: "almostUp",
+  juz: [5],
+  count: null,
+  until: null,
+  createdAt: 1,
+  ...over,
+});
+
+describe("notes", () => {
+  const holdingView = (hold: Partial<HoldView> = {}) =>
+    makeView({
+      tiles: makeTiles({ 5: { state: "reading", isMine: true } }),
+      me: signedIn({
+        holding: 5,
+        suggestion: null,
+        hold: { openForHelp: false, canExtend: true, paceDays: null, ...hold },
+      }),
+    });
+
+  it("shows the member's notes above the main card, newest first", () => {
+    m.notes = [
+      note({ noteId: "n2" as NoteView["noteId"], kind: "thanks", juz: [9] }),
+      note(),
+    ];
+    setup(holdingView());
+    const first = screen.getByText(/^أحدهم يُكمل الجزء ٩ الآن/);
+    const second = screen.getByText(/^مهلة الجزء ٥ أوشكت/);
+    const card = screen.getByText(t.card.held);
+    expect(
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      second.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no notes for someone who is not a member", () => {
+    m.notes = [note()];
+    setup(
+      makeView({
+        me: signedIn({ isMember: false, holding: null, hold: null }),
+      }),
+    );
+    expect(screen.queryByText(/أوشكت على الانتهاء/)).not.toBeInTheDocument();
+  });
+
+  it("almostUp: still reading extends and thanks with a toast", async () => {
+    m.notes = [note()];
+    m.stillReading.mockResolvedValue({ ok: true });
+    const { user } = setup(holdingView({ canExtend: false }));
+    await user.click(screen.getByRole("button", { name: "ما زلت أقرأ" }));
+    expect(m.stillReading).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      inviteCode: "CODE",
+    });
+    expect(toast()).toHaveTextContent("أعطيناك وقتاً إضافياً. يسّر الله لك.");
+  });
+
+  it("the main card's still reading does the same", async () => {
+    m.stillReading.mockResolvedValue({ ok: true });
+    const { user } = setup(holdingView({ canExtend: true }));
+    await user.click(screen.getByRole("button", { name: "ما زلت أقرأ" }));
+    expect(m.stillReading).toHaveBeenCalledTimes(1);
+    expect(toast()).toHaveTextContent("أعطيناك وقتاً إضافياً. يسّر الله لك.");
+  });
+
+  it.each([
+    ["not_holding", t.actions.errors.notHolding],
+    ["already_extended", t.actions.errors.stillReading.already_extended],
+    ["opened", t.actions.errors.stillReading.opened],
+    ["blocked", t.actions.errors.shared.blocked],
+    ["rate_limited", t.actions.errors.shared.rate_limited],
+    ["maintenance", t.actions.errors.shared.maintenance],
+  ] as const)(
+    "still reading failing with %s has its own copy",
+    async (reason, copy) => {
+      m.stillReading.mockResolvedValue({ ok: false, reason });
+      const { user } = setup(holdingView());
+      await user.click(screen.getByRole("button", { name: "ما زلت أقرأ" }));
+      expect(toast()).toHaveTextContent(copy);
+    },
+  );
+
+  it("almostUp: finished and can't finish use the usual flows", async () => {
+    m.notes = [note()];
+    m.finish.mockResolvedValue({ ok: true, undoUntil: NOW + 10_000 });
+    const { user } = setup(holdingView({ canExtend: false }));
+    const inNotes = within(
+      screen.getByRole("region", { name: t.notes.heading }),
+    );
+    await user.click(inNotes.getByRole("button", { name: "أتممت القراءة" }));
+    expect(m.finish).toHaveBeenCalledTimes(1);
+    await user.click(inNotes.getByRole("button", { name: "لا أستطيع إكماله" }));
+    expect(
+      screen.getByRole("dialog", { name: "لا بأس، جزاك الله خيراً" }),
+    ).toBeInTheDocument();
+  });
+
+  it("openForHelp card take opens the take sheet for the first still-open juz", async () => {
+    m.notes = [note({ kind: "openForHelp", juz: [12, 15, 18] })];
+    const { user } = setup(
+      makeView({
+        tiles: makeTiles({ 12: { state: "reading" }, 15: { state: "done" } }),
+        me: signedIn({ suggestion: 3 }),
+      }),
+    );
+    expect(
+      screen.getByText(/^الأجزاء ١٢، ١٥ و١٨ متاحة لمن يساعد/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "خذ الجزء" }));
+    expect(
+      screen.getByRole("dialog", { name: "الجزء ١٨" }),
+    ).toBeInTheDocument();
+  });
+
+  it("openForHelp card invite opens the invite sheet", async () => {
+    m.notes = [note({ kind: "openForHelp", juz: [12] })];
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "أرسل الدعوة" }));
+    expect(
+      screen.getByRole("dialog", { name: t.share.inviteTitle }),
+    ).toBeInTheDocument();
+  });
+
+  it("behind card take opens the take sheet for the suggestion", async () => {
+    m.notes = [note({ kind: "behind", juz: [], count: 6 })];
+    const { user } = setup(makeView({ me: signedIn({ suggestion: 7 }) }));
+    const inNotes = within(
+      screen.getByRole("region", { name: t.notes.heading }),
+    );
+    await user.click(inNotes.getByRole("button", { name: "خذ جزءاً" }));
+    expect(screen.getByRole("dialog", { name: "الجزء ٧" })).toBeInTheDocument();
+  });
+
+  it("ok dismisses the note", async () => {
+    m.notes = [note({ kind: "thanks", juz: [9] })];
+    m.dismiss.mockResolvedValue({ ok: true });
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "حسناً" }));
+    expect(m.dismiss).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      noteId: "n1",
+    });
+  });
+});
+
+describe("taken over", () => {
+  it("finish taken_over shows the thanks toast without undo", async () => {
+    m.finish.mockResolvedValue({ ok: false, reason: "taken_over" });
+    const { user } = setup(
+      makeView({ me: signedIn({ holding: 5, suggestion: null }) }),
+    );
+    await user.click(screen.getByRole("button", { name: "أتممتُ القراءة" }));
+    expect(toast()).toHaveTextContent(
+      "أحدهم يُكمل الجزء ٥ الآن. جزاكما الله خيراً.",
+    );
+    expect(
+      screen.queryByRole("button", { name: t.toast.undo }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("page switches and links", () => {
+  it("members get the notifications switch with a visible state label", async () => {
+    m.setNotifications.mockResolvedValue({ ok: true });
+    const { user } = setup(
+      makeView({ me: signedIn({ notificationsOn: true }) }),
+    );
+    const sw = screen.getByRole("switch", { name: "إشعارات هذه الختمة" });
+    expect(sw).toBeChecked();
+    expect(sw).toHaveTextContent("مفعّلة");
+    await user.click(sw);
+    expect(m.setNotifications).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      inviteCode: "CODE",
+      on: false,
+    });
+  });
+
+  it("the switch shows off, and turns on", async () => {
+    m.setNotifications.mockResolvedValue({ ok: true });
+    const { user } = setup(
+      makeView({ me: signedIn({ notificationsOn: false }) }),
+    );
+    const sw = screen.getByRole("switch", { name: "إشعارات هذه الختمة" });
+    expect(sw).not.toBeChecked();
+    expect(sw).toHaveTextContent("متوقفة");
+    await user.click(sw);
+    expect(m.setNotifications).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      inviteCode: "CODE",
+      on: true,
+    });
+  });
+
+  it("a failed switch toasts the generic error", async () => {
+    m.setNotifications.mockResolvedValue({ ok: false });
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("switch"));
+    expect(toast()).toHaveTextContent(t.errors.generic);
+  });
+
+  it("visitors who are not members get no switch", () => {
+    setup(
+      makeView({ me: signedIn({ isMember: false, notificationsOn: null }) }),
+    );
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("the organizer gets the settings link, others do not", () => {
+    const { unmount } = setup(makeView({ isOrganizer: true, me: signedIn() }));
+    expect(
+      screen.getByRole("link", { name: "إعدادات الختمة" }),
+    ).toHaveAttribute("href", "/j/CODE/settings");
+    unmount();
+    setup(makeView({ isOrganizer: false, me: signedIn() }));
+    expect(
+      screen.queryByRole("link", { name: "إعدادات الختمة" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -9,6 +9,8 @@ type Props = {
   onTake: (juz: number) => void;
   onFinish: () => void;
   onRelease: () => void;
+  /** "Still reading": one more grace period, offered only while `hold.canExtend`. */
+  onStillReading: () => void;
   /** A mutation is running: its buttons are disabled so a double tap cannot repeat it. */
   busy?: boolean;
 };
@@ -21,9 +23,10 @@ export function MainCard({
   onTake,
   onFinish,
   onRelease,
+  onStillReading,
   busy = false,
 }: Props) {
-  const { holding, suggestion } = view.me;
+  const { holding, suggestion, hold } = view.me;
 
   if (holding !== null) {
     const juz = JUZ.find((j) => j.number === holding);
@@ -49,10 +52,23 @@ export function MainCard({
             {t.card.startsFrom(juz.startSurah)}
           </div>
         )}
+        {hold?.openForHelp && (
+          <p className="mb-4 text-base text-ink-soft">{t.card.openForHelp}</p>
+        )}
+        {hold?.paceDays != null && (
+          <p className="mb-4 text-base text-ink-soft">
+            {t.card.pace(Math.min(7, Math.max(1, Math.round(hold.paceDays))))}
+          </p>
+        )}
         <div className="grid gap-3">
           <Button onClick={onFinish} disabled={busy}>
             {t.card.finish}
           </Button>
+          {hold?.canExtend && (
+            <Button variant="ghost" onClick={onStillReading} disabled={busy}>
+              {t.card.stillReading}
+            </Button>
+          )}
           <Button variant="ghost" onClick={onRelease} disabled={busy}>
             {t.card.release}
           </Button>

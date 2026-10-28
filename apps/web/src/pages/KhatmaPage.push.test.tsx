@@ -38,7 +38,8 @@ vi.mock("../components/InstallStepsSheet", () => ({
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: (...args: unknown[]) => m.query(...args),
+    useQuery: (ref: never, ...rest: unknown[]) =>
+      getFunctionName(ref) === "notes:forKhatma" ? [] : m.query(ref, ...rest),
     useMutation: (ref: never) =>
       getFunctionName(ref) === "pool:take" ? m.take : vi.fn(),
   };

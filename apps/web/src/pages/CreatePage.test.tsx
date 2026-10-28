@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -252,5 +252,54 @@ describe("CreatePage", () => {
     m.token = undefined;
     renderPage();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows the grace line under the schedule and follows the schedule", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(
+      screen.getByRole("button", { name: "مهلة كل جزء: يومان · تغيير" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /يومية/ }));
+    expect(
+      screen.getByRole("button", { name: "مهلة كل جزء: ٦ ساعات · تغيير" }),
+    ).toBeInTheDocument();
+  });
+
+  it("create sends grace only when edited", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+    expect(m.create.mock.calls[0]?.[0]).not.toHaveProperty("grace");
+
+    m.create.mockClear();
+    cleanup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /تغيير/ }));
+    await user.click(screen.getByRole("button", { name: "أيام" }));
+    const input = screen.getByRole("textbox", { name: "المدة" });
+    await user.clear(input);
+    await user.type(input, "3");
+    await user.click(screen.getByRole("button", { name: "تمّ" }));
+    await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+    expect(m.create).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      name: null,
+      schedule: "weekly",
+      grace: { value: 3, unit: "days" },
+    });
+  });
+
+  it("an out-of-range grace blocks creating and explains why", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /تغيير/ }));
+    await user.click(screen.getByRole("button", { name: "دقائق" }));
+    const input = screen.getByRole("textbox", { name: "المدة" });
+    await user.clear(input);
+    await user.type(input, "10");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+    expect(m.create).not.toHaveBeenCalled();
   });
 });

@@ -1,9 +1,11 @@
 import { api } from "@convex/_generated/api";
+import { isValidGrace, type Grace } from "@convex/lib/grace";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 import { useAction } from "convex/react";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "../components/Button";
+import { GraceField } from "../components/GraceField";
 import { pendingIntent } from "../features/verify/progress";
 import { VerifySheet } from "../features/verify/VerifySheet";
 import { t } from "../i18n/ar";
@@ -33,6 +35,8 @@ export function CreatePage() {
   const [schedule, setSchedule] = useState<Schedule>(
     resumed?.schedule ?? DEFAULT_SCHEDULE,
   );
+  // `null` while the grace follows the schedule's default; only an edit is sent.
+  const [grace, setGrace] = useState<Grace | null>(resumed?.grace ?? null);
   const [verifying, setVerifying] = useState(resumed !== null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +53,7 @@ export function CreatePage() {
         sessionToken: getSessionToken() ?? undefined,
         name: name.trim() === "" ? null : name.trim(),
         schedule,
+        ...(grace ? { grace } : {}),
       });
       void navigate(`/j/${encodeURIComponent(inviteCode)}`, {
         state: { justCreated: true },
@@ -73,6 +78,7 @@ export function CreatePage() {
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (grace && !isValidGrace(grace)) return setError(t.create.graceInvalid);
     if (signedIn) void create();
     else setVerifying(true);
   }
@@ -137,6 +143,7 @@ export function CreatePage() {
             })}
           </div>
         </fieldset>
+        <GraceField value={grace} schedule={schedule} onChange={setGrace} />
 
         {error && (
           <p role="alert" className="mt-4 font-medium text-[#8A2B1E]">
@@ -153,7 +160,12 @@ export function CreatePage() {
       {verifying && (
         <VerifySheet
           title={t.create.beforeCreate}
-          intent={{ kind: "create", name, schedule }}
+          intent={{
+            kind: "create",
+            name,
+            schedule,
+            ...(grace ? { grace } : {}),
+          }}
           onVerified={() => {
             setVerifying(false);
             void create();

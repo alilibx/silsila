@@ -1,9 +1,11 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import type { KhatmaView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import type {
   FinishResult,
   ReleaseResult,
+  StillReadingResult,
   TakeResult,
   UndoResult,
 } from "@convex/pool";
@@ -30,9 +32,15 @@ const releaseCopy: Record<Failure<ReleaseResult>, string> = {
   ...errors.shared,
   not_holding: errors.notHolding,
 };
-const finishCopy: Record<Failure<FinishResult>, string> = {
-  ...releaseCopy,
-  taken_over: errors.takenOver,
+// `taken_over` is not here: it is a thank-you with the juz' number, handled in `finish`.
+const finishCopy: Record<
+  Exclude<Failure<FinishResult>, "taken_over">,
+  string
+> = releaseCopy;
+const stillReadingCopy: Record<Failure<StillReadingResult>, string> = {
+  ...errors.shared,
+  not_holding: errors.notHolding,
+  ...errors.stillReading,
 };
 const undoCopy: Record<Failure<UndoResult>, string> = {
   ...errors.shared,
@@ -101,6 +109,9 @@ export function useKhatmaActions(
   const finishMutation = useMutation(api.pool.finish);
   const undoMutation = useMutation(api.pool.undoFinish);
   const releaseMutation = useMutation(api.pool.release);
+  const stillReadingMutation = useMutation(api.pool.stillReading);
+  const dismissMutation = useMutation(api.notes.dismiss);
+  const notificationsMutation = useMutation(api.khatmas.setNotifications);
   const celebratedMutation = useMutation(api.khatmas.markCelebrated);
   const signOutMutation = useMutation(api.sessions.signOut);
 
@@ -250,13 +261,39 @@ export function useKhatmaActions(
   }
 
   async function finish() {
+    const held = loaded?.me.holding ?? null;
     const result = await run(() => finishMutation(args));
     if (!result) return;
     if (result.ok) {
       showToast(t.toast.finished, undoWindowMs(result.undoUntil, Date.now()));
+    } else if (result.reason === "taken_over") {
+      // Someone else is finishing it: thank them for it, and offer no undo (nothing was finished).
+      showToast(
+        held === null
+          ? t.errors.generic
+          : t.toast.takenOver(toArabicDigits(held)),
+      );
     } else {
       showToast(finishCopy[result.reason]);
     }
+  }
+
+  async function stillReading() {
+    const result = await run(() => stillReadingMutation(args));
+    if (!result) return;
+    showToast(
+      result.ok ? t.toast.stillReading : stillReadingCopy[result.reason],
+    );
+  }
+
+  async function dismissNote(noteId: Id<"notes">) {
+    await run(() => dismissMutation({ sessionToken, noteId }));
+  }
+
+  /** The switch shows the stored value, so only a failure needs a word; success arrives through the view. */
+  async function setNotifications(on: boolean) {
+    const result = await run(() => notificationsMutation({ ...args, on }));
+    if (result && !result.ok) showToast(t.errors.generic);
   }
 
   async function undo() {
@@ -293,6 +330,9 @@ export function useKhatmaActions(
     confirmTake,
     switchAccount,
     finish,
+    stillReading,
+    dismissNote,
+    setNotifications,
     undo,
     confirmRelease,
     continueToKhatma,

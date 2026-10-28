@@ -1,3 +1,5 @@
+import { toArabicDigits } from "@convex/lib/digits";
+import { noteText } from "@convex/lib/noteText";
 import type { Schedule } from "@convex/lib/schedule";
 
 /** Copy every feature shares for failures it cannot explain more precisely. */
@@ -6,6 +8,22 @@ const commonErrors = {
   network: "تعذّر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.",
   generic: "حدث خطأ غير متوقع. حاول مرة أخرى.",
 } as const;
+
+/**
+ * A count with its noun, agreeing in Arabic: 1 and 2 use the singular and the dual with no digit,
+ * 3 to 10 use the plural, 11 and up use the singular again (in the accusative, `many`).
+ */
+function counted(
+  n: number,
+  forms: { one: string; two: string; few: string; many: string },
+): string {
+  if (n === 1) return forms.one;
+  if (n === 2) return forms.two;
+  const digits = toArabicDigits(n);
+  return n >= 3 && n <= 10
+    ? `${digits} ${forms.few}`
+    : `${digits} ${forms.many}`;
+}
 
 /** Every UI string lives here. Components never contain Arabic literals. */
 export const ar = {
@@ -79,6 +97,64 @@ export const ar = {
     pickYourself: "أو اختر جزءاً بنفسك",
     allTaken: "كل الأجزاء مأخوذة الآن",
     allTakenHint: "ننتظر أحبابنا يُتمّون قراءتهم.",
+    stillReading: "ما زلت أقرأ",
+    openForHelp: "يمكن لغيرك أن يساعد فيه الآن، ويمكنك إتمامه إن شئت.",
+    /** Whole days, 1 to 7: `يوم`, `يومين`, `٣ أيام`. */
+    pace: (days: number) =>
+      `عادةً تُتمّ الجزء في نحو ${counted(days, {
+        one: "يوم",
+        two: "يومين",
+        few: "أيام",
+        many: "يوماً",
+      })}`,
+  },
+  notes: {
+    heading: "رسائل لك",
+    /** The only door to the note texts: components never import them directly. */
+    text: noteText,
+    stillReading: "ما زلت أقرأ",
+    finished: "أتممت القراءة",
+    cantFinish: "لا أستطيع إكماله",
+    takeJuz: "خذ الجزء",
+    sendInvite: "أرسل الدعوة",
+    takeOne: "خذ جزءاً",
+    ok: "حسناً",
+    /** The label beside the dot on the home page's khatma card. */
+    newMessage: "رسالة جديدة",
+  },
+  grace: {
+    label: "مهلة كل جزء",
+    summary: (amount: string) => `مهلة كل جزء: ${amount}`,
+    change: "تغيير",
+    done: "تمّ",
+    amountLabel: "المدة",
+    unitsLabel: "الوحدة",
+    units: { minutes: "دقائق", hours: "ساعات", days: "أيام" },
+    range: "المهلة بين ٣٠ دقيقة و٣٠ يوماً.",
+    amount: {
+      minutes: (n: number) =>
+        counted(n, {
+          one: "دقيقة",
+          two: "دقيقتان",
+          few: "دقائق",
+          many: "دقيقة",
+        }),
+      hours: (n: number) =>
+        counted(n, {
+          one: "ساعة",
+          two: "ساعتان",
+          few: "ساعات",
+          many: "ساعة",
+        }),
+      days: (n: number) =>
+        counted(n, { one: "يوم", two: "يومان", few: "أيام", many: "يوماً" }),
+    },
+  },
+  khatmaSettings: {
+    link: "إعدادات الختمة",
+    notifications: "إشعارات هذه الختمة",
+    on: "مفعّلة",
+    off: "متوقفة",
   },
   device: {
     unknownDevice: "جهاز",
@@ -142,6 +218,9 @@ export const ar = {
     undo: "تراجع",
     undone: "أعدنا الجزء إليك. أتمّه متى تيسّر.",
     released: "أعدناه إلى الختمة. جزاك الله خيراً",
+    stillReading: "أعطيناك وقتاً إضافياً. يسّر الله لك.",
+    /** Someone else took the reader's juz' as they tapped finish. */
+    takenOver: (n: string) => `أحدهم يُكمل الجزء ${n} الآن. جزاكما الله خيراً.`,
   },
   take: {
     confirm: "نعم، هذا جزئي",
@@ -177,8 +256,6 @@ export const ar = {
   actions: {
     errors: {
       notHolding: "ليس معك جزء الآن.",
-      /** Someone else took the reader's juz' after it opened for help. */
-      takenOver: "أحدهم يُكمل هذا الجزء الآن. جزاكما الله خيراً.",
       /** The session ended on another device (signed out from there, say). */
       signedOut: "خرجتَ من حسابك على هذا الجهاز. سجّل دخولك من جديد لتكمل.",
       shared: {
@@ -191,6 +268,10 @@ export const ar = {
         taken: "سبقك أحدهم إليه. اخترنا لك غيره.",
         already_holding: "معك جزء الآن. أتمّه أو أعِده أولاً، ثم خذ غيره.",
         khatma_full: "اكتمل عدد المشاركين في هذه الختمة.",
+      },
+      stillReading: {
+        already_extended: "أعطيناك وقتاً إضافياً من قبل لهذا الجزء.",
+        opened: "لم يعد الوقت الإضافي متاحاً. يمكنك إتمام الجزء متى شئت.",
       },
       undo: {
         window_closed: "انتهت مهلة التراجع. الجزء محسوب لك، تقبّل الله منك.",
@@ -223,6 +304,7 @@ export const ar = {
       weekly: "الأكثر شيوعاً",
       none: "نقرأ على راحتنا",
     } as Partial<Record<Schedule, string>>,
+    graceInvalid: "عدّل مهلة كل جزء لتكون بين ٣٠ دقيقة و٣٠ يوماً.",
     submit: "أنشئ الختمة",
     submitting: "جارٍ الإنشاء",
     beforeCreate: "قبل أن تنشئ ختمة",

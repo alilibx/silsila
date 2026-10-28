@@ -28,10 +28,14 @@ vi.mock("../features/verify/VerifySheet", () => ({
     </div>
   ),
 }));
-vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQuery(...args),
-  useMutation: () => vi.fn(),
-}));
+vi.mock("convex/react", async () => {
+  const { getFunctionName } = await import("convex/server");
+  return {
+    useQuery: (ref: never, ...rest: unknown[]) =>
+      getFunctionName(ref) === "notes:forKhatma" ? [] : useQuery(ref, ...rest),
+    useMutation: () => vi.fn(),
+  };
+});
 
 function renderAt(url: string) {
   return render(

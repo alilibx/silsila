@@ -22,11 +22,41 @@ describe("progress intent", () => {
     const intents: NonNullable<Progress["intent"]>[] = [
       { kind: "take", inviteCode: "CODE", juz: 7 },
       { kind: "create", name: "ختمة الجمعة", schedule: "daily" },
+      {
+        kind: "create",
+        name: "ختمة الجمعة",
+        schedule: "daily",
+        grace: { value: 90, unit: "minutes" },
+      },
       { kind: "signin" },
     ];
     for (const intent of intents) {
       saveProgress({ ...base(), intent });
       expect(loadProgress()?.intent).toEqual(intent);
+    }
+  });
+
+  it("a saved create keeps its name and schedule but drops a grace the server would refuse", () => {
+    for (const grace of [
+      { value: 10, unit: "minutes" },
+      { value: 31, unit: "days" },
+      { value: 2, unit: "weeks" },
+      { value: "2", unit: "days" },
+    ]) {
+      saveProgress({
+        ...base(),
+        intent: {
+          kind: "create",
+          name: "x",
+          schedule: "daily",
+          grace,
+        } as never,
+      });
+      expect(loadProgress()?.intent).toEqual({
+        kind: "create",
+        name: "x",
+        schedule: "daily",
+      });
     }
   });
 
