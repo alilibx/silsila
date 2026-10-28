@@ -490,6 +490,35 @@ describe("useVerification: resume from storage", () => {
     expect(result.current.step).toBe("pin");
   });
 
+  it.each([
+    ["matched", "confirm"],
+    ["needs_pin", "pin"],
+  ] as const)(
+    "%s late in the window renews the stored expiry, so a reload still resumes at %s",
+    async (status, step) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const t0 = 1_000_000;
+      vi.setSystemTime(t0);
+      setStatus("pending");
+      const first = await started();
+      // the server restarts its 10 minutes when the message matches at 9m
+      vi.setSystemTime(t0 + 9 * 60_000);
+      setStatus(status, "+971 50 ••• 1234");
+      first.rerender();
+      expect(first.result.current.step).toBe(step);
+      expect(JSON.parse(localStorage.getItem(STORE) ?? "null")).toMatchObject({
+        verificationId: "v1",
+        expiresAt: t0 + 19 * 60_000,
+      });
+      first.unmount();
+      // reloaded at 11m: past the first deadline, inside the renewed one
+      vi.setSystemTime(t0 + 11 * 60_000);
+      const reloaded = renderHook(() => useVerification());
+      expect(reloaded.result.current.step).toBe(step);
+      expect(reloaded.result.current.displayName).toBe("علي");
+    },
+  );
+
   it("drops expired or malformed progress", () => {
     save({ expiresAt: Date.now() - 1 });
     const stale = renderHook(() => useVerification());

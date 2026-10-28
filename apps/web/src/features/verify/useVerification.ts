@@ -124,6 +124,16 @@ export function useVerification(intent?: VerifyIntent) {
     }
   }, [step]);
 
+  // A match (or the PIN request) restarts the server's 10 minutes, so the stored deadline moves
+  // with it; otherwise a reload late in the first window would drop a verification still alive.
+  const liveStatus = live?.status;
+  useEffect(() => {
+    if (!saved || (liveStatus !== "matched" && liveStatus !== "needs_pin")) {
+      return;
+    }
+    saveProgress({ ...saved, expiresAt: Date.now() + TTL_MS });
+  }, [liveStatus, saved]);
+
   const code = statusError ?? errorCode;
   const error = code ? t.verify.errors[code] : null;
 
