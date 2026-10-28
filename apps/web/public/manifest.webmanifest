@@ -1,0 +1,11 @@
+{
+  "name": "سلسلة",
+  "short_name": "سلسلة",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F5EFE3",
+  "theme_color": "#1F5A45"
+}

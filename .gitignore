@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+.env*.local
+.convex/
+.superpowers/
+.claude/worktrees/
+.DS_Store
+*.log
+test-results/
+playwright-report/

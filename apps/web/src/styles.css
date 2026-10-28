@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f5efe3;
+  --paper-2: #ede3d0;
+  --card: #fbf8f1;
+  --ink: #1c2924;
+  --ink-soft: #4e5b55;
+  --line: #d8ccb4;
+  --green: #1f5a45;
+  --green-deep: #133a2d;
+  --saffron: #c98a1e;
+  --saffron-soft: #f6e4bd;
+  --saffron-ink: #5e4108;
+  --gold: #d9a93f;
+  --wa: #17834a;
+  --radius: 18px;
+  /* 8-point star lattice, from the prototype. */
+  --pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='88' viewBox='0 0 88 88'%3E%3Cg fill='none' stroke='%231F5A45' stroke-opacity='.075' stroke-width='1.2'%3E%3Crect x='24' y='24' width='40' height='40'/%3E%3Crect x='24' y='24' width='40' height='40' transform='rotate(45 44 44)'/%3E%3Ccircle cx='44' cy='44' r='9'/%3E%3Cpath d='M0 0L24 24M88 0L64 24M0 88L24 64M88 88L64 64'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-green: var(--green);
+  --color-green-deep: var(--green-deep);
+  --color-saffron: var(--saffron);
+  --color-saffron-soft: var(--saffron-soft);
+  --color-saffron-ink: var(--saffron-ink);
+  --color-gold: var(--gold);
+  --color-wa: var(--wa);
+  --radius-ui: var(--radius);
+  --font-sans: "Readex Pro", system-ui, sans-serif;
+  --font-display: "Aref Ruqaa", serif;
+  --font-quran: "Amiri Quran", serif;
+}
+
+@layer base {
+  html {
+    /* 18px at the browser default, and it still follows the phone's text-size setting. */
+    font-size: 112.5%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    color: var(--ink);
+    background: var(--paper) var(--pattern);
+  }
+}
+
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@layer utilities {
+  .animate-sheet-fade {
+    animation: sheet-fade 0.2s ease both;
+  }
+
+  .animate-sheet-up {
+    animation: sheet-up 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-sheet-fade,
+    .animate-sheet-up {
+      animation: none;
+    }
+  }
+}
+
+@keyframes toast-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
+@layer utilities {
+  /* The undo countdown. It carries real information, so reduced motion keeps it. */
+  .animate-toast-shrink {
+    animation: toast-shrink linear both;
+  }
+}

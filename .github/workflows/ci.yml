@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      # The same build Vercel runs after `convex deploy` (see docs/deploy.md), so a broken
+      # bundle fails here first. A placeholder URL: without one, main.tsx renders only the
+      # "missing VITE_CONVEX_URL" notice and the app itself would be tree-shaken away.
+      - run: pnpm --filter web build
+        env:
+          VITE_CONVEX_URL: https://ci-placeholder.convex.cloud

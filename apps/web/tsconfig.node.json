@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  // Node-side files only: the Vite config and tests that read the source tree from disk.
+  // Browser code (tsconfig.json) never sees Node's globals.
+  "include": ["vite.config.ts", "src/**/*.node.test.ts"]
+}

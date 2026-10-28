@@ -1,0 +1,166 @@
+import { api } from "@convex/_generated/api";
+import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
+import { useAction } from "convex/react";
+import { useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router";
+import { Button } from "../components/Button";
+import { pendingIntent } from "../features/verify/progress";
+import { VerifySheet } from "../features/verify/VerifySheet";
+import { t } from "../i18n/ar";
+import { errorCode } from "../lib/errors";
+import { formatDate } from "../lib/format";
+import {
+  clearSessionToken,
+  getSessionToken,
+  useSessionToken,
+} from "../lib/session";
+
+const DEFAULT_SCHEDULE: Schedule = "weekly";
+const createErrors: Record<string, string> = t.create.errors;
+
+/** A create still waiting on verification (e.g. the tab reloaded while in WhatsApp). */
+function resumedCreate() {
+  const intent = pendingIntent();
+  return intent?.kind === "create" ? intent : null;
+}
+
+export function CreatePage() {
+  const navigate = useNavigate();
+  const signedIn = useSessionToken() !== undefined;
+  const createKhatma = useAction(api.khatmas.create);
+  const [resumed] = useState(resumedCreate);
+  const [name, setName] = useState(resumed?.name ?? "");
+  const [schedule, setSchedule] = useState<Schedule>(
+    resumed?.schedule ?? DEFAULT_SCHEDULE,
+  );
+  const [verifying, setVerifying] = useState(resumed !== null);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const creatingRef = useRef(false);
+
+  async function create() {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
+    setError(null);
+    try {
+      const { inviteCode } = await createKhatma({
+        // Read at call time: right after verification the hook has not re-rendered yet.
+        sessionToken: getSessionToken() ?? undefined,
+        name: name.trim() === "" ? null : name.trim(),
+        schedule,
+      });
+      void navigate(`/j/${encodeURIComponent(inviteCode)}`, {
+        state: { justCreated: true },
+      });
+    } catch (caught) {
+      const code = errorCode(caught);
+      creatingRef.current = false;
+      setCreating(false);
+      if (code === "not_signed_in") {
+        // The stored token is dead: forget it and sign in again, then create with the same values.
+        clearSessionToken();
+        setVerifying(true);
+        return;
+      }
+      setError(
+        code === null
+          ? t.create.errors.network
+          : (createErrors[code] ?? t.create.errors.generic),
+      );
+    }
+  }
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (signedIn) void create();
+    else setVerifying(true);
+  }
+
+  return (
+    <main className="mx-auto max-w-xl p-5">
+      <header className="mb-3.5">
+        <Link
+          to="/"
+          className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
+        >
+          {t.create.back}
+        </Link>
+      </header>
+      <h1 className="font-display text-4xl leading-tight text-green-deep">
+        {t.pages.create}
+      </h1>
+
+      <form onSubmit={onSubmit} noValidate className="mt-4">
+        <label htmlFor="khatma-name" className="block font-medium">
+          {t.create.nameLabel}{" "}
+          <span className="font-normal text-ink-soft">{t.create.optional}</span>
+        </label>
+        <input
+          id="khatma-name"
+          type="text"
+          maxLength={60}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={t.create.namePlaceholder(formatDate(Date.now()))}
+          className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+        />
+
+        <fieldset className="mt-5">
+          <legend className="font-medium">{t.create.scheduleLegend}</legend>
+          <div className="mt-2 grid gap-2.5">
+            {SCHEDULES.map((value) => {
+              const subtitle: string | undefined = t.create.subtitles[value];
+              return (
+                <label
+                  key={value}
+                  className="flex min-h-14 cursor-pointer items-center gap-3 rounded-ui border-2 border-line bg-card px-4 py-3 has-[:checked]:border-green has-[:checked]:bg-[#E7F5EC] has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-green"
+                >
+                  <input
+                    type="radio"
+                    name="schedule"
+                    value={value}
+                    checked={schedule === value}
+                    onChange={() => setSchedule(value)}
+                    className="size-5 shrink-0 accent-green"
+                  />
+                  <span>
+                    <span className="font-medium">{t.schedules[value]}</span>
+                    {subtitle && (
+                      <span className="block text-base text-ink-soft">
+                        {subtitle}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {error && (
+          <p role="alert" className="mt-4 font-medium text-[#8A2B1E]">
+            {error}
+          </p>
+        )}
+        <div className="mt-6">
+          <Button type="submit" disabled={creating}>
+            {creating ? t.create.submitting : t.create.submit}
+          </Button>
+        </div>
+      </form>
+
+      {verifying && (
+        <VerifySheet
+          title={t.create.beforeCreate}
+          intent={{ kind: "create", name, schedule }}
+          onVerified={() => {
+            setVerifying(false);
+            void create();
+          }}
+          onClose={() => setVerifying(false)}
+        />
+      )}
+    </main>
+  );
+}

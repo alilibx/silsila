@@ -1,0 +1,40 @@
+{
+  "name": "silsila",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "run-p dev:convex dev:web",
+    "dev:convex": "convex dev",
+    "dev:web": "pnpm --if-present --filter ./apps/web dev",
+    "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p apps/web && tsc --noEmit -p apps/web/tsconfig.node.json && tsc --noEmit -p e2e && tsc --noEmit -p tsconfig.node.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.20.5",
+    "convex": "^1.48.0",
+    "convex-helpers": "^0.1.129",
+    "convex-test": "^0.0.65",
+    "eslint": "^10.13.0",
+    "jsdom": "^30.1.3",
+    "npm-run-all2": "^9.0.4",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.15"
+  }
+}
