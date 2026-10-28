@@ -239,6 +239,21 @@ export const ar = {
       generic: commonErrors.generic,
     },
   },
+  nav: {
+    label: "التنقل",
+    home: "ختماتي",
+    create: "ختمة جديدة",
+    settings: "إعداداتي",
+    back: "ختماتي",
+    switchKhatma: "تبديل الختمة",
+    switchTitle: "اختر ختمة",
+    tabs: {
+      label: "أقسام الختمة",
+      mine: "جزئي",
+      pool: "الأجزاء",
+      group: "المجموعة",
+    },
+  },
   device: {
     unknownDevice: "جهاز",
     unknownBrowser: "متصفح",

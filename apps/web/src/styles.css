@@ -54,6 +54,8 @@
   body {
     margin: 0;
     min-height: 100vh;
+    /* Room for the fixed bottom bar; BottomBar sets --nav-h to its height while it shows. */
+    padding-bottom: var(--nav-h, 0px);
     font-family: var(--font-sans);
     color: var(--ink);
     background: var(--paper) var(--pattern);
