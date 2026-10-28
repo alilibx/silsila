@@ -13,6 +13,7 @@
   "dependencies": {
     "@posthog/react": "^1.11.3",
     "convex": "^1.48.0",
+    "modern-screenshot": "^4.7.0",
     "posthog-js": "^1.441.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
