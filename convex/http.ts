@@ -341,12 +341,24 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const read = await readHelpBody(req);
     if ("refused" in read) return read.refused;
-    const res = await ctx.runMutation(internal.help.uploadUrlInternal, {
-      reporterHash: await reporterHash(read.body.reporterToken as string),
-      ip: await callerIp(ctx, req),
-    });
+    const requestId = optionalString(read.body.requestId);
+    let res: string | { error: "rate_limited" | "not_found" };
+    try {
+      res = await ctx.runMutation(internal.help.uploadUrlInternal, {
+        reporterHash: await reporterHash(read.body.reporterToken as string),
+        ip: await callerIp(ctx, req),
+        // A malformed id fails the mutation's validator: a bad request.
+        ...(requestId !== null ? { requestId: requestId as never } : {}),
+      });
+    } catch {
+      return json(400, { error: "bad_request" }, read.headers);
+    }
     if (typeof res !== "string") {
-      return json(429, { error: res.error }, read.headers);
+      return json(
+        res.error === "not_found" ? 404 : 429,
+        { error: res.error },
+        read.headers,
+      );
     }
     return json(200, { uploadUrl: res }, read.headers);
   }),

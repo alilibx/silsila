@@ -224,14 +224,25 @@ test("get shows the person, the khatma, and file URLs until they're deleted", as
   expect(got?.context).toEqual(ctxFields);
   expect(got?.messages[0]?.screenshotUrl).toBeTruthy();
 
-  await t.run((ctx) =>
-    ctx.db.patch(res.requestId, { attachmentsDeletedAt: NOW }),
-  );
+  // What the files sweep does: ids gone, the message remembers.
+  await t.run(async (ctx) => {
+    const [message] = await ctx.db
+      .query("helpMessages")
+      .withIndex("by_request", (q) => q.eq("requestId", res.requestId))
+      .collect();
+    await ctx.db.patch(message!._id, {
+      screenshotId: null,
+      voiceId: null,
+      filesDeletedAt: NOW,
+    });
+    await ctx.db.patch(res.requestId, { attachmentsDeletedAt: NOW });
+  });
   const later = await t.query(api.adminHelp.get, {
     adminToken: "admin",
     requestId: res.requestId,
   });
   expect(later?.messages[0]?.screenshotUrl).toBeNull();
+  expect(later?.messages[0]?.hadAttachment).toBe(true);
   expect(later?.messages[0]?.text).toBe("هنا");
 });
 

@@ -83,7 +83,6 @@ export const get = adminQuery({
     if (!r) return null;
     const person = r.personId ? await ctx.db.get(r.personId) : null;
     const khatma = r.khatmaId ? await ctx.db.get(r.khatmaId) : null;
-    const deleted = r.attachmentsDeletedAt !== null;
     return {
       _id: r._id,
       status: r.status,
@@ -105,14 +104,16 @@ export const get = adminQuery({
           _id: m._id,
           from: m.from,
           text: m.text,
-          screenshotUrl:
-            !deleted && m.screenshotId
-              ? await ctx.storage.getUrl(m.screenshotId)
-              : null,
-          voiceUrl:
-            !deleted && m.voiceId ? await ctx.storage.getUrl(m.voiceId) : null,
+          screenshotUrl: m.screenshotId
+            ? await ctx.storage.getUrl(m.screenshotId)
+            : null,
+          voiceUrl: m.voiceId ? await ctx.storage.getUrl(m.voiceId) : null,
           voiceSeconds: m.voiceSeconds,
-          hadAttachment: m.screenshotId !== null || m.voiceId !== null,
+          // Files deleted by retention leave the message with a note to show.
+          hadAttachment:
+            m.screenshotId !== null ||
+            m.voiceId !== null ||
+            m.filesDeletedAt !== undefined,
           createdAt: m.createdAt,
         })),
       ),

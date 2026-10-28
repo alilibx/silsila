@@ -233,15 +233,17 @@ test("a visitor's request is invisible to another token", async () => {
   expect((await t.run((ctx) => ctx.db.get(requestId)))?.seenAt).toBeNull();
 
   expect(
-    await t.mutation(api.help.uploadUrlAsVisitor, {
-      reporterToken: wrong,
+    await t.mutation(internal.help.uploadUrlInternal, {
+      reporterHash: await sha256Hex(wrong),
       requestId,
+      ip: "203.0.113.7",
     }),
   ).toEqual({ error: "not_found" });
   expect(
-    typeof (await t.mutation(api.help.uploadUrlAsVisitor, {
-      reporterToken: VISITOR,
+    typeof (await t.mutation(internal.help.uploadUrlInternal, {
+      reporterHash: await sha256Hex(VISITOR),
       requestId,
+      ip: "203.0.113.7",
     })),
   ).toBe("string");
 
@@ -345,4 +347,27 @@ test("an answered request with no word back closes after 14 days", async () => {
   const row = await t.run((ctx) => ctx.db.get(res.requestId));
   expect(row?.status).toBe("closed");
   expect(row?.closedAt).toBeGreaterThan(NOW + 14 * DAY);
+});
+
+test("a conversation stops taking messages at 200", async () => {
+  const t = convexTest(schema, modules);
+  await member(t);
+  const res = await send(t, { text: "a" });
+  if (!("requestId" in res)) throw new Error();
+  await t.run(async (ctx) => {
+    for (let i = 1; i < 200; i++) {
+      await ctx.db.insert("helpMessages", {
+        requestId: res.requestId,
+        from: "person",
+        text: `m${i}`,
+        screenshotId: null,
+        voiceId: null,
+        voiceSeconds: null,
+        createdAt: NOW + i,
+      });
+    }
+  });
+  expect(await send(t, { requestId: res.requestId, text: "one more" })).toEqual(
+    { error: "rate_limited" },
+  );
 });

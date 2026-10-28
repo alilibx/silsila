@@ -21,6 +21,13 @@ const HANDOFF_TTL_MS = DAY_MS;
 /** Audit rows are kept 2 years (spec 4.5). */
 export const AUDIT_TTL_MS = 2 * 365 * DAY_MS;
 
+/**
+ * Help requests per run. Each one reads and writes all its messages (up to
+ * MAX_MESSAGES_PER_REQUEST), so the batch is far smaller than BATCH.
+ */
+const HELP_BATCH = 20;
+const ORPHAN_BATCH = 200;
+
 /** Uploads younger than this may still be on their way into a message. */
 const ORPHAN_AGE_MS = HOUR_MS;
 const ORPHAN_MARK = "helpOrphans";
@@ -72,8 +79,8 @@ async function purgeHelp(ctx: MutationCtx, now: number): Promise<boolean> {
         .gt("closedAt", 0)
         .lt("closedAt", fileCutoff),
     )
-    .take(BATCH + 1);
-  for (const request of withFiles.slice(0, BATCH)) {
+    .take(HELP_BATCH + 1);
+  for (const request of withFiles.slice(0, HELP_BATCH)) {
     const messages = await messagesOf(ctx, request._id);
     await deleteFiles(
       ctx,
@@ -81,12 +88,16 @@ async function purgeHelp(ctx: MutationCtx, now: number): Promise<boolean> {
     );
     for (const m of messages) {
       if (m.screenshotId !== null || m.voiceId !== null) {
-        await ctx.db.patch(m._id, { screenshotId: null, voiceId: null });
+        await ctx.db.patch(m._id, {
+          screenshotId: null,
+          voiceId: null,
+          filesDeletedAt: now,
+        });
       }
     }
     await ctx.db.patch(request._id, { attachmentsDeletedAt: now });
   }
-  return expired.length > BATCH || withFiles.length > BATCH;
+  return expired.length > HELP_BATCH || withFiles.length > HELP_BATCH;
 }
 
 function messagesOf(ctx: MutationCtx, requestId: Id<"helpRequests">) {
@@ -115,8 +126,8 @@ async function purgeOrphanUploads(
     .withIndex("by_creation_time", (q) =>
       q.gt("_creationTime", mark).lt("_creationTime", now - ORPHAN_AGE_MS),
     )
-    .take(BATCH + 1);
-  const batch = files.slice(0, BATCH);
+    .take(ORPHAN_BATCH + 1);
+  const batch = files.slice(0, ORPHAN_BATCH);
   for (const file of batch) {
     const used =
       (await ctx.db
@@ -139,7 +150,7 @@ async function purgeOrphanUploads(
       });
     }
   }
-  return files.length > BATCH;
+  return files.length > ORPHAN_BATCH;
 }
 
 /** Deletes up to BATCH rows; returns true when more old rows remain. */
@@ -230,10 +241,25 @@ export const purge = internalMutation({
       await deleteBatch(ctx, handoffs),
       await deleteBatch(ctx, audit),
       await deleteBatch(ctx, adminSessions),
-      await purgeHelp(ctx, now),
-      await purgeOrphanUploads(ctx, now),
     ].some(Boolean);
 
     if (more) await ctx.scheduler.runAfter(0, internal.maintenance.purge, {});
+    // Help has its own job: a backlog there must never fail this purge.
+    await ctx.scheduler.runAfter(0, internal.maintenance.purgeHelpData, {});
+  },
+});
+
+/** Help retention and orphaned uploads, in small batches (plan 3 spec 3.6). */
+export const purgeHelpData = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const more = [
+      await purgeHelp(ctx, now),
+      await purgeOrphanUploads(ctx, now),
+    ].some(Boolean);
+    if (more) {
+      await ctx.scheduler.runAfter(0, internal.maintenance.purgeHelpData, {});
+    }
   },
 });

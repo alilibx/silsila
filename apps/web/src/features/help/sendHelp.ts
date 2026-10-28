@@ -83,16 +83,23 @@ export async function sendHelp(args: {
       voiceId?: Id<"_storage">;
       voiceSeconds?: number;
     } = {};
-    for (const [key, blob] of [
-      ["screenshotId", args.screenshot],
-      ["voiceId", args.voice?.blob ?? null],
-    ] as const) {
-      if (!blob) continue;
+    if (args.screenshot) {
+      // A screenshot that won't upload is dropped quietly (spec 3.2): the words matter more.
+      try {
+        const url = await getUrl();
+        if (typeof url === "string") {
+          ids.screenshotId = await upload(url, args.screenshot);
+        }
+      } catch {
+        // sent without it
+      }
+    }
+    if (args.voice) {
       const url = await getUrl();
       if (typeof url !== "string") throw url;
-      ids[key] = await upload(url, blob);
+      ids.voiceId = await upload(url, args.voice.blob);
+      ids.voiceSeconds = args.voice.seconds;
     }
-    if (args.voice) ids.voiceSeconds = args.voice.seconds;
     return ids;
   };
   const text = args.text.trim() ? args.text : undefined;
@@ -117,12 +124,13 @@ export async function sendHelp(args: {
     if (requestId) {
       const reporterToken = getReporterToken();
       if (!reporterToken) return { error: "not_found" };
-      const ids = await files(() =>
-        client.mutation(api.help.uploadUrlAsVisitor, {
+      const ids = await files(async () => {
+        const res = (await postJson("/api/help/upload-url", {
           reporterToken,
           requestId,
-        }),
-      );
+        })) as { uploadUrl?: string; error?: string };
+        return res.uploadUrl ?? { error: res.error ?? "generic" };
+      });
       const res = await client.mutation(api.help.sendAsVisitor, {
         reporterToken,
         requestId,

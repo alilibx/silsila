@@ -148,3 +148,31 @@ test("upload URLs for visitors are limited per IP", async () => {
     (await post(t, "/api/help/upload-url", { reporterToken: "x" })).status,
   ).toBe(400);
 });
+
+test("follow-up uploads go over HTTP too, so they count against the IP", async () => {
+  const t = convexTest(schema, modules);
+  const created = await post(t, "/api/help/request", request());
+  const { requestId } = (await created.json()) as { requestId: string };
+
+  const wrong = await post(t, "/api/help/upload-url", {
+    reporterToken: "another-visitor-token-0123456789",
+    requestId,
+  });
+  expect(wrong.status).toBe(404);
+
+  for (let i = 0; i < 20; i++) {
+    expect(
+      (
+        await post(t, "/api/help/upload-url", {
+          reporterToken: TOKEN,
+          requestId,
+        })
+      ).status,
+    ).toBe(200);
+  }
+  // 20 per token per hour.
+  expect(
+    (await post(t, "/api/help/upload-url", { reporterToken: TOKEN, requestId }))
+      .status,
+  ).toBe(429);
+});

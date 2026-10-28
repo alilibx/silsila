@@ -6,6 +6,8 @@ import { checkFile, VOICE_MAX_SECONDS } from "./helpFiles";
 import { khatmaByInviteCode } from "./khatma";
 
 const MAX_TEXT = 1000;
+/** A conversation takes no more messages past this, so no request grows without end. */
+export const MAX_MESSAGES_PER_REQUEST = 200;
 
 export type HelpInput = {
   text: string | null;
@@ -203,6 +205,10 @@ export async function addMessage(
     status: "open",
     lastMessageAt: now,
     closedAt: null,
+    // New files on a request whose old ones were swept: sweep these in turn.
+    ...(input.screenshotId !== null || input.voiceId !== null
+      ? { attachmentsDeletedAt: null }
+      : {}),
   });
   await notifyAdmins(ctx, request._id, "message");
 }

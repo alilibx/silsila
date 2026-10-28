@@ -16,6 +16,7 @@ import {
   createRequest,
   helpContextValidator,
   helpInputArgs,
+  MAX_MESSAGES_PER_REQUEST,
   owns,
   toHelpInput,
   type HelpOwner,
@@ -118,6 +119,13 @@ async function followUp(
 ): Promise<{ requestId: Id<"helpRequests"> } | { error: SendError }> {
   const request = await ownedRequest(ctx, requestId, owner);
   if (!request) return { error: "not_found" };
+  const count = (
+    await ctx.db
+      .query("helpMessages")
+      .withIndex("by_request", (q) => q.eq("requestId", requestId))
+      .take(MAX_MESSAGES_PER_REQUEST)
+  ).length;
+  if (count >= MAX_MESSAGES_PER_REQUEST) return { error: "rate_limited" };
   const input = await cleanHelpInput(ctx, rawInput, false);
   if ("error" in input) return input;
   if (!(await checkRateLimits(ctx, [await messageBucket(ctx, owner)]))) {
@@ -198,31 +206,6 @@ export const claimVisitorRequests = sessionMutation({
 // ---------------------------------------------------------------------------
 // Visitors (signed out). New requests come over HTTP (http.ts), where the
 // per-IP limit can read the IP; these are the follow-ups.
-
-/** An upload URL for a follow-up voice note. The token must own the request. */
-export const uploadUrlAsVisitor = mutation({
-  args: { reporterToken: v.string(), requestId: v.id("helpRequests") },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<string | { error: "not_found" | "rate_limited" }> => {
-    const owner = { reporterHash: await reporterHash(args.reporterToken) };
-    // Tokens cost nothing to mint, so a token alone buys no upload URLs.
-    if (!(await ownedRequest(ctx, args.requestId, owner))) {
-      return { error: "not_found" };
-    }
-    const allowed = await checkRateLimits(ctx, [
-      await uploadBucket(ctx, owner),
-      shardedBucket(
-        "helpUpload:visitorGlobal",
-        VISITOR_UPLOADS_GLOBAL_PER_HOUR,
-        HOUR_MS,
-      ),
-    ]);
-    if (!allowed) return { error: "rate_limited" };
-    return await ctx.storage.generateUploadUrl();
-  },
-});
 
 export const sendAsVisitor = mutation({
   args: {
@@ -366,10 +349,29 @@ export const markSeen = mutation({
   },
 });
 
-/** Called by `POST /api/help/upload-url` with the caller's IP. */
+/**
+ * Called by `POST /api/help/upload-url` with the caller's IP, for a visitor's
+ * new request or, with `requestId`, a follow-up in a request the token owns.
+ * Both go over HTTP so every visitor upload counts against the IP.
+ */
 export const uploadUrlInternal = internalMutation({
-  args: { reporterHash: v.string(), ip: v.union(v.string(), v.null()) },
-  handler: async (ctx, args): Promise<string | { error: "rate_limited" }> => {
+  args: {
+    reporterHash: v.string(),
+    ip: v.union(v.string(), v.null()),
+    requestId: v.optional(v.id("helpRequests")),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<string | { error: "rate_limited" | "not_found" }> => {
+    if (
+      args.requestId !== undefined &&
+      !(await ownedRequest(ctx, args.requestId, {
+        reporterHash: args.reporterHash,
+      }))
+    ) {
+      return { error: "not_found" };
+    }
     const buckets: RateLimitBucket[] = [
       await uploadBucket(ctx, { reporterHash: args.reporterHash }),
       shardedBucket(

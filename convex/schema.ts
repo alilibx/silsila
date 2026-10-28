@@ -245,6 +245,8 @@ export default defineSchema({
     screenshotId: v.union(v.id("_storage"), v.null()),
     voiceId: v.union(v.id("_storage"), v.null()),
     voiceSeconds: nullableNumber,
+    /** Set when retention deleted this message's files, so admins see "deleted". */
+    filesDeletedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_request", ["requestId", "createdAt"])
