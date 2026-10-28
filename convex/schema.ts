@@ -209,6 +209,8 @@ export default defineSchema({
   auditLog: defineTable({
     /** null for changes made from the command line (the first admin). */
     adminId: v.union(v.id("admins"), v.null()),
+    /** The actor's phone when the row was written, so it outlives the admin's removal. */
+    adminPhone: v.union(v.string(), v.null()),
     action: auditActionValidator,
     targetKind: v.union(v.literal("admin"), v.literal("setting")),
     targetId: v.string(),

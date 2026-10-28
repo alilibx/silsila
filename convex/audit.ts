@@ -1,6 +1,5 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
 import { adminQuery } from "./lib/adminSession";
 import { auditActionValidator } from "./lib/audit";
 
@@ -28,13 +27,6 @@ export const list = adminQuery({
           : ctx.db.query("auditLog").withIndex("by_at");
     const result = await rows.order("desc").paginate(args.paginationOpts);
 
-    // A page holds few admins; read each once.
-    const phones = new Map<Id<"admins">, string | null>();
-    for (const row of result.page) {
-      if (row.adminId !== null && !phones.has(row.adminId)) {
-        phones.set(row.adminId, (await ctx.db.get(row.adminId))?.phone ?? null);
-      }
-    }
     return {
       ...result,
       page: result.page.map((row) => ({
@@ -46,8 +38,7 @@ export const list = adminQuery({
         before: row.before as unknown,
         after: row.after as unknown,
         note: row.note,
-        adminPhone:
-          row.adminId === null ? null : (phones.get(row.adminId) ?? null),
+        adminPhone: row.adminPhone,
       })),
     };
   },

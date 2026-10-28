@@ -128,7 +128,13 @@ test("writeAudit records the entry with the current time and a null note", async
   const adminId = await addAdmin(t);
   await t.run((ctx) =>
     writeAudit(ctx, {
-      adminId,
+      actor: {
+        _id: adminId,
+        _creationTime: 0,
+        phone: "+971500000001",
+        addedBy: null,
+        addedAt: NOW,
+      },
       action: "setting.set",
       targetKind: "setting",
       targetId: "maxMembers",
@@ -140,6 +146,7 @@ test("writeAudit records the entry with the current time and a null note", async
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({
     adminId,
+    adminPhone: "+971500000001",
     action: "setting.set",
     targetKind: "setting",
     targetId: "maxMembers",

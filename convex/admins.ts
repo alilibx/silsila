@@ -54,7 +54,7 @@ export const bootstrap = internalMutation({
       addedAt: Date.now(),
     });
     await writeAudit(ctx, {
-      adminId: null,
+      actor: null,
       action: "admin.bootstrap",
       targetKind: "admin",
       targetId: adminId,
@@ -101,7 +101,7 @@ export const add = adminMutation({
       addedAt: Date.now(),
     });
     await writeAudit(ctx, {
-      adminId: ctx.admin._id,
+      actor: ctx.admin,
       action: "admin.add",
       targetKind: "admin",
       targetId: adminId,
@@ -126,7 +126,7 @@ export const remove = adminMutation({
     await deleteAdminSessions(ctx, target._id);
     await ctx.db.delete(target._id);
     await writeAudit(ctx, {
-      adminId: ctx.admin._id,
+      actor: ctx.admin,
       action: "admin.remove",
       targetKind: "admin",
       targetId: target._id,

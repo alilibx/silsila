@@ -84,7 +84,7 @@ export const set = adminMutation({
       await ctx.db.insert("settings", { key, value, updatedAt: Date.now() });
     }
     await writeAudit(ctx, {
-      adminId: ctx.admin._id,
+      actor: ctx.admin,
       action: "setting.set",
       targetKind: "setting",
       targetId: key,
@@ -108,7 +108,7 @@ export const reset = adminMutation({
     if (!row) return { ok: true };
     await ctx.db.delete(row._id);
     await writeAudit(ctx, {
-      adminId: ctx.admin._id,
+      actor: ctx.admin,
       action: "setting.reset",
       targetKind: "setting",
       targetId: key,

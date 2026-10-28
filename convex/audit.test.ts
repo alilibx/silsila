@@ -45,9 +45,11 @@ function addRow(
   action: AuditAction,
   at: number,
 ) {
-  return t.run((ctx) =>
+  return t.run(async (ctx) =>
     ctx.db.insert("auditLog", {
       adminId,
+      adminPhone:
+        adminId === null ? null : ((await ctx.db.get(adminId))?.phone ?? null),
       action,
       targetKind: action.startsWith("setting") ? "setting" : "admin",
       targetId: "x",
@@ -122,4 +124,25 @@ test("only admins can read the log", async () => {
   await expect(
     t.query(api.audit.list, { adminToken: "nobody", paginationOpts: page }),
   ).rejects.toThrow(/not_admin/);
+});
+
+test("a removed admin's changes still show who made them", async () => {
+  const t = convexTest(schema, modules);
+  await signedInAdmin(t, "+971500000001", "ali");
+  const sara = await signedInAdmin(t, "+971500000002", "sara");
+  await t.mutation(api.adminSettings.set, {
+    adminToken: "sara",
+    key: "maxMembers",
+    value: 40,
+  });
+  await t.mutation(api.admins.remove, { adminToken: "ali", adminId: sara });
+
+  const res = await t.query(api.audit.list, {
+    adminToken: "ali",
+    paginationOpts: page,
+  });
+  expect(res.page.map((r) => [r.action, r.adminPhone])).toEqual([
+    ["admin.remove", "+971500000001"],
+    ["setting.set", "+971500000002"],
+  ]);
 });

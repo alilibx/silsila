@@ -302,6 +302,7 @@ test("purge deletes audit rows after two years and expired admin sessions", asyn
     t.run((ctx) =>
       ctx.db.insert("auditLog", {
         adminId,
+        adminPhone: "+971500000001",
         action: "setting.set",
         targetKind: "setting",
         targetId: "maxMembers",

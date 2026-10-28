@@ -1,5 +1,5 @@
 import { v, type Infer } from "convex/values";
-import type { Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
 /** Every kind of change the audit log records (spec 4.5). */
@@ -20,7 +20,8 @@ export type AuditAction = Infer<typeof auditActionValidator>;
 export async function writeAudit(
   ctx: MutationCtx,
   entry: {
-    adminId: Id<"admins"> | null;
+    /** The admin who made the change; null for the command line. */
+    actor: Doc<"admins"> | null;
     action: AuditAction;
     targetKind: "admin" | "setting";
     targetId: string;
@@ -30,7 +31,8 @@ export async function writeAudit(
   },
 ): Promise<void> {
   await ctx.db.insert("auditLog", {
-    adminId: entry.adminId,
+    adminId: entry.actor?._id ?? null,
+    adminPhone: entry.actor?.phone ?? null,
     action: entry.action,
     targetKind: entry.targetKind,
     targetId: entry.targetId,
