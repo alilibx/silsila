@@ -6,6 +6,13 @@
   "git": {
     "deploymentEnabled": false
   },
+  "redirects": [
+    {
+      "source": "/stg/:path*",
+      "destination": "https://stg.wirdak.app/:path*",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/j/:code",
