@@ -6,6 +6,9 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
+import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
+
+export { cleanParam, type TemplateMessage };
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -249,22 +252,6 @@ export function parseRelayed(payload: unknown): IncomingMessage | null {
 
 const SEND_ATTEMPTS = 2;
 const SEND_RETRY_DELAY_MS = 500;
-
-/** A template send: the header and body texts, and the first button's parameter. */
-export type TemplateMessage = {
-  name: string;
-  header?: string;
-  body?: string[];
-  buttonParam?: string;
-};
-
-/**
- * WhatsApp refuses template parameters with newlines, tabs or more than four
- * spaces in a row, so every run of whitespace becomes one space.
- */
-export function cleanParam(value: string): string {
-  return value.replace(/\s+/gu, " ").trim();
-}
 
 const textParams = (values: string[]) =>
   values.map((text) => ({ type: "text", text: cleanParam(text) }));
