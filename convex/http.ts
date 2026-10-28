@@ -51,6 +51,40 @@ async function callerIp(ctx: ActionCtx, req: Request): Promise<string | null> {
   return ip ? ip.slice(0, MAX_IP) : null;
 }
 
+/**
+ * The request body as text, or `null` once it is known to exceed `maxBytes`:
+ * from the `Content-Length` header without reading anything, else by reading
+ * the stream and stopping as soon as the running total crosses the cap.
+ */
+async function readCappedText(
+  req: Request,
+  maxBytes: number,
+): Promise<string | null> {
+  const declared = Number(req.headers.get("Content-Length") ?? Number.NaN);
+  if (declared > maxBytes) return null;
+  if (req.body === null) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 const START_ERROR_STATUS = {
   invalid_name: 400,
   rate_limited: 429,
@@ -88,10 +122,11 @@ http.route({
     }
     const headers = corsHeaders(origin);
 
-    const raw = await req.text();
+    const raw = await readCappedText(req, MAX_START_BODY);
+    if (raw === null) return json(413, { error: "too_large" }, headers);
     let body: unknown;
     try {
-      body = raw.length <= MAX_START_BODY ? JSON.parse(raw) : null;
+      body = JSON.parse(raw);
     } catch {
       body = null;
     }

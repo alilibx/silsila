@@ -264,6 +264,57 @@ test("start over HTTP: CORS preflight, origins, and error codes", async () => {
   expect(await maint.json()).toEqual({ error: "maintenance" });
 });
 
+test("start over HTTP refuses an oversized Content-Length without reading the body", async () => {
+  const t = convexTest(schema, modules);
+  let pulled = false;
+  // highWaterMark 0: the stream is pulled only when someone reads it
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        pulled = true;
+        controller.enqueue(new TextEncoder().encode("{}"));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const res = await t.fetch("/api/verification/start", {
+    method: "POST",
+    headers: { Origin: SITE, "Content-Length": "1000000" },
+    body,
+    duplex: "half",
+  } as RequestInit);
+  expect(res.status).toBe(413);
+  expect(await res.json()).toEqual({ error: "too_large" });
+  expect(pulled).toBe(false);
+  expect(await t.run((ctx) => ctx.db.query("verifications").collect())).toEqual(
+    [],
+  );
+});
+
+test("start over HTTP stops reading a body that grows past the cap", async () => {
+  const t = convexTest(schema, modules);
+  const chunk = new TextEncoder().encode("x".repeat(1024));
+  let chunksSent = 0;
+  // Endless, with no Content-Length: only a byte cap ends the read.
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      chunksSent++;
+      controller.enqueue(chunk);
+    },
+  });
+  const res = await t.fetch("/api/verification/start", {
+    method: "POST",
+    headers: { Origin: SITE },
+    body,
+    duplex: "half",
+  } as RequestInit);
+  expect(res.status).toBe(413);
+  expect(await res.json()).toEqual({ error: "too_large" });
+  // 4 KiB cap: the fifth 1 KiB chunk crosses it (plus whatever the stream buffered ahead)
+  expect(chunksSent).toBeLessThan(10);
+});
+
 test("the Vite dev origin is allowed only in dev", async () => {
   const t = convexTest(schema, modules);
   const preflight = () =>
