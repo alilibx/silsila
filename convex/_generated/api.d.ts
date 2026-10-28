@@ -12,6 +12,7 @@ import type * as adminAuth from "../adminAuth.js";
 import type * as adminHelp from "../adminHelp.js";
 import type * as adminPush from "../adminPush.js";
 import type * as adminSettings from "../adminSettings.js";
+import type * as adminStats from "../adminStats.js";
 import type * as admins from "../admins.js";
 import type * as audit from "../audit.js";
 import type * as crons from "../crons.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   adminHelp: typeof adminHelp;
   adminPush: typeof adminPush;
   adminSettings: typeof adminSettings;
+  adminStats: typeof adminStats;
   admins: typeof admins;
   audit: typeof audit;
   crons: typeof crons;
