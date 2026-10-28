@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useLocation } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getSessionToken, setSessionToken } from "../../lib/session";
 import { HandoffGate } from "./HandoffGate";
 
@@ -21,12 +22,23 @@ vi.mock("../../lib/push", () => ({
   enablePush: vi.fn(),
 }));
 
-const ui = () =>
+// The router's own location, which is what the app's pages read.
+function Where() {
+  const { pathname, search } = useLocation();
+  return <output data-testid="where">{pathname + search}</output>;
+}
+
+const ui = (entry = "/j/CODE?h=tok&from=wa") =>
   render(
-    <HandoffGate>
-      <p>التطبيق</p>
-    </HandoffGate>,
+    <MemoryRouter initialEntries={[entry]}>
+      <HandoffGate>
+        <p>التطبيق</p>
+        <Where />
+      </HandoffGate>
+    </MemoryRouter>,
   );
+
+const where = () => screen.getByTestId("where").textContent;
 
 beforeEach(() => {
   localStorage.clear();
@@ -34,11 +46,6 @@ beforeEach(() => {
   m.markAsked.mockReset();
   m.standalone = true;
   m.support = "ready";
-  window.history.replaceState(null, "", "/j/CODE?h=tok&from=wa");
-});
-
-afterEach(() => {
-  window.history.replaceState(null, "", "/");
 });
 
 describe("HandoffGate", () => {
@@ -48,8 +55,8 @@ describe("HandoffGate", () => {
     expect(await screen.findByText("التطبيق")).toBeInTheDocument();
     expect(m.redeem).not.toHaveBeenCalled();
     expect(getSessionToken()).toBeNull();
-    // Never leave the token in the address bar, even when it was not redeemed.
-    expect(window.location.search).toBe("?from=wa");
+    // Never leave the token in the router's location, even when it was not redeemed.
+    expect(where()).toBe("/j/CODE?from=wa");
   });
 
   it("trades the token for a session, strips h, and offers push", async () => {
@@ -58,9 +65,7 @@ describe("HandoffGate", () => {
     await waitFor(() => expect(getSessionToken()).toBe("new-session"));
     expect(m.redeem).toHaveBeenCalledTimes(1);
     expect(m.redeem.mock.calls[0]?.[0]).toBe("tok");
-    expect(window.location.pathname + window.location.search).toBe(
-      "/j/CODE?from=wa",
-    );
+    expect(where()).toBe("/j/CODE?from=wa");
     expect(
       await screen.findByText("نرسل لك تذكيراً لطيفاً، ونخبرك حين نختم معاً."),
     ).toBeInTheDocument();
@@ -74,7 +79,7 @@ describe("HandoffGate", () => {
     expect(await screen.findByText("التطبيق")).toBeInTheDocument();
     expect(m.redeem).not.toHaveBeenCalled();
     expect(getSessionToken()).toBe("mine");
-    expect(window.location.search).toBe("?from=wa");
+    expect(where()).toBe("/j/CODE?from=wa");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -84,15 +89,22 @@ describe("HandoffGate", () => {
     expect(await screen.findByText("التطبيق")).toBeInTheDocument();
     await waitFor(() => expect(m.redeem).toHaveBeenCalledTimes(1));
     expect(getSessionToken()).toBeNull();
-    expect(window.location.search).toBe("?from=wa");
+    expect(where()).toBe("/j/CODE?from=wa");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("does nothing without h", async () => {
-    window.history.replaceState(null, "", "/");
-    ui();
+    ui("/j/CODE?from=wa");
     expect(await screen.findByText("التطبيق")).toBeInTheDocument();
     expect(m.redeem).not.toHaveBeenCalled();
+    expect(where()).toBe("/j/CODE?from=wa");
+  });
+
+  it("drops the whole query string when h was the only parameter", async () => {
+    m.redeem.mockResolvedValue("new-session");
+    ui("/?h=tok");
+    await waitFor(() => expect(getSessionToken()).toBe("new-session"));
+    expect(where()).toBe("/");
   });
 
   it("only skips the push prompt when push is unsupported here", async () => {

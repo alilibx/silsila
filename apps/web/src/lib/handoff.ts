@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { convexHttp } from "./convexHttp";
 
 type Manifest = {
+  id?: string;
   start_url?: string;
   scope?: string;
   icons?: { src: string; [key: string]: unknown }[];
@@ -54,6 +55,7 @@ export function handoffManifest(
   const absolute = (path: string) => new URL(path, origin).href;
   return {
     ...base,
+    id: absolute(base.id ?? "/"),
     start_url: absolute(`/?h=${encodeURIComponent(token)}`),
     scope: absolute(base.scope ?? "/"),
     icons: base.icons?.map((icon) => ({ ...icon, src: absolute(icon.src) })),

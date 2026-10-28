@@ -15,6 +15,7 @@ vi.mock("convex/browser", () => ({
 }));
 
 const STATIC = {
+  id: "/",
   name: "وِردك",
   start_url: "/",
   scope: "/",
@@ -38,6 +39,7 @@ describe("handoffManifest", () => {
     const out = handoffManifest(STATIC, "tok", "https://wirdak.app");
     expect(out).toEqual({
       ...STATIC,
+      id: "https://wirdak.app/",
       start_url: "https://wirdak.app/?h=tok",
       scope: "https://wirdak.app/",
       icons: [
@@ -49,6 +51,16 @@ describe("handoffManifest", () => {
       ],
     });
     expect(JSON.stringify(out).match(/tok/g)).toHaveLength(1);
+  });
+});
+
+describe("handoffManifest id", () => {
+  it("gives a manifest without an id the stable id /", () => {
+    const noId: Partial<typeof STATIC> = { ...STATIC };
+    delete noId.id;
+    expect(handoffManifest(noId, "tok", "https://wirdak.app").id).toBe(
+      "https://wirdak.app/",
+    );
   });
 });
 
@@ -103,7 +115,9 @@ describe("installHandoffManifest", () => {
       reader.onload = () => resolve(String(reader.result));
       reader.readAsText(blob!);
     });
-    expect(JSON.parse(text).start_url).toBe(`${window.location.origin}/?h=tok`);
+    const manifest = JSON.parse(text);
+    expect(manifest.start_url).toBe(`${window.location.origin}/?h=tok`);
+    expect(manifest.id).toBe(`${window.location.origin}/`);
     expect(window.location.href).toBe(before);
 
     restore();

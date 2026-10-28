@@ -1,32 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { PushPromptSheet } from "../../components/PushPromptSheet";
 import { t } from "../../i18n/ar";
 import { redeemHandoffToken } from "../../lib/handoff";
 import { isStandalone, markPushAsked, pushSupport } from "../../lib/push";
 import { getSessionToken, setSessionToken } from "../../lib/session";
-
-/** Whether this launch will redeem a token; decided before the first render so nothing flashes. */
-function willRedeem(): boolean {
-  return (
-    new URLSearchParams(window.location.search).has("h") &&
-    isStandalone() &&
-    getSessionToken() === null
-  );
-}
-
-function takeHandoffToken(): string | null {
-  const url = new URL(window.location.href);
-  const token = url.searchParams.get("h");
-  if (token === null) return null;
-  // The token is spent or useless from here on: never leave it in the address bar or history.
-  url.searchParams.delete("h");
-  window.history.replaceState(
-    window.history.state,
-    "",
-    url.pathname + url.search + url.hash,
-  );
-  return token;
-}
 
 /**
  * First launch of the iPhone home-screen app: a `?h=` token from the swapped-in manifest's
@@ -34,16 +12,37 @@ function takeHandoffToken(): string | null {
  * redeems inside the home-screen app, and never over a session the app already has.
  */
 export function HandoffGate({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   // Read once on mount (a ref survives StrictMode's second effect run, so one token, one redeem).
   const started = useRef(false);
-  const [redeeming, setRedeeming] = useState(willRedeem);
+  // Decided before the first render, so nothing flashes signed out while the token is traded.
+  const [redeeming, setRedeeming] = useState(
+    () =>
+      new URLSearchParams(location.search).has("h") &&
+      isStandalone() &&
+      getSessionToken() === null,
+  );
   const [prompt, setPrompt] = useState(false);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    const token = takeHandoffToken();
-    if (token === null || !isStandalone() || getSessionToken() !== null) return;
+    const params = new URLSearchParams(location.search);
+    const token = params.get("h");
+    if (token === null) return;
+    // Spent or useless from here on: never leave it in the address bar, history, or router state.
+    params.delete("h");
+    const search = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: search ? `?${search}` : "",
+        hash: location.hash,
+      },
+      { replace: true },
+    );
+    if (!isStandalone() || getSessionToken() !== null) return;
     void (async () => {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const sessionToken = await redeemHandoffToken(token, timeZone);
@@ -56,6 +55,7 @@ export function HandoffGate({ children }: { children: ReactNode }) {
       }
       setRedeeming(false);
     })();
+    // Mount only: the token is read once, and `navigate` changes the location it came from.
   }, []);
 
   // Wait for the exchange so the first screen never flashes signed out.

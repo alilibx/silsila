@@ -64,6 +64,8 @@ function Step({
  * The iPhone steps for putting Wirdak on the home screen. While it is open the page's manifest is
  * swapped for one whose `start_url` carries a hand-off token, so the home-screen app opens signed
  * in. The page's own address never changes, so sharing it from the Share sheet can't leak the token.
+ * The token is made when the sheet opens and the manifest goes back when it closes, so the sheet
+ * works wherever it is opened from (after a take, or from settings) and again on every reopen.
  */
 export function InstallStepsSheet({ onClose }: { onClose: () => void }) {
   const sessionToken = useSessionToken();
@@ -99,8 +101,11 @@ export function InstallStepsSheet({ onClose }: { onClose: () => void }) {
           {t.install.steps.confirm}
         </Step>
       </ol>
-      <div className="mt-5">
-        <Button onClick={onClose}>{t.install.done}</Button>
+      <div className="mt-5 grid gap-3">
+        <Button onClick={onClose}>{t.install.added}</Button>
+        <Button variant="ghost" onClick={onClose}>
+          {t.install.notNow}
+        </Button>
       </div>
     </Sheet>
   );

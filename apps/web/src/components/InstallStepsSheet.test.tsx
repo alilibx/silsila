@@ -55,6 +55,8 @@ describe("InstallStepsSheet", () => {
     expect(screen.getByText("اضغط زر المشاركة")).toBeInTheDocument();
     expect(screen.getByText(/إضافة إلى الشاشة الرئيسية/)).toBeInTheDocument();
     expect(screen.getByText(/أضف/, { selector: "li *" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "أضفتُه" })).toBeInTheDocument();
+    expect(screen.getByText(/الآن، ونافذة الخطوات/)).toBeInTheDocument();
   });
 
   it("puts the token only in the manifest, never in location, and restores the manifest on close", async () => {
@@ -82,6 +84,32 @@ describe("InstallStepsSheet", () => {
     await userEvent.click(screen.getByRole("button", { name: "إغلاق" }));
     expect(link.getAttribute("href")).toBe("/manifest.webmanifest");
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test/1");
+  });
+
+  it("works when opened again from anywhere, with a fresh token each time", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:test/again");
+    URL.revokeObjectURL = vi.fn();
+    m.action
+      .mockResolvedValueOnce({ token: "first" })
+      .mockResolvedValueOnce({ token: "second" });
+    const link = () => document.querySelector('link[rel="manifest"]')!;
+    for (let i = 1; i <= 2; i++) {
+      const { unmount } = render(<Host />);
+      await waitFor(() =>
+        expect(link().getAttribute("href")).toBe("blob:test/again"),
+      );
+      expect(m.action).toHaveBeenCalledTimes(i);
+      unmount();
+      expect(link().getAttribute("href")).toBe("/manifest.webmanifest");
+    }
+  });
+
+  it("closes from either button: added, or not now", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:test/1");
+    URL.revokeObjectURL = vi.fn();
+    render(<Host />);
+    await userEvent.click(screen.getByRole("button", { name: "ليس الآن" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("restores the manifest even when closed before the token arrived", async () => {
