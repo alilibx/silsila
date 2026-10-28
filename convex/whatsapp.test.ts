@@ -4,9 +4,12 @@ import { internal } from "./_generated/api";
 import { hmacSha256Hex } from "./lib/crypto";
 import schema from "./schema";
 import {
+  cleanParam,
   parseIncoming,
   relayIncoming,
   relaySignature,
+  sendWhatsAppLink,
+  sendWhatsAppTemplate,
   whatsappConfigured,
 } from "./whatsapp";
 
@@ -17,6 +20,8 @@ const APP_SECRET = "test-app-secret";
 
 type Sent = { url: string; auth: string; to: string; body: string };
 let sent: Sent[];
+/** Every Graph request body, whatever its message type. */
+let payloads: Record<string, unknown>[];
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -30,18 +35,20 @@ beforeEach(() => {
   vi.stubEnv("WHATSAPP_GRAPH_VERSION", "v21.0");
   vi.stubEnv("SITE_URL", "https://wirdak.example");
   sent = [];
+  payloads = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init: RequestInit) => {
       const payload = JSON.parse(String(init.body)) as {
         to: string;
-        text: { body: string };
+        text?: { body: string };
       };
+      payloads.push(payload);
       sent.push({
         url,
         auth: new Headers(init.headers).get("Authorization") ?? "",
         to: payload.to,
-        body: payload.text.body,
+        body: payload.text?.body ?? "",
       });
       return new Response(JSON.stringify({ messages: [{ id: "out" }] }), {
         status: 200,
@@ -312,6 +319,124 @@ test("sendText in dev survives an unreadable error body", async () => {
     }),
   ).toBe(false);
   expect(mock).toHaveBeenCalledTimes(1);
+});
+
+test("sendWhatsAppTemplate posts a template with header, body and url button", async () => {
+  expect(
+    await sendWhatsAppTemplate("+971501234567", {
+      name: "wirdak_reminder",
+      header: "ختمة رمضان",
+      body: ["١٢"],
+      buttonParam: "j/AB12CD",
+    }),
+  ).toBe(true);
+  expect(payloads).toEqual([
+    {
+      messaging_product: "whatsapp",
+      to: "971501234567",
+      type: "template",
+      template: {
+        name: "wirdak_reminder",
+        language: { code: "ar" },
+        components: [
+          {
+            type: "header",
+            parameters: [{ type: "text", text: "ختمة رمضان" }],
+          },
+          { type: "body", parameters: [{ type: "text", text: "١٢" }] },
+          {
+            type: "button",
+            sub_type: "url",
+            index: "0",
+            parameters: [{ type: "text", text: "j/AB12CD" }],
+          },
+        ],
+      },
+    },
+  ]);
+});
+
+test("sendWhatsAppTemplate leaves out empty components", async () => {
+  await sendWhatsAppTemplate("+971501234567", {
+    name: "wirdak_completed",
+    body: [],
+    buttonParam: "j/X",
+  });
+  const template = payloads[0]!.template as { components: { type: string }[] };
+  expect(template.components.map((c) => c.type)).toEqual(["button"]);
+});
+
+test("sendWhatsAppLink posts an interactive cta_url", async () => {
+  await sendWhatsAppLink("+971501234567", "تمّ التحقق ✅", {
+    label: "ارجع إلى وِردك",
+    url: "https://wirdak.example/j/X",
+  });
+  expect(payloads).toEqual([
+    {
+      messaging_product: "whatsapp",
+      to: "971501234567",
+      type: "interactive",
+      interactive: {
+        type: "cta_url",
+        body: { text: "تمّ التحقق ✅" },
+        action: {
+          name: "cta_url",
+          parameters: {
+            display_text: "ارجع إلى وِردك",
+            url: "https://wirdak.example/j/X",
+          },
+        },
+      },
+    },
+  ]);
+});
+
+test("template send failures log the Graph error code only", async () => {
+  vi.stubEnv("WIRDAK_ENV", "prod");
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 132001 } }), {
+          status: 400,
+        }),
+    ),
+  );
+  expect(
+    await sendWhatsAppTemplate("+971501234567", {
+      name: "wirdak_pin",
+      body: ["123456"],
+      buttonParam: "123456",
+    }),
+  ).toBe(false);
+  const logged = error.mock.calls.flat().join(" ");
+  expect(logged).toBe("whatsapp send failed: HTTP 400 code 132001");
+});
+
+test("template and link sends in dev without a token log a summary", async () => {
+  vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  await sendWhatsAppTemplate("+971501234567", {
+    name: "wirdak_pin",
+    body: ["123456"],
+    buttonParam: "123456",
+  });
+  await sendWhatsAppLink("+971501234567", "نص", {
+    label: "زر",
+    url: "https://wirdak.example/x",
+  });
+  expect(sent).toEqual([]);
+  const logged = log.mock.calls.flat().join(" ");
+  expect(logged).toContain("wirdak_pin");
+  expect(logged).toContain("123456");
+  expect(logged).toContain("https://wirdak.example/x");
+});
+
+test("cleanParam collapses whitespace WhatsApp refuses in parameters", () => {
+  expect(cleanParam("  ختمة\n\tالوالدة     الكريمة ")).toBe(
+    "ختمة الوالدة الكريمة",
+  );
 });
 
 test("webhook rejects a bad signature", async () => {

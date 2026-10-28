@@ -212,20 +212,41 @@ export function parseRelayed(payload: unknown): IncomingMessage | null {
 const SEND_ATTEMPTS = 2;
 const SEND_RETRY_DELAY_MS = 500;
 
+/** A template send: the header and body texts, and the first button's parameter. */
+export type TemplateMessage = {
+  name: string;
+  header?: string;
+  body?: string[];
+  buttonParam?: string;
+};
+
 /**
- * Sends a text message through the Graph API. Never throws: a failed reply
- * must not undo the state change that triggered it. Message bodies (PINs,
- * sign-out links) are logged only in dev when no access token is set.
+ * WhatsApp refuses template parameters with newlines, tabs or more than four
+ * spaces in a row, so every run of whitespace becomes one space.
  */
-export async function sendWhatsAppText(
+export function cleanParam(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
+}
+
+const textParams = (values: string[]) =>
+  values.map((text) => ({ type: "text", text: cleanParam(text) }));
+
+/**
+ * Posts one message payload to the Graph API. Never throws: a failed reply
+ * must not undo the state change that triggered it. `summary` (which may hold
+ * a PIN or a sign-out link) is logged only in dev when no access token is set;
+ * prod logs keep to the HTTP status and Graph error code.
+ */
+async function postMessage(
   to: string,
-  body: string,
+  payload: Record<string, unknown>,
+  summary: string,
 ): Promise<boolean> {
   const digits = to.replace(/\D/g, "");
   const token = env("WHATSAPP_ACCESS_TOKEN");
   if (!token) {
     if (isDev()) {
-      console.log(`[whatsapp:dev] to +${digits}:\n${body}`);
+      console.log(`[whatsapp:dev] to +${digits}:\n${summary}`);
       return true;
     }
     console.error("whatsapp_not_configured: reply not sent");
@@ -247,8 +268,7 @@ export async function sendWhatsAppText(
     body: JSON.stringify({
       messaging_product: "whatsapp",
       to: digits,
-      type: "text",
-      text: { body },
+      ...payload,
     }),
   };
   for (let attempt = 1; ; attempt++) {
@@ -262,15 +282,103 @@ export async function sendWhatsAppText(
       return false;
     }
     if (res.ok) return true;
-    // Graph errors describe the request, not the message body, but keep
-    // prod logs to the status code.
-    const detail = isDev() ? ` ${await res.text().catch(() => "")}` : "";
-    console.error(`whatsapp send failed: HTTP ${res.status}${detail}`);
+    console.error(
+      `whatsapp send failed: HTTP ${res.status}${await errorDetail(res)}`,
+    );
     // Throttling and server errors are retried once; other 4xx never are.
     const retryable = res.status === 429 || res.status >= 500;
     if (!retryable || attempt >= SEND_ATTEMPTS) return false;
     await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
   }
+}
+
+/**
+ * The whole error body in dev; in prod only Graph's numeric error code, which
+ * describes the request and never echoes the message.
+ */
+async function errorDetail(res: Response): Promise<string> {
+  const raw = await res.text().catch(() => "");
+  if (isDev()) return ` ${raw}`;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const code =
+      isObject(parsed) && isObject(parsed.error) ? parsed.error.code : null;
+    return typeof code === "number" ? ` code ${code}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** A free-form text message (only delivered inside the 24-hour window). */
+export async function sendWhatsAppText(
+  to: string,
+  body: string,
+): Promise<boolean> {
+  return await postMessage(to, { type: "text", text: { body } }, body);
+}
+
+/** An approved template in Arabic; empty components are left out. */
+export async function sendWhatsAppTemplate(
+  to: string,
+  message: TemplateMessage,
+): Promise<boolean> {
+  const components: Record<string, unknown>[] = [];
+  if (message.header !== undefined) {
+    components.push({
+      type: "header",
+      parameters: textParams([message.header]),
+    });
+  }
+  if (message.body && message.body.length > 0) {
+    components.push({ type: "body", parameters: textParams(message.body) });
+  }
+  if (message.buttonParam !== undefined) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: textParams([message.buttonParam]),
+    });
+  }
+  const summary = [
+    `template ${message.name}`,
+    message.header,
+    ...(message.body ?? []),
+    message.buttonParam,
+  ]
+    .filter((part) => part !== undefined)
+    .join("\n");
+  return await postMessage(
+    to,
+    {
+      type: "template",
+      template: { name: message.name, language: { code: "ar" }, components },
+    },
+    summary,
+  );
+}
+
+/** A text with one link button (inside the 24-hour window, no template needed). */
+export async function sendWhatsAppLink(
+  to: string,
+  body: string,
+  button: { label: string; url: string },
+): Promise<boolean> {
+  return await postMessage(
+    to,
+    {
+      type: "interactive",
+      interactive: {
+        type: "cta_url",
+        body: { text: body },
+        action: {
+          name: "cta_url",
+          parameters: { display_text: button.label, url: button.url },
+        },
+      },
+    },
+    `${body}\n[${button.label}] ${button.url}`,
+  );
 }
 
 export const sendText = internalAction({
