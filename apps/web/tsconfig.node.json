@@ -1,9 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@convex/*": ["../../convex/*"]
+    }
   },
-  // Node-side files only: the Vite config and tests that read the source tree from disk.
+  // Node-side files only: the Vite config, the Vercel functions in api/, and tests that read the source tree from disk.
   // Browser code (tsconfig.json) never sees Node's globals.
-  "include": ["vite.config.ts", "src/**/*.node.test.ts"]
+  "include": ["vite.config.ts", "api/**/*.ts", "src/**/*.node.test.ts"]
 }

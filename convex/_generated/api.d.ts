@@ -34,6 +34,7 @@ import type * as nudges from "../nudges.js";
 import type * as organizer from "../organizer.js";
 import type * as people from "../people.js";
 import type * as pool from "../pool.js";
+import type * as preview from "../preview.js";
 import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
 import type * as rounds from "../rounds.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   organizer: typeof organizer;
   people: typeof people;
   pool: typeof pool;
+  preview: typeof preview;
   push: typeof push;
   pushNode: typeof pushNode;
   rounds: typeof rounds;

@@ -1,4 +1,5 @@
-import { toArabicDigits } from "@convex/lib/digits";
+// Relative, not `@convex/…`: the Vercel function in api/invite.ts bundles this without Vite's alias.
+import { toArabicDigits } from "../../../../convex/lib/digits";
 import { t } from "../i18n/ar";
 
 const dateFormat = new Intl.DateTimeFormat("ar", {

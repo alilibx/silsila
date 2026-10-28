@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  // Root tool configs, which run in Node.
-  "include": ["vitest.config.ts", "playwright.config.ts"]
+  // Root tool configs and scripts, which run in Node.
+  "include": ["vitest.config.ts", "playwright.config.ts", "scripts/**/*.ts"]
 }
