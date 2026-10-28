@@ -21,8 +21,24 @@ let linked: {
   sessionToken: string;
   dead: boolean;
 } | null = null;
-/** The check in progress, shared by every caller until it settles. */
-let inFlight: Promise<number | null> | null = null;
+/** The check in progress, shared by every caller for the same session until it settles. */
+let inFlight: { sessionToken: string; check: Promise<number | null> } | null =
+  null;
+
+/** Joins this session's check in progress, or starts one after any other session's settles. */
+function check(sessionToken: string): Promise<number | null> {
+  if (inFlight?.sessionToken === sessionToken) return inFlight.check;
+  const previous = inFlight?.check ?? Promise.resolve(null);
+  const entry = {
+    sessionToken,
+    check: previous.then(() => keepAlive(sessionToken)),
+  };
+  inFlight = entry;
+  void entry.check.finally(() => {
+    if (inFlight === entry) inFlight = null;
+  });
+  return entry.check;
+}
 
 /**
  * Links the hand-off manifest the first time, then extends its token. The token's lifetime, or
@@ -68,10 +84,7 @@ export function useHandoffManifest(): void {
     let renewAt = 0;
 
     const renew = async () => {
-      inFlight ??= keepAlive(sessionToken).finally(() => {
-        inFlight = null;
-      });
-      const ttlMs = await inFlight;
+      const ttlMs = await check(sessionToken);
       if (ttlMs !== null && !cancelled) {
         renewAt = Date.now() + Math.max(CHECK_MS, ttlMs * RENEW_AT);
       }

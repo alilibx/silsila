@@ -149,28 +149,25 @@ describe("linkPageManifest", () => {
 });
 
 describe("linkHandoffManifest", () => {
-  it("links a blob manifest with the token in start_url, and keeps it", async () => {
+  it("links a data: manifest with the token in start_url", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue({ ok: true, json: async () => STATIC });
     vi.stubGlobal("fetch", fetchMock);
-    let blob: Blob | undefined;
-    URL.createObjectURL = vi.fn((b: Blob) => {
-      blob = b;
-      return "blob:test/1";
-    });
-    URL.revokeObjectURL = vi.fn();
     const before = window.location.href;
 
     const link = await linkHandoffManifest("tok");
     expect(fetchMock).toHaveBeenCalledWith(STATIC_MANIFEST);
     expect(link?.isConnected).toBe(true);
-    expect(manifestHrefs()).toEqual(["blob:test/1"]);
-    const manifest = JSON.parse(await blob!.text());
+    const [href] = manifestHrefs();
+    expect(manifestHrefs()).toHaveLength(1);
+    const prefix = "data:application/manifest+json;charset=utf-8,";
+    expect(href?.startsWith(prefix)).toBe(true);
+    const manifest = JSON.parse(decodeURIComponent(href!.slice(prefix.length)));
+    expect(manifest.name).toBe("وِردك");
     expect(manifest.start_url).toBe(`${window.location.origin}/?h=tok`);
     expect(manifest.id).toBe(`${window.location.origin}/`);
     expect(window.location.href).toBe(before);
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   });
 
   it("links nothing when the manifest cannot be read", async () => {

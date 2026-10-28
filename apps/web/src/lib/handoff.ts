@@ -63,7 +63,7 @@ export async function redeemHandoffToken(
 }
 
 /**
- * The page's manifest with `start_url` set to `/?h=<token>`. A `blob:` manifest can't resolve
+ * The page's manifest with `start_url` set to `/?h=<token>`. A `data:` manifest can't resolve
  * relative URLs, so every URL in it is made absolute.
  */
 export function handoffManifest(
@@ -114,13 +114,10 @@ export async function linkHandoffManifest(
     if (!response.ok) return null;
     const base = (await response.json()) as Manifest;
     const manifest = handoffManifest(base, token, window.location.origin);
-    // Never revoked: the link stays for the page's life.
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(manifest)], {
-        type: "application/manifest+json",
-      }),
+    // A data: URL, the form WebKit's own manifest tests use (its loader marks them same-origin).
+    return addManifestLink(
+      `data:application/manifest+json;charset=utf-8,${encodeURIComponent(JSON.stringify(manifest))}`,
     );
-    return addManifestLink(url);
   } catch {
     return null;
   }

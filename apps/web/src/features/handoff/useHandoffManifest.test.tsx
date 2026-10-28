@@ -23,16 +23,19 @@ const hrefs = () =>
   [...document.querySelectorAll('link[rel="manifest"]')].map((l) =>
     l.getAttribute("href"),
   );
-const blobs = new Map<string, Blob>();
-let blobSeq = 0;
+const DATA_PREFIX = "data:application/manifest+json;charset=utf-8,";
 
 /** The `start_url` of the one manifest the page links. */
 async function startUrl(): Promise<string> {
   const [href] = hrefs();
   expect(hrefs()).toHaveLength(1);
-  const blob = blobs.get(href!);
-  if (!blob) throw new Error(`not a hand-off manifest: ${href}`);
-  return (JSON.parse(await blob.text()) as { start_url: string }).start_url;
+  if (!href?.startsWith(DATA_PREFIX)) {
+    throw new Error(`not a hand-off manifest: ${href}`);
+  }
+  const manifest = JSON.parse(
+    decodeURIComponent(href.slice(DATA_PREFIX.length)),
+  );
+  return (manifest as { start_url: string }).start_url;
 }
 
 const creates = () => m.action.mock.calls.filter(([, a]) => !("token" in a));
@@ -79,14 +82,6 @@ beforeEach(() => {
       json: async () => ({ name: "وِردك", start_url: "/", scope: "/" }),
     }),
   );
-  blobs.clear();
-  blobSeq = 0;
-  URL.createObjectURL = vi.fn((b: Blob) => {
-    const url = `blob:test/${++blobSeq}`;
-    blobs.set(url, b);
-    return url;
-  });
-  URL.revokeObjectURL = vi.fn((url: string) => void blobs.delete(url));
 });
 
 afterEach(() => {
@@ -174,8 +169,7 @@ describe("useHandoffManifest", () => {
     expect(extends_()).toHaveLength(2);
     // the first manifest is the one iOS keeps, so it is never replaced
     expect(await startUrl()).toMatch(/h=tok-1$/);
-    expect(hrefs()).toEqual(["blob:test/1"]);
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(hrefs()).toHaveLength(1);
   });
 
   it("retries a failed token request on the next check", async () => {
@@ -245,6 +239,24 @@ describe("useHandoffManifest", () => {
     await advance(RENEW_MS);
     expect(creates()).toHaveLength(1);
     expect(extends_()).toHaveLength(0);
-    expect(hrefs()).toEqual(["blob:test/1"]);
+    expect(await startUrl()).toMatch(/h=tok-1$/);
+  });
+
+  it("links a new session's token at once when it signs in while the last one's is pending", async () => {
+    let release: (v: unknown) => void = () => {};
+    m.action.mockReturnValueOnce(new Promise((r) => (release = r)));
+    renderHook(() => useHandoffManifest());
+    await settle();
+    act(() => clearSessionToken());
+    act(() => setSessionToken("sess-2"));
+    await settle();
+    await act(async () => release({ token: "late", ttlMs: TTL_MS }));
+    await settle();
+    // no waiting for the next minute's check
+    expect(creates().map(([, a]) => a)).toEqual([
+      { sessionToken: "sess" },
+      { sessionToken: "sess-2" },
+    ]);
+    expect(await startUrl()).toMatch(/h=tok-1$/);
   });
 });
