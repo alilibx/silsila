@@ -81,6 +81,8 @@ test("defaults match the spec", () => {
     handoffRedeemGlobalPerMinute: 60,
     maintenanceMode: false,
     announcement: null,
+    maintenanceMessage: null,
+    minClientVersion: null,
   });
 });
 

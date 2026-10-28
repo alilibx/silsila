@@ -9,6 +9,7 @@
  */
 
 import type * as adminAuth from "../adminAuth.js";
+import type * as adminSettings from "../adminSettings.js";
 import type * as admins from "../admins.js";
 import type * as crons from "../crons.js";
 import type * as dev from "../dev.js";
@@ -29,6 +30,7 @@ import type * as lib_pace from "../lib/pace.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_schedule from "../lib/schedule.js";
 import type * as lib_session from "../lib/session.js";
+import type * as lib_settingSpecs from "../lib/settingSpecs.js";
 import type * as lib_settings from "../lib/settings.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_wakingTime from "../lib/wakingTime.js";
@@ -39,6 +41,7 @@ import type * as organizer from "../organizer.js";
 import type * as people from "../people.js";
 import type * as pool from "../pool.js";
 import type * as preview from "../preview.js";
+import type * as publicSettings from "../publicSettings.js";
 import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
 import type * as rounds from "../rounds.js";
@@ -54,6 +57,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   adminAuth: typeof adminAuth;
+  adminSettings: typeof adminSettings;
   admins: typeof admins;
   crons: typeof crons;
   dev: typeof dev;
@@ -74,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/schedule": typeof lib_schedule;
   "lib/session": typeof lib_session;
+  "lib/settingSpecs": typeof lib_settingSpecs;
   "lib/settings": typeof lib_settings;
   "lib/text": typeof lib_text;
   "lib/wakingTime": typeof lib_wakingTime;
@@ -84,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   people: typeof people;
   pool: typeof pool;
   preview: typeof preview;
+  publicSettings: typeof publicSettings;
   push: typeof push;
   pushNode: typeof pushNode;
   rounds: typeof rounds;
