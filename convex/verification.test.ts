@@ -11,13 +11,13 @@ const NOW = 1_800_000_000_000;
 const TEN_MIN = 600_000;
 const PHONE = "971501234567";
 const E164 = `+${PHONE}`;
-const SITE = "https://silsila.example";
+const SITE = "https://wirdak.example";
 
 const NO_MATCH =
-  "لم نجد رمز تحقق صالحاً. ارجع إلى سلسلة واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
-const MATCHED = `تمّ التحقق ✅ ارجع إلى سلسلة لتكمل:\n${SITE}`;
+  "لم نجد رمز تحقق صالحاً. ارجع إلى وِردك واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
+const MATCHED = `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${SITE}`;
 const PIN_RE =
-  /^رمز الدخول إلى سلسلة: (\d{6})\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك\. لا تعطه لأحد، فسلسلة لا تطلبه منك أبداً\. إن لم تطلبه الآن فتجاهل هذه الرسالة\.$/;
+  /^رمز الدخول إلى وِردك: (\d{6})\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك\. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً\. إن لم تطلبه الآن فتجاهل هذه الرسالة\.$/;
 
 type T = TestConvexForDataModel<DataModel>;
 type Sent = { to: string; body: string };
@@ -26,7 +26,7 @@ let sent: Sent[];
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
-  vi.stubEnv("SILSILA_ENV", "dev");
+  vi.stubEnv("WIRDAK_ENV", "dev");
   vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", "971500000000");
   vi.stubEnv("WHATSAPP_PHONE_NUMBER_ID", "1234567890");
   vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "test-access-token");
@@ -176,7 +176,7 @@ test("start over HTTP returns a formatted code and the ready-made message", asyn
   const body = (await res.json()) as Started;
   expect(body.code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{2}$/);
   expect(body.code).not.toMatch(/[IO01]/);
-  expect(body.message).toBe(`رمز التحقق في سلسلة: ${body.code}`);
+  expect(body.message).toBe(`رمز التحقق في وِردك: ${body.code}`);
   expect(body.waNumber).toBe("971500000000");
   expect(body.secret.length).toBeGreaterThanOrEqual(40);
 
@@ -332,14 +332,14 @@ test("the Vite dev origin is allowed only in dev", async () => {
       body: JSON.stringify({ displayName: "علي", clientKey: "c-dev" }),
     });
 
-  // dev (SILSILA_ENV=dev from beforeEach)
+  // dev (WIRDAK_ENV=dev from beforeEach)
   expect((await preflight()).headers.get("Access-Control-Allow-Origin")).toBe(
     "http://localhost:5173",
   );
   expect((await post()).status).toBe(200);
 
   // prod: only SITE_URL is allowed
-  vi.stubEnv("SILSILA_ENV", "prod");
+  vi.stubEnv("WIRDAK_ENV", "prod");
   const pre = await preflight();
   expect(pre.status).toBe(403);
   expect(pre.headers.get("Access-Control-Allow-Origin")).toBeNull();
@@ -451,7 +451,7 @@ test("new number: start → message → matched → claim → session", async ()
   const alert = sent.at(-1)!;
   expect(alert.to).toBe(PHONE);
   const m =
-    /^تمّ إنشاء حساب في سلسلة برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/silsila\.example\/signout\?t=([A-Za-z0-9_-]{43})$/.exec(
+    /^تمّ إنشاء حساب في وِردك برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/wirdak\.example\/signout\?t=([A-Za-z0-9_-]{43})$/.exec(
       alert.body,
     );
   expect(m).not.toBeNull();
@@ -512,7 +512,7 @@ test("existing number needs the PIN from the WhatsApp reply", async () => {
   ).toBe(1);
   // an existing account gets the normal sign-in alert, not the new-account one
   expect(sent.at(-1)!.body).toMatch(
-    /^تسجيل دخول جديد إلى سلسلة من Android Chrome\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: https:\/\/silsila\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
+    /^تسجيل دخول جديد إلى وِردك من Android Chrome\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: https:\/\/wirdak\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
   );
   // the PIN is single use
   expect(await confirmPin(t, v, pin)).toEqual({ error: "expired" });
@@ -579,7 +579,7 @@ test("a forwarded link on a new number: the owner learns an account was created"
   const createdAlert = sent.at(-1)!;
   expect(createdAlert.to).toBe(PHONE);
   expect(createdAlert.body).toMatch(
-    /^تمّ إنشاء حساب في سلسلة برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/silsila\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
+    /^تمّ إنشاء حساب في وِردك برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/wirdak\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
   );
 
   // the real owner later signs in with the PIN and is told about the other session
@@ -669,7 +669,7 @@ test("a message matches only its own verification", async () => {
   const t = convexTest(schema, modules);
   const a = await addPending(t, "AAAA2222BB", "secret-a");
   const b = await addPending(t, "CCCC3333DD", "secret-b");
-  await send(t, "رمز التحقق في سلسلة: AAAA-2222-BB");
+  await send(t, "رمز التحقق في وِردك: AAAA-2222-BB");
   expect((await status(t, a)).status).toBe("matched");
   expect((await status(t, b)).status).toBe("pending");
 });
@@ -895,7 +895,7 @@ test("messages from one phone are rate-limited without replies", async () => {
 
 test("prod without WhatsApp config refuses to start", async () => {
   const t = convexTest(schema, modules);
-  vi.stubEnv("SILSILA_ENV", "prod");
+  vi.stubEnv("WIRDAK_ENV", "prod");
   vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
   expect(
     await t.action(internal.verification.startInternal, {

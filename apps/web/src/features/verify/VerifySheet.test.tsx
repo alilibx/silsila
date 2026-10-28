@@ -37,7 +37,7 @@ const START = {
   secret: "sec",
   code: "AAAA-BBBB-CC",
   waNumber: "971500000000",
-  message: "رمز التحقق في سلسلة: AAAA-BBBB-CC",
+  message: "رمز التحقق في وِردك: AAAA-BBBB-CC",
 };
 const fetchMock = vi.fn();
 const open = vi.fn();
@@ -295,9 +295,9 @@ describe("VerifySheet", () => {
       await screen.findByRole("button", {
         name: status === "matched" ? t.verify.yes : t.verify.pinSubmit,
       });
-      expect(localStorage.getItem("silsila.verify")).not.toBeNull();
+      expect(localStorage.getItem("wirdak.verify")).not.toBeNull();
       await user.click(screen.getByRole("button", { name: t.sheet.close }));
-      expect(localStorage.getItem("silsila.verify")).toBeNull();
+      expect(localStorage.getItem("wirdak.verify")).toBeNull();
       view.unmount();
     }
     expect(onClose).toHaveBeenCalledTimes(2);
@@ -311,12 +311,12 @@ describe("VerifySheet", () => {
     await screen.findByRole("status");
     await user.click(screen.getByRole("button", { name: t.sheet.close }));
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem("silsila.verify")).not.toBeNull();
+    expect(localStorage.getItem("wirdak.verify")).not.toBeNull();
   });
 
   it("resumes a stored verification after a reload", () => {
     localStorage.setItem(
-      "silsila.verify",
+      "wirdak.verify",
       JSON.stringify({
         verificationId: "v1",
         secret: "sec",
@@ -331,7 +331,7 @@ describe("VerifySheet", () => {
 
   it("resuming at the pin step leaves focus in the pin box", () => {
     localStorage.setItem(
-      "silsila.verify",
+      "wirdak.verify",
       JSON.stringify({
         verificationId: "v1",
         secret: "sec",

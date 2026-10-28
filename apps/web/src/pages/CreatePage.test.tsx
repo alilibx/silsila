@@ -213,7 +213,7 @@ describe("CreatePage", () => {
 
   it("after the tab reloads mid-verification: reopens the sheet with the form restored, then creates", async () => {
     localStorage.setItem(
-      "silsila.verify",
+      "wirdak.verify",
       JSON.stringify({
         verificationId: "v1",
         secret: "sec",
@@ -240,7 +240,7 @@ describe("CreatePage", () => {
 
   it("ignores a verification in flight for something else", () => {
     localStorage.setItem(
-      "silsila.verify",
+      "wirdak.verify",
       JSON.stringify({
         verificationId: "v1",
         secret: "sec",

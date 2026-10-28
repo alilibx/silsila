@@ -57,7 +57,7 @@ vi.mock("../features/verify/VerifySheet", () => ({
 
 const saveSignInProgress = () =>
   localStorage.setItem(
-    "silsila.verify",
+    "wirdak.verify",
     JSON.stringify({
       verificationId: "v1",
       secret: "sec",
@@ -150,7 +150,7 @@ describe("HomePage", () => {
     m.me = null;
     m.mine = [];
     renderHome();
-    expect(screen.getByText(/سلسلة تجمع أحبابك/)).toBeInTheDocument();
+    expect(screen.getByText(/وِردك يجمع أحبابك/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "ابدأ ختمة جديدة" }),
     ).toHaveAttribute("href", "/new");
@@ -162,7 +162,7 @@ describe("HomePage", () => {
     m.me = null;
     renderHome();
     expect(m.clear).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/سلسلة تجمع أحبابك/)).toBeInTheDocument();
+    expect(screen.getByText(/وِردك يجمع أحبابك/)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "إعداداتي" })).toBeNull();
   });
 

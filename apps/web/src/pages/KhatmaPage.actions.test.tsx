@@ -523,7 +523,7 @@ describe("take after verification", () => {
   describe("after the tab reloads mid-verification", () => {
     const saveProgress = (inviteCode: string) =>
       localStorage.setItem(
-        "silsila.verify",
+        "wirdak.verify",
         JSON.stringify({
           verificationId: "v1",
           secret: "sec",

@@ -34,13 +34,13 @@ vi.mock("convex/react", async () => {
   };
 });
 
-const STORE = "silsila.verify";
+const STORE = "wirdak.verify";
 const START = {
   verificationId: "v1",
   secret: "sec",
   code: "AAAA-BBBB-CC",
   waNumber: "971500000000",
-  message: "رمز التحقق في سلسلة: AAAA-BBBB-CC",
+  message: "رمز التحقق في وِردك: AAAA-BBBB-CC",
 };
 const WA_URL =
   "https://wa.me/971500000000?text=" + encodeURIComponent(START.message);

@@ -14,7 +14,7 @@ import { clearSessionToken, getSessionToken } from "../lib/session";
 type Outcome = "kept" | "all" | "owner" | "invalid";
 
 const OUTCOMES: readonly Outcome[] = ["kept", "all", "owner", "invalid"];
-const PREFIX = "silsila.signout.";
+const PREFIX = "wirdak.signout.";
 const LAST_KEY = `${PREFIX}last`;
 
 /** A short, non-secret key for the token, so the token itself is never written to storage. */

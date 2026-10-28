@@ -1,11 +1,11 @@
-# Deploying Silsila
+# Deploying Wirdak
 
 Two things are deployed, and they ship together from one Vercel build (Convex's documented Vercel integration):
 
 | Part                               | Where                                | How it ships                                                        |
 | ---------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
 | Backend (`convex/`)                | Convex production, EU West (Ireland) | `convex deploy`, run first by the Vercel build command              |
-| Web app (`apps/web`, Vite + React) | Vercel project `silsila-web`         | Vercel's Git integration, root directory `apps/web`, same build     |
+| Web app (`apps/web`, Vite + React) | Vercel project `wirdak-web`         | Vercel's Git integration, root directory `apps/web`, same build     |
 
 The build command lives in `apps/web/vercel.json`:
 
@@ -29,7 +29,7 @@ Set in the Convex dashboard (Settings, Environment Variables) or with `pnpm exec
 
 | Name                       | What it is for                                                                                                          | How to rotate                                                                                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SILSILA_ENV`              | `prod` in production. Only the exact value `dev` relaxes anything (dev message logging, `dev:simulateIncoming`).         | Not a secret. Never set it to `dev` on production.                                                                                                             |
+| `WIRDAK_ENV`              | `prod` in production. Only the exact value `dev` relaxes anything (dev message logging, `dev:simulateIncoming`).         | Not a secret. Never set it to `dev` on production.                                                                                                             |
 | `SITE_URL`                 | The public site origin, no trailing slash. Used for links in WhatsApp messages and as the allowed CORS origin of `/api/verification/start`. | Change it when the domain changes. It is read at runtime, so no redeploy is needed.                                                                               |
 | `WHATSAPP_PUBLIC_NUMBER`   | The business number, digits only, that the `wa.me` link opens.                                                          | Not a secret. Change if the business number changes.                                                                                                            |
 | `WHATSAPP_PHONE_NUMBER_ID` | Meta's ID of that number, used to send replies and to ignore messages meant for other numbers.                          | Not a secret. Change only if the number is replaced in Meta.                                                                                                    |
@@ -40,7 +40,7 @@ Set in the Convex dashboard (Settings, Environment Variables) or with `pnpm exec
 
 Production answers `whatsapp_not_configured` from `/api/verification/start` until all seven `WHATSAPP_*` / `SITE_URL` values are set. The site then shows "التحقق عبر واتساب غير متاح الآن. نعمل على إصلاحه." and nobody can sign in. That is the expected state before ARQ-246 is finished.
 
-### Vercel project `silsila-web`
+### Vercel project `wirdak-web`
 
 | Name                   | Environment | What it is for                                                                                                                         | How to rotate                                                                                                                                  |
 | ---------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -55,16 +55,16 @@ There is no GitHub secret: CI deploys nothing.
 
 ### Local only
 
-`CONVEX_DEPLOYMENT`, `CONVEX_URL` and `CONVEX_SITE_URL` in `.env.local` point at the local anonymous backend (git-ignored). `pnpm e2e` sets `SILSILA_ENV=dev`, `SITE_URL` and `WHATSAPP_PUBLIC_NUMBER` on that local backend itself and refuses to run if a WhatsApp token is set there.
+`CONVEX_DEPLOYMENT`, `CONVEX_URL` and `CONVEX_SITE_URL` in `.env.local` point at the local anonymous backend (git-ignored). `pnpm e2e` sets `WIRDAK_ENV=dev`, `SITE_URL` and `WHATSAPP_PUBLIC_NUMBER` on that local backend itself and refuses to run if a WhatsApp token is set there.
 
 ## Checklist (Ali)
 
 These need accounts and real systems, so they are not automated.
 
 1. **Create the production Convex deployment.** New project in the Convex dashboard, production deployment in **EU West (Ireland)**. Note the two URLs: `https://<prod>.convex.cloud` and `https://<prod>.convex.site`.
-2. **Set the Convex production environment.** `pnpm exec convex env set --prod SILSILA_ENV prod` and `pnpm exec convex env set --prod SITE_URL https://wirdak.app` (or the same in the dashboard). The `WHATSAPP_*` values wait for step 6.
+2. **Set the Convex production environment.** `pnpm exec convex env set --prod WIRDAK_ENV prod` and `pnpm exec convex env set --prod SITE_URL https://wirdak.app` (or the same in the dashboard). The `WHATSAPP_*` values wait for step 6.
 3. **Generate a production deploy key** in the deployment settings (Settings, URL and Deploy Key).
-4. **Create the Vercel project `silsila-web`.** Import the GitHub repository, set **Root Directory** to `apps/web`, and keep "Include source files outside of the Root Directory" enabled: the web app imports types and helpers from `convex/` through the `@convex` alias, and the build command runs from the repository root. Framework preset Vite. `apps/web/vercel.json` sets the build command and output directory, rewrites every path to `/index.html`, and sets the security headers; leave the build and output settings in the dashboard on their defaults so the file wins. Add `CONVEX_DEPLOY_KEY` (from step 3) for the **Production** environment only, and decide about previews (see above). Deploy, and confirm in the build log that `convex deploy` pushed the functions before the Vite build ran.
+4. **Create the Vercel project `wirdak-web`.** Import the GitHub repository, set **Root Directory** to `apps/web`, and keep "Include source files outside of the Root Directory" enabled: the web app imports types and helpers from `convex/` through the `@convex` alias, and the build command runs from the repository root. Framework preset Vite. `apps/web/vercel.json` sets the build command and output directory, rewrites every path to `/index.html`, and sets the security headers; leave the build and output settings in the dashboard on their defaults so the file wins. Add `CONVEX_DEPLOY_KEY` (from step 3) for the **Production** environment only, and decide about previews (see above). Deploy, and confirm in the build log that `convex deploy` pushed the functions before the Vite build ran.
 5. **Point the domain** `wirdak.app` at Vercel (ARQ-249), then make sure `SITE_URL` in Convex is exactly `https://wirdak.app`. The admin panel (plan 2) will live at `admin.wirdak.app` as its own Vercel project.
 6. **WhatsApp setup (ARQ-246).** In the Meta app, set the webhook callback URL to `https://<prod>.convex.site/whatsapp/webhook` and the verify token to the value of `WHATSAPP_VERIFY_TOKEN`, then subscribe to `messages`. Set the six `WHATSAPP_*` variables in Convex production.
 7. **Real-phone test.** On a real phone open the production site, start a khatma, press the WhatsApp button, send the ready-made message, confirm "نعم، هذا رقمي", then create a khatma, take a juz', and finish it. Repeat with a second phone using the invite link.

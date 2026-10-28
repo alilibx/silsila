@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
-const SESSION_KEY = "silsila.session";
-const CLIENT_KEY = "silsila.client";
+const SESSION_KEY = "wirdak.session";
+const CLIENT_KEY = "wirdak.client";
 
 // localStorage can throw (blocked or full storage). Writes then land in memory, and reads
 // check both, so a value written in this tab is always readable in this tab.

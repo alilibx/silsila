@@ -6,7 +6,7 @@ const root = new URL("..", import.meta.url).pathname;
 
 /** What the local backend needs to verify numbers without WhatsApp. Public values only. */
 const BACKEND_ENV: Record<string, string> = {
-  SILSILA_ENV: "dev",
+  WIRDAK_ENV: "dev",
   SITE_URL: "http://localhost:5173",
   WHATSAPP_PUBLIC_NUMBER: "971500000000",
 };

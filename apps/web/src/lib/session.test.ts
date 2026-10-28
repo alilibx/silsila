@@ -23,7 +23,7 @@ describe("session token storage", () => {
     expect(getSessionToken()).toBeNull();
     setSessionToken("x");
     expect(getSessionToken()).toBe("x");
-    expect(localStorage.getItem("silsila.session")).toBe("x");
+    expect(localStorage.getItem("wirdak.session")).toBe("x");
   });
 
   it("clears the token", () => {
@@ -47,7 +47,7 @@ describe("session token storage", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeSession(listener);
     window.dispatchEvent(
-      new StorageEvent("storage", { key: "silsila.session" }),
+      new StorageEvent("storage", { key: "wirdak.session" }),
     );
     expect(listener).toHaveBeenCalledTimes(1);
     unsubscribe();
@@ -67,9 +67,9 @@ describe("useSessionToken", () => {
   it("follows storage events from another tab", () => {
     const { result } = renderHook(() => useSessionToken());
     act(() => {
-      localStorage.setItem("silsila.session", "other-tab");
+      localStorage.setItem("wirdak.session", "other-tab");
       window.dispatchEvent(
-        new StorageEvent("storage", { key: "silsila.session" }),
+        new StorageEvent("storage", { key: "wirdak.session" }),
       );
     });
     expect(result.current).toBe("other-tab");
@@ -77,10 +77,10 @@ describe("useSessionToken", () => {
 });
 
 describe("getClientKey", () => {
-  it("is stable once created and persisted under silsila.client", () => {
+  it("is stable once created and persisted under wirdak.client", () => {
     const key = getClientKey();
     expect(getClientKey()).toBe(key);
-    expect(localStorage.getItem("silsila.client")).toBe(key);
+    expect(localStorage.getItem("wirdak.client")).toBe(key);
   });
 
   it("has at least 128 bits of hex entropy and differs per browser", () => {
