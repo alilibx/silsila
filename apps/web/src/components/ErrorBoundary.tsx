@@ -22,9 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: unknown, info: ErrorInfo): void {
     const exception =
       error instanceof Error ? error : new Error("Unknown React render error");
-    posthog.captureException(exception, {
-      component_stack: info.componentStack,
-    });
+    posthog.captureException(exception, { component_stack: info.componentStack });
     posthogLog.error("react render failed", { error_type: exception.name });
     console.error(error, info.componentStack);
   }

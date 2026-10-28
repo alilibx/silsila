@@ -166,10 +166,12 @@ function WhatsAppNotes({ on }: { on: boolean }) {
   const sessionToken = useSessionToken();
   const setWhatsappNotes = useMutation(api.people.setWhatsappNotes);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   async function change(next: boolean) {
-    if (busy || !sessionToken) return;
+    if (busyRef.current || !sessionToken) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -177,6 +179,7 @@ function WhatsAppNotes({ on }: { on: boolean }) {
     } catch {
       setError(t.errors.network);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }

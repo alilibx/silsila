@@ -2,13 +2,13 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import { hmacSha256Hex } from "./lib/crypto";
+import { cleanParam } from "./lib/whatsappTemplates";
 import schema from "./schema";
 import {
-  cleanParam,
+  describeMessage,
   parseIncoming,
   relayIncoming,
   relaySignature,
-  describeMessage,
   sendPin,
   sendSignInAlert,
   sendVerified,
@@ -483,6 +483,16 @@ test("sendPin falls back to text when the template fails", async () => {
     "[wirdak_pin] 123456 | 123456",
     "رمز الدخول إلى وِردك: 123456\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.",
   ]);
+});
+
+test("sendPin doesn't send a second PIN when the template got no answer", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const mock = vi.fn(async () => {
+    throw new TypeError("fetch failed");
+  });
+  vi.stubGlobal("fetch", mock);
+  expect(await sendPin("+971501234567", "123456")).toBe(false);
+  expect(mock).toHaveBeenCalledTimes(1);
 });
 
 test("cleanParam collapses whitespace WhatsApp refuses in parameters", () => {

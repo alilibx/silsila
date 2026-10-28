@@ -8,8 +8,6 @@ import {
 import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
 import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
 
-export { cleanParam, type TemplateMessage };
-
 // ---------------------------------------------------------------------------
 // Environment
 
@@ -116,16 +114,19 @@ export const PIN_TEMPLATE = "wirdak_pin";
 
 /**
  * The 6-digit PIN as the authentication template, whose copy-code button
- * takes the PIN too. Falls back to the text reply if the template is refused
- * (paused, or not approved yet), so a sign-in never waits on Meta.
+ * takes the PIN too. Falls back to the text reply if Graph refuses the
+ * template (paused, or not approved yet), so a sign-in never waits on Meta.
+ * Not when the request got no answer: the template may have gone out, and a
+ * second PIN message would only confuse.
  */
 export async function sendPin(to: string, pin: string): Promise<boolean> {
-  const sent = await sendWhatsAppTemplate(to, {
+  const outcome = await postTemplate(to, {
     name: PIN_TEMPLATE,
     body: [pin],
     buttonParam: pin,
   });
-  return sent || (await sendWhatsAppText(to, pinReply(pin)));
+  if (outcome === "refused") return await sendWhatsAppText(to, pinReply(pin));
+  return outcome === "sent";
 }
 
 /**
@@ -292,25 +293,31 @@ export function describeMessage(payload: unknown): string {
  * hold a PIN or a sign-out link) is logged only in dev when no access token is
  * set; prod logs keep to the HTTP status and Graph error code.
  */
+/**
+ * `refused` means Graph answered with an error status, so nothing was sent;
+ * `failed` means no answer came (or nothing could be tried), so it may have been.
+ */
+type PostOutcome = "sent" | "refused" | "failed";
+
 async function postMessage(
   to: string,
   payload: Record<string, unknown>,
-): Promise<boolean> {
+): Promise<PostOutcome> {
   const digits = to.replace(/\D/g, "");
   const token = env("WHATSAPP_ACCESS_TOKEN");
   if (!token) {
     if (isDev()) {
       console.log(`[whatsapp:dev] to +${digits}:\n${describeMessage(payload)}`);
-      return true;
+      return "sent";
     }
     console.error("whatsapp_not_configured: reply not sent");
-    return false;
+    return "failed";
   }
   const phoneNumberId = env("WHATSAPP_PHONE_NUMBER_ID");
   const version = env("WHATSAPP_GRAPH_VERSION");
   if (!phoneNumberId || !version) {
     console.error("whatsapp_not_configured: reply not sent");
-    return false;
+    return "failed";
   }
   const url = `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`;
   const init: RequestInit = {
@@ -333,15 +340,15 @@ async function postMessage(
       console.error(
         `whatsapp send failed: ${err instanceof Error ? err.name : "error"}`,
       );
-      return false;
+      return "failed";
     }
-    if (res.ok) return true;
+    if (res.ok) return "sent";
     console.error(
       `whatsapp send failed: HTTP ${res.status}${await errorDetail(res)}`,
     );
     // Throttling and server errors are retried once; other 4xx never are.
     const retryable = res.status === 429 || res.status >= 500;
-    if (!retryable || attempt >= SEND_ATTEMPTS) return false;
+    if (!retryable || attempt >= SEND_ATTEMPTS) return "refused";
     await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
   }
 }
@@ -368,7 +375,7 @@ export async function sendWhatsAppText(
   to: string,
   body: string,
 ): Promise<boolean> {
-  return await postMessage(to, { type: "text", text: { body } });
+  return (await postMessage(to, { type: "text", text: { body } })) === "sent";
 }
 
 /** An approved template in Arabic; empty components are left out. */
@@ -376,6 +383,13 @@ export async function sendWhatsAppTemplate(
   to: string,
   message: TemplateMessage,
 ): Promise<boolean> {
+  return (await postTemplate(to, message)) === "sent";
+}
+
+async function postTemplate(
+  to: string,
+  message: TemplateMessage,
+): Promise<PostOutcome> {
   const components: Record<string, unknown>[] = [];
   if (message.header !== undefined) {
     components.push({
@@ -406,7 +420,7 @@ export async function sendWhatsAppLink(
   body: string,
   button: { label: string; url: string },
 ): Promise<boolean> {
-  return await postMessage(to, {
+  const outcome = await postMessage(to, {
     type: "interactive",
     interactive: {
       type: "cta_url",
@@ -417,6 +431,7 @@ export async function sendWhatsAppLink(
       },
     },
   });
+  return outcome === "sent";
 }
 
 export const sendText = internalAction({
