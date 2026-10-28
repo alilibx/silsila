@@ -408,3 +408,17 @@ test("members can't reach lookups or operations", async () => {
     }),
   ).rejects.toThrow();
 });
+
+test("an admin's number can't be blocked", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  expect(
+    await t.mutation(api.adminOps.blockPhone, {
+      adminToken: "admin",
+      phone: "+971500000099",
+    }),
+  ).toEqual({ error: "is_admin" });
+  expect(
+    await t.run((ctx) => ctx.db.query("blockedPhones").collect()),
+  ).toHaveLength(0);
+});

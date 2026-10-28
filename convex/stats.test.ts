@@ -262,6 +262,7 @@ test("milestone sequences", async () => {
 test("two milestones crossed at once: both marked, only the highest pushed", async () => {
   const t = convexTest(schema, modules);
   await adminWithPush(t);
+  await t.mutation(internal.stats.markPassedMilestones, {});
   await day(t, D - 1, { totalKhatmas: 120, totalMembers: 10 });
   await t.mutation(internal.stats.checkMilestones, {});
   const sent = await t.run((ctx) => ctx.db.query("milestonesSent").collect());
@@ -275,15 +276,19 @@ test("two milestones crossed at once: both marked, only the highest pushed", asy
   expect(pushes).toHaveLength(1);
   expect(pushes[0]?.body).toContain("١٠٠");
 
-  // A later crossing inside the spacing window is marked, not pushed.
+  // A later crossing inside the spacing window waits, unmarked, for the next run.
   await day(t, D - 1, { totalKhatmas: 260, totalMembers: 10 });
   await t.mutation(internal.stats.checkMilestones, {});
   expect(await scheduledPushes(t)).toHaveLength(1);
-  expect(
+  const has250 = async () =>
     (await t.run((ctx) => ctx.db.query("milestonesSent").collect())).some(
       (s) => s.metric === "khatmas" && s.value === 250,
-    ),
-  ).toBe(true);
+    );
+  expect(await has250()).toBe(false);
+  vi.advanceTimersByTime(2 * 60_000);
+  await t.mutation(internal.stats.checkMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(2);
+  expect(await has250()).toBe(true);
 });
 
 test("the backfill marks milestones already passed without pushing", async () => {
@@ -355,3 +360,63 @@ function day(t: T, d: number, fields: Partial<Record<string, number>>) {
     else await ctx.db.insert("dailyStats", row);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Review fixes
+
+test("no milestone is pushed before the backfill has run", async () => {
+  const t = convexTest(schema, modules);
+  await adminWithPush(t);
+  await day(t, D - 1, { totalRoundsCompleted: 5 });
+  await t.mutation(internal.stats.checkMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(0);
+  expect(
+    await t.run((ctx) => ctx.db.query("milestonesSent").collect()),
+  ).toHaveLength(0);
+});
+
+test("milestones crossed together are pushed one per run, none lost", async () => {
+  const t = convexTest(schema, modules);
+  await adminWithPush(t);
+  await t.mutation(internal.stats.markPassedMilestones, {});
+  await day(t, D - 1, { totalKhatmas: 15, totalMembers: 150 });
+  await t.mutation(internal.stats.checkMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(1);
+  const sent = async () =>
+    (await t.run((ctx) => ctx.db.query("milestonesSent").collect()))
+      .map((s) => `${s.metric}:${s.value}`)
+      .sort();
+  expect(await sent()).toEqual(["khatmas:10"]);
+  vi.setSystemTime(Date.now() + 2 * 60_000);
+  await t.mutation(internal.stats.checkMilestones, {});
+  expect(await scheduledPushes(t)).toHaveLength(2);
+  expect(await sent()).toEqual(["khatmas:10", "members:100"]);
+});
+
+test("rerunning a day after its sign-in counters were purged keeps its sign-in counts", async () => {
+  const t = convexTest(schema, modules);
+  await seed(t);
+  await t.mutation(internal.stats.rollupDay, { day: D });
+  await t.run(async (ctx) => {
+    for (const c of await ctx.db.query("counters").collect())
+      await ctx.db.delete(c._id);
+  });
+  await t.mutation(internal.stats.rollupDay, { day: D });
+  expect((await rows(t))[0]).toMatchObject({
+    signInsStarted: 4,
+    signInsCompleted: 3,
+  });
+});
+
+test("the nightly rollup stores yesterday's active khatma count", async () => {
+  const t = convexTest(schema, modules);
+  await seed(t);
+  await t.run(async (ctx) => {
+    const round = await ctx.db.query("rounds").first();
+    await ctx.db.patch(round!._id, { lastFinishedAt: noon(D) });
+  });
+  await t.mutation(internal.stats.rollupDay, { day: D - 1 });
+  vi.setSystemTime(noon(D + 1));
+  await t.mutation(internal.stats.rollupYesterday, {});
+  expect((await rows(t)).find((r) => r.day === D)?.activeKhatmas).toBe(1);
+});

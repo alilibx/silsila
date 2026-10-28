@@ -248,6 +248,7 @@ export const ar = {
     signIn: "نجاح التحقق عبر واتساب",
     signInHint: "من بدأ التحقق في آخر ٧ أيام وأكمله",
     none: "—",
+    days: (n: string) => `${n} يوماً`,
     percent: (n: string) => `${n}٪`,
     periods: { 7: "٧ أيام", 30: "٣٠ يوماً", 365: "سنة" },
     period: "المدة",
@@ -316,6 +317,7 @@ export const ar = {
     errors: {
       invalid_phone: "رقم غير صالح.",
       already_blocked: "الرقم محظور بالفعل.",
+      is_admin: "هذا رقم مشرف. احذفه من المشرفين أولاً.",
       not_blocked: "الرقم غير محظور.",
       not_found: "غير موجود.",
       not_member: "اختر عضواً نشطاً.",

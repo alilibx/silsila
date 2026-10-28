@@ -39,6 +39,22 @@ export async function bumpCounter(
   else await ctx.db.insert("counters", { key, value: by });
 }
 
+export async function setCounter(
+  ctx: MutationCtx,
+  key: string,
+  value: number,
+): Promise<void> {
+  const row = await ctx.db
+    .query("counters")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .first();
+  if (row) await ctx.db.patch(row._id, { value });
+  else await ctx.db.insert("counters", { key, value });
+}
+
+/** Set once the backfill has marked past milestones; until then none are pushed. */
+export const BACKFILLED_AT = "stats:backfilledAt";
+
 /** The counter key for one day's sign-ins (verifications are purged after a day). */
 export function signInKey(day: number, kind: "started" | "completed"): string {
   return `signin:${day}:${kind}`;

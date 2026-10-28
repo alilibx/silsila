@@ -63,9 +63,17 @@ export const blockPhone = adminMutation({
   handler: async (
     ctx,
     args,
-  ): Promise<{ ok: true } | { error: "invalid_phone" | "already_blocked" }> => {
+  ): Promise<
+    { ok: true } | { error: "invalid_phone" | "already_blocked" | "is_admin" }
+  > => {
     const phone = normalizeAdminPhone(args.phone);
     if (phone === null) return { error: "invalid_phone" };
+    // A blocked admin couldn't sign in to undo it: remove them from admins first.
+    const admin = await ctx.db
+      .query("admins")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .first();
+    if (admin) return { error: "is_admin" };
     const existing = await ctx.db
       .query("blockedPhones")
       .withIndex("by_phone", (q) => q.eq("phone", phone))

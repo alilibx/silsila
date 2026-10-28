@@ -215,6 +215,8 @@ export default defineSchema({
     totalMembers: v.number(),
     totalKhatmas: v.number(),
     totalRoundsCompleted: v.number(),
+    /** Active khatmas at the end of the day; set by the nightly run only (not the backfill). */
+    activeKhatmas: v.optional(v.number()),
     computedAt: v.number(),
   }).index("by_day", ["day"]),
 

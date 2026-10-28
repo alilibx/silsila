@@ -58,7 +58,15 @@ beforeEach(() => {
 describe("dashboard", () => {
   it("shows the six tiles in Arabic digits", () => {
     renderPage();
-    for (const text of ["١٠٤", "١٬٠٣٨", "٢١٤", "٣", "٥", "٤ أيام", "٩٢٪"]) {
+    for (const text of [
+      "١٠٤",
+      "١٬٠٣٨",
+      "٢١٤",
+      "٣",
+      "٥",
+      t.stats.days("٤"),
+      "٩٢٪",
+    ]) {
       expect(screen.getAllByText(text).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(t.stats.newThisWeek("١٤٠"))).toBeInTheDocument();
@@ -98,5 +106,14 @@ describe("dashboard", () => {
       metric: "newMembers",
       days: 365,
     });
+  });
+});
+
+describe("days per round", () => {
+  it("shows days with one decimal, never hours", () => {
+    m.overview = { ...base, daysPerRoundMedian: 29.4 };
+    renderPage();
+    expect(screen.getByText(t.stats.days("٢٩٫٤"))).toBeInTheDocument();
+    expect(screen.queryByText(/ساعة/)).not.toBeInTheDocument();
   });
 });

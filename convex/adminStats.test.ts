@@ -170,6 +170,13 @@ test("with no stats yet the dashboard shows zeros, not an error", async () => {
   });
 });
 
+test("the week-ago active count comes from the stored daily row", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  await day(t, TODAY - 7, { activeKhatmas: 9 });
+  expect((await overview(t)).activeKhatmasWeekAgo).toBe(9);
+});
+
 test("active khatmas: a finish in the last 14 days", async () => {
   const t = convexTest(schema, modules);
   await admin(t);
@@ -185,13 +192,12 @@ test("active khatmas: a finish in the last 14 days", async () => {
     startedAt: NOW - 30 * DAY,
     lastFinishedAt: NOW - DAY,
   });
-  await finishAt(t, both, NOW - 10 * DAY);
   await finishAt(t, both, NOW - DAY);
-  await day(t, TODAY - 10, {});
 
   const o = await overview(t);
   expect(o.activeKhatmas).toBe(2);
-  expect(o.activeKhatmasWeekAgo).toBe(1);
+  // No stored row from a week ago: nothing to compare.
+  expect(o.activeKhatmasWeekAgo).toBeNull();
 });
 
 test("stalled khatmas: an open current round, a member, and 14 quiet days", async () => {

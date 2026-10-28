@@ -12,10 +12,13 @@ import { toArabicDigits } from "./lib/digits";
 import { milestonesFor, type MilestoneMetric } from "./lib/milestones";
 import { getSetting } from "./lib/settings";
 import {
+  BACKFILLED_AT,
   bumpCounter,
+  DAY_MS,
   dayStart,
   dubaiDay,
   readCounter,
+  setCounter,
   signInKey,
 } from "./lib/stats";
 
@@ -97,10 +100,42 @@ async function rowBefore(
     .first();
 }
 
-/** Writes (or rewrites) one day's row. Running it twice gives the same row. */
-async function writeDay(ctx: MutationCtx, day: number): Promise<void> {
+const ACTIVE_DAYS = 14;
+
+/**
+ * Writes (or rewrites) one day's row. Running it twice gives the same row.
+ * Sign-in counters are purged a week after their day, so a rerun keeps the
+ * counts already stored when the counters are gone. `live` (the nightly run
+ * for yesterday) also stores the active khatma count, which only makes
+ * sense at the end of the day it describes.
+ */
+async function writeDay(
+  ctx: MutationCtx,
+  day: number,
+  live = false,
+): Promise<void> {
   const counts = await dayCounts(ctx, day);
   const before = await rowBefore(ctx, day);
+  const existing = await rowFor(ctx, day);
+  if (
+    counts.signInsStarted === 0 &&
+    counts.signInsCompleted === 0 &&
+    existing
+  ) {
+    counts.signInsStarted = existing.signInsStarted;
+    counts.signInsCompleted = existing.signInsCompleted;
+  }
+  let activeKhatmas = existing?.activeKhatmas;
+  if (live) {
+    const dayEnd = dayStart(day + 1);
+    const rounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_lastFinishedAt", (q) =>
+        q.gt("lastFinishedAt", dayEnd - ACTIVE_DAYS * DAY_MS),
+      )
+      .collect();
+    activeKhatmas = new Set(rounds.map((r) => r.khatmaId)).size;
+  }
   const row = {
     day,
     ...counts,
@@ -108,9 +143,9 @@ async function writeDay(ctx: MutationCtx, day: number): Promise<void> {
     totalKhatmas: (before?.totalKhatmas ?? 0) + counts.newKhatmas,
     totalRoundsCompleted:
       (before?.totalRoundsCompleted ?? 0) + counts.roundsCompleted,
+    ...(activeKhatmas !== undefined ? { activeKhatmas } : {}),
     computedAt: Date.now(),
   };
-  const existing = await rowFor(ctx, day);
   if (existing) await ctx.db.replace(existing._id, row);
   else await ctx.db.insert("dailyStats", row);
 }
@@ -139,7 +174,7 @@ export const rollupYesterday = internalMutation({
     const yesterday = dubaiDay(Date.now()) - 1;
     const last = Math.min(yesterday, latest.day + CATCH_UP_DAYS);
     for (let day = latest.day + 1; day <= last; day++) {
-      await writeDay(ctx, day);
+      await writeDay(ctx, day, day === yesterday);
     }
     if (last < yesterday) {
       await ctx.scheduler.runAfter(0, internal.stats.rollupYesterday, {});
@@ -211,9 +246,9 @@ async function totals(ctx: QueryCtx): Promise<Record<MilestoneMetric, number>> {
   };
 }
 
-/** Records every reached milestone not sent yet; returns them, smallest first. */
-async function markNew(
-  ctx: MutationCtx,
+/** The reached milestones of `metric` not sent yet, smallest first. */
+async function unsent(
+  ctx: QueryCtx,
   metric: MilestoneMetric,
   total: number,
 ): Promise<number[]> {
@@ -225,51 +260,70 @@ async function markNew(
         q.eq("metric", metric).eq("value", value),
       )
       .first();
-    if (sent) continue;
+    if (!sent) fresh.push(value);
+  }
+  return fresh;
+}
+
+async function mark(
+  ctx: MutationCtx,
+  metric: MilestoneMetric,
+  values: number[],
+): Promise<void> {
+  for (const value of values) {
     await ctx.db.insert("milestonesSent", {
       metric,
       value,
       sentAt: Date.now(),
     });
-    fresh.push(value);
   }
-  return fresh;
 }
 
-/** Every 10 minutes: pushes the highest new milestone, spaced (spec 7). */
+/**
+ * Every 10 minutes (spec 7). Each milestone fires once: the first metric with
+ * unsent ones gets its highest pushed and all of them marked; other metrics,
+ * and anything inside the spacing window, wait for a later run. Nothing is
+ * pushed before the backfill, whose totals the milestones depend on.
+ */
 export const checkMilestones = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if ((await readCounter(ctx, BACKFILLED_AT)) === 0) return;
     const now = Date.now();
-    const current = await totals(ctx);
-    let best: { metric: MilestoneMetric; value: number } | null = null;
-    for (const metric of METRICS) {
-      const fresh = await markNew(ctx, metric, current[metric]);
-      const top = fresh.at(-1);
-      if (top !== undefined && best === null) best = { metric, value: top };
-    }
-    if (best === null) return;
     const spacing = await getSetting(ctx, "milestonePushSpacingMs");
-    const lastPushAt = await readCounter(ctx, LAST_MILESTONE_PUSH);
-    if (now - lastPushAt < spacing) return;
-    await bumpCounter(ctx, LAST_MILESTONE_PUSH, now - lastPushAt);
-    const others = METRICS.filter((m) => m !== best.metric)
-      .map((m) => `${n(current[m])} ${NOUN[m]}`)
-      .join(" · ");
-    await ctx.scheduler.runAfter(0, internal.pushNode.deliverToAdmins, {
-      kind: "milestone",
-      body: `🎉 وصلنا ${n(best.value)} ${NOUN[best.metric]}\n${others}`,
-      tag: `milestone-${best.metric}-${best.value}`,
-    });
+    if (now - (await readCounter(ctx, LAST_MILESTONE_PUSH)) < spacing) return;
+    const current = await totals(ctx);
+    for (const metric of METRICS) {
+      const fresh = await unsent(ctx, metric, current[metric]);
+      const top = fresh.at(-1);
+      if (top === undefined) continue;
+      await mark(ctx, metric, fresh);
+      await setCounter(ctx, LAST_MILESTONE_PUSH, now);
+      const others = METRICS.filter((m) => m !== metric)
+        .map((m) => `${n(current[m])} ${NOUN[m]}`)
+        .join(" · ");
+      await ctx.scheduler.runAfter(0, internal.pushNode.deliverToAdmins, {
+        kind: "milestone",
+        body: `🎉 وصلنا ${n(top)} ${NOUN[metric]}\n${others}`,
+        tag: `milestone-${metric}-${top}`,
+      });
+      return;
+    }
   },
 });
 
-/** Marks every milestone already reached as sent, without pushing (the backfill). */
+/**
+ * Marks every milestone already reached as sent, without pushing, and lets
+ * milestone pushes start. The backfill calls it.
+ */
 export const markPassedMilestones = internalMutation({
   args: {},
   handler: async (ctx) => {
     const current = await totals(ctx);
-    for (const metric of METRICS) await markNew(ctx, metric, current[metric]);
+    for (const metric of METRICS) {
+      await mark(ctx, metric, await unsent(ctx, metric, current[metric]));
+    }
+    await setCounter(ctx, BACKFILLED_AT, Date.now());
   },
 });
 

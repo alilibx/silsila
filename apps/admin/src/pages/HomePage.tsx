@@ -11,7 +11,6 @@ import { SettingField } from "../components/SettingField";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { formatCount, formatDecimal } from "../lib/formatNumber";
-import { formatDuration } from "../lib/formatSetting";
 
 const QUICK = ["maintenanceMode", "maintenanceMessage", "announcement"];
 
@@ -109,9 +108,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
           value={
             o.daysPerRoundMedian === null
               ? t.stats.none
-              : formatDuration(
-                  Math.round(o.daysPerRoundMedian * 24) * 3_600_000,
-                )
+              : t.stats.days(formatDecimal(o.daysPerRoundMedian))
           }
           detail={t.stats.medianHint}
         />

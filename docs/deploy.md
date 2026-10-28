@@ -184,7 +184,7 @@ The admin dashboard reads one `dailyStats` row per Dubai day (plan 3 spec 6.2). 
 bun run convex run stats:backfill --deployment manzilo:wirdak:<staging|production>
 ```
 
-It's safe to run again: each day's row is rewritten, not added. It also marks the milestones already passed, so launch doesn't push a burst of old ones. Sign-in success has no history before 3c, because verifications are purged after a day.
+It's safe to run again: each day's row is rewritten, not added. It also marks the milestones already passed, so launch doesn't push a burst of old ones. Milestone pushes stay off until it has run once. Sign-in success has no history before 3c, because verifications are purged after a day.
 
 The crons that keep it going:
 
@@ -192,7 +192,7 @@ The crons that keep it going:
 | ---- | ---- | ---- |
 | `roll up yesterday's stats` | daily, 00:10 Dubai (20:10 UTC) | Writes yesterday's row, and catches up any day a failed run missed. |
 | `send the admins' morning summary` | hourly, at minute 5 | At the `summaryHour` setting (Dubai time), pushes yesterday's numbers once to admins with the summary alert on. |
-| `push milestones` | every 10 minutes | When a total passes a milestone, marks it and pushes it, at most one per `milestonePushSpacingMs`. |
+| `push milestones` | every 10 minutes | After the backfill, pushes the next milestone a total has passed: one per run, at most one per `milestonePushSpacingMs`. Others wait for a later run. |
 
 ### Local only
 

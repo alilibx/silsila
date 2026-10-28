@@ -38,20 +38,6 @@ function median(values: number[]): number | null {
 
 const oneDecimal = (n: number) => Math.round(n * 10) / 10;
 
-async function distinctKhatmasFinishing(
-  ctx: QueryCtx,
-  from: number,
-  to: number,
-): Promise<number> {
-  const finished = await ctx.db
-    .query("assignments")
-    .withIndex("by_finishedAt", (q) =>
-      q.gte("finishedAt", from).lt("finishedAt", to),
-    )
-    .collect();
-  return new Set(finished.map((a) => a.khatmaId)).size;
-}
-
 async function hasActiveMember(
   ctx: QueryCtx,
   khatmaId: Id<"khatmas">,
@@ -108,11 +94,11 @@ export const overview = adminQuery({
         q.gt("lastFinishedAt", now - ACTIVE_DAYS * DAY_MS),
       )
       .collect();
-    const hasOldRows =
-      (await ctx.db
-        .query("dailyStats")
-        .withIndex("by_day", (q) => q.lte("day", today - 7))
-        .first()) !== null;
+    // Stored by the nightly rollup, so no 14-day read happens here.
+    const weekAgo = await ctx.db
+      .query("dailyStats")
+      .withIndex("by_day", (q) => q.eq("day", today - 7))
+      .first();
 
     const completed = await ctx.db
       .query("rounds")
@@ -130,13 +116,7 @@ export const overview = adminQuery({
 
     return {
       activeKhatmas: new Set(activeRounds.map((r) => r.khatmaId)).size,
-      activeKhatmasWeekAgo: hasOldRows
-        ? await distinctKhatmasFinishing(
-            ctx,
-            now - (ACTIVE_DAYS + 7) * DAY_MS,
-            now - 7 * DAY_MS,
-          )
-        : null,
+      activeKhatmasWeekAgo: weekAgo?.activeKhatmas ?? null,
       members: (latest?.totalMembers ?? 0) + live.newMembers,
       membersNewThisWeek: sum(lastSix, "newMembers") + live.newMembers,
       ajzaToday: live.ajzaFinished,
