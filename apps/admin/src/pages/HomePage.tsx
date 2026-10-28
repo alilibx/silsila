@@ -3,6 +3,7 @@ import { toArabicDigits } from "@convex/lib/digits";
 import { formatDate } from "@web/lib/format";
 import { useQuery } from "convex/react";
 import { Link } from "react-router";
+import { AdminPushCard } from "../components/AdminPushCard";
 import { SettingField } from "../components/SettingField";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
@@ -42,6 +43,7 @@ export function HomePage() {
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-3xl text-green-deep">{t.home.title}</h1>
       <OpenHelpCard adminToken={adminToken} />
+      <AdminPushCard />
       <h2 className="text-lg font-semibold">{t.home.switches}</h2>
       {rows
         .filter((row) => QUICK.includes(row.key))
