@@ -3,3 +3,5 @@ docs
 .superpowers
 .claude
 convex/_generated
+.vercel
+CHANGELOG.md
