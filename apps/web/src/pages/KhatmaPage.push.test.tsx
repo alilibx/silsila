@@ -39,7 +39,9 @@ vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
     useQuery: (ref: never, ...rest: unknown[]) =>
-      getFunctionName(ref) === "notes:forKhatma" ? [] : m.query(ref, ...rest),
+      ["notes:forKhatma", "khatmas:mine"].includes(getFunctionName(ref))
+        ? []
+        : m.query(ref, ...rest),
     useMutation: (ref: never) =>
       getFunctionName(ref) === "pool:take" ? m.take : vi.fn(),
   };

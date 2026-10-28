@@ -22,7 +22,9 @@ vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
     useQuery: (ref: never) =>
-      getFunctionName(ref) === "notes:forKhatma" ? [] : m.view,
+      ["notes:forKhatma", "khatmas:mine"].includes(getFunctionName(ref))
+        ? []
+        : m.view,
     useMutation: () => vi.fn(),
     useAction: () => m.ensure,
   };

@@ -3,7 +3,7 @@ import type { KhatmaView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
 import { NoteCard, takeTarget } from "../components/NoteCard";
@@ -15,6 +15,7 @@ import {
   tabParam,
   type KhatmaTab,
 } from "../components/KhatmaTabs";
+import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
 import { SwitchRow } from "../components/SwitchRow";
 import { PoolGrid } from "../components/PoolGrid";
 import { PushPromptSheet } from "../components/PushPromptSheet";
@@ -76,6 +77,9 @@ export function KhatmaPage() {
     api.notes.forKhatma,
     isMember ? { sessionToken, inviteCode } : "skip",
   );
+  // The switch button needs the member's other khatmas; nobody else sees it.
+  const mine = useQuery(api.khatmas.mine, isMember ? { sessionToken } : "skip");
+  const [switching, setSwitching] = useState(false);
 
   // The server decides who is signed in; a stored token alone proves nothing.
   const tokenIsDead =
@@ -120,6 +124,11 @@ export function KhatmaPage() {
           inviteCode={inviteCode}
           tab={tab}
           onTab={setTab}
+          onSwitch={
+            mine !== undefined && mine.length >= 2
+              ? () => setSwitching(true)
+              : null
+          }
           busy={busy}
           onTake={actions.take}
           onFinish={() => void actions.finish()}
@@ -160,6 +169,13 @@ export function KhatmaPage() {
           onClose={actions.closeSheet}
         />
       )}
+      {switching && mine && (
+        <SwitchKhatmaSheet
+          khatmas={mine}
+          currentCode={inviteCode}
+          onClose={() => setSwitching(false)}
+        />
+      )}
       {sheet?.kind === "push" && (
         <PushPromptSheet onClose={actions.closeSheet} />
       )}
@@ -196,6 +212,8 @@ type ContentProps = {
   inviteCode: string;
   tab: KhatmaTab;
   onTab: (tab: KhatmaTab) => void;
+  /** Opens the switch-khatma sheet; `null` hides the button (fewer than two khatmas). */
+  onSwitch: (() => void) | null;
   busy: boolean;
   onTake: (juz: number) => void;
   onFinish: () => void;
@@ -296,6 +314,7 @@ function MemberContent({
   inviteCode,
   tab,
   onTab,
+  onSwitch,
   busy,
   onTake,
   onFinish,
@@ -334,9 +353,20 @@ function MemberContent({
         </Link>
       </header>
 
-      <h1 className="font-display text-4xl leading-tight text-green-deep">
-        {khatmaTitle(view)}
-      </h1>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="font-display text-4xl leading-tight text-green-deep">
+          {khatmaTitle(view)}
+        </h1>
+        {onSwitch && (
+          <button
+            type="button"
+            onClick={onSwitch}
+            className="mt-1 inline-flex min-h-11 shrink-0 items-center rounded-full border-2 border-green px-3.5 text-base font-semibold text-green"
+          >
+            {t.nav.switchKhatma}
+          </button>
+        )}
+      </div>
       <Chips view={view} />
       <KhatmaTabs tab={tab} onChange={onTab} idPrefix={ids} />
 

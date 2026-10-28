@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   MemoryRouter,
@@ -15,6 +15,7 @@ import { KhatmaPage } from "./KhatmaPage";
 import { NotFoundPage } from "./NotFoundPage";
 
 const useQuery = vi.fn();
+const useMine = vi.fn<(...args: unknown[]) => unknown>();
 const useSessionToken = vi.fn<() => string | undefined>();
 const getSessionToken = vi.fn<() => string | null>();
 const clearSessionToken = vi.fn();
@@ -39,7 +40,11 @@ vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
     useQuery: (ref: never, ...rest: unknown[]) =>
-      getFunctionName(ref) === "notes:forKhatma" ? [] : useQuery(ref, ...rest),
+      getFunctionName(ref) === "notes:forKhatma"
+        ? []
+        : getFunctionName(ref) === "khatmas:mine"
+          ? useMine(...rest)
+          : useQuery(ref, ...rest),
     useMutation: () => vi.fn(),
   };
 });
@@ -58,6 +63,8 @@ function renderAt(url: string) {
 describe("KhatmaPage", () => {
   beforeEach(() => {
     useQuery.mockReset();
+    useMine.mockReset();
+    useMine.mockReturnValue([]);
     useSessionToken.mockReset();
     useSessionToken.mockReturnValue(undefined);
     getSessionToken.mockReset();
@@ -445,6 +452,71 @@ describe("KhatmaPage", () => {
       );
       expect(tab(t.nav.tabs.pool)).toHaveAttribute("aria-selected", "true");
       expect(grid()).toBeInTheDocument();
+    });
+
+    const cards = [
+      {
+        inviteCode: "CODE",
+        name: "ختمة العائلة",
+        createdAt: 0,
+        schedule: "weekly",
+        done: 0,
+        holding: null,
+        hasNote: false,
+      },
+      {
+        inviteCode: "OTHER",
+        name: "ختمة الزملاء",
+        createdAt: 0,
+        schedule: "monthly",
+        done: 7,
+        holding: null,
+        hasNote: false,
+      },
+    ];
+
+    it("shows تبديل الختمة with two or more khatmas, and opens the sheet", async () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue(cards);
+      renderTabs("/j/CODE");
+      expect(useMine).toHaveBeenCalledWith({ sessionToken: "tok" });
+      await userEvent.click(
+        screen.getByRole("button", { name: t.nav.switchKhatma }),
+      );
+      const sheet = screen.getByRole("dialog", { name: t.nav.switchTitle });
+      expect(
+        within(sheet).getByRole("link", { name: /ختمة الزملاء/ }),
+      ).toHaveAttribute("href", "/j/OTHER");
+      expect(
+        within(sheet).getByRole("link", { name: /ختمة العائلة/ }),
+      ).toHaveAttribute("aria-current", "page");
+    });
+
+    it("hides the switch button with one khatma", () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue(cards.slice(0, 1));
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
+    });
+
+    it("hides the switch button while mine loads", () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue(undefined);
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
+    });
+
+    it("a non-member gets no switch button, even with khatmas of their own", () => {
+      useQuery.mockReturnValue(member({ isMember: false }));
+      useMine.mockReturnValue(cards);
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
     });
 
     it("ignores ?tab for a non-member", () => {

@@ -58,7 +58,9 @@ vi.mock("convex/react", async () => {
     useQuery: (ref: never, ...rest: unknown[]) =>
       getFunctionName(ref) === "notes:forKhatma"
         ? m.notes
-        : m.query(ref, ...rest),
+        : getFunctionName(ref) === "khatmas:mine"
+          ? []
+          : m.query(ref, ...rest),
     useMutation: (ref: never) => {
       const name = getFunctionName(ref).split(":")[1] as
         | "take"
