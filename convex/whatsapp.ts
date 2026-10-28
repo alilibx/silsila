@@ -6,6 +6,7 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
+import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -106,31 +107,89 @@ export const verificationMessage = (code: string) =>
   `رمز التحقق في وِردك: ${code}`;
 export const NO_MATCH_REPLY =
   "لم نجد رمز تحقق صالحاً. ارجع إلى وِردك واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
-/**
- * Ends with a link back to the site (spec 5.2 step 5) when one is configured:
- * this deployment's own `SITE_URL`, so staging links stay on staging, plus the
- * page the sign-in started on (already cleaned by `cleanReturnPath`).
- */
-export const matchedReply = (returnPath = "/") => {
-  const url = siteUrl();
-  const path = returnPath === "/" ? "" : returnPath;
-  return url
-    ? `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${url}${path}`
-    : "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.";
-};
 /** Says what the code is for, so a forwarded-link victim knows not to hand it over. */
 export const pinReply = (pin: string) =>
   `رمز الدخول إلى وِردك: ${pin}\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
+const VERIFIED = "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.";
 /** The code for an admin panel sign-in. No link: the admin page is already waiting for it. */
 export const adminPinReply = (pin: string) =>
   `رمز الدخول إلى لوحة إدارة وِردك: ${pin}\nلا تعطه لأحد. إن لم تطلبه الآن فتجاهل هذه الرسالة.`;
-export const adminSignInAlert = (deviceLabel: string, alertToken: string) =>
-  `تسجيل دخول إلى لوحة إدارة وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لإنهاء كل جلسات الإدارة: ${adminSiteUrl()}/signout?t=${alertToken}`;
-export const signInAlert = (deviceLabel: string, alertToken: string) =>
-  `تسجيل دخول جديد إلى وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: ${siteUrl()}/signout?t=${alertToken}`;
+const adminSignInAlert = (deviceLabel: string) =>
+  `تسجيل دخول إلى لوحة إدارة وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط «لستُ أنا» لإنهاء كل جلسات الإدارة.`;
+const signInAlert = (deviceLabel: string) =>
+  `تسجيل دخول جديد إلى وِردك من ${deviceLabel}. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من الأجهزة الأخرى.`;
 /** Sent instead of `signInAlert` when the sign-in created the account. */
-export const accountCreatedAlert = (deviceLabel: string, alertToken: string) =>
-  `تمّ إنشاء حساب في وِردك برقمك من ${deviceLabel}. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: ${siteUrl()}/signout?t=${alertToken}`;
+const accountCreatedAlert = (deviceLabel: string) =>
+  `تمّ إنشاء حساب في وِردك برقمك من ${deviceLabel}. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من كل الأجهزة.`;
+
+/** Meta's authentication template: the PIN with a copy-code button. */
+export const PIN_TEMPLATE = "wirdak_pin";
+
+/**
+ * The 6-digit PIN as the authentication template, whose copy-code button
+ * takes the PIN too. Falls back to the text reply if Graph refuses the
+ * template (paused, or not approved yet), so a sign-in never waits on Meta.
+ * Not when the request got no answer: the template may have gone out, and a
+ * second PIN message would only confuse. `fallback` words the text reply
+ * (the admin panel has its own).
+ */
+export async function sendPin(
+  to: string,
+  pin: string,
+  fallback: (pin: string) => string = pinReply,
+): Promise<boolean> {
+  const outcome = await postTemplate(to, {
+    name: PIN_TEMPLATE,
+    body: [pin],
+    buttonParam: pin,
+  });
+  if (outcome === "refused") return await sendWhatsAppText(to, fallback(pin));
+  return outcome === "sent";
+}
+
+/**
+ * The "verified" reply (spec 5.2 step 5), with a button back to the page the
+ * sign-in started on (already cleaned by `cleanReturnPath`) on this
+ * deployment's own `SITE_URL`, so staging links stay on staging.
+ */
+export async function sendVerified(
+  to: string,
+  returnPath = "/",
+): Promise<boolean> {
+  const url = siteUrl();
+  if (!url) return await sendWhatsAppText(to, VERIFIED);
+  const path = returnPath === "/" ? "" : returnPath;
+  return await sendWhatsAppLink(to, VERIFIED, {
+    label: "ارجع إلى وِردك",
+    url: `${url}${path}`,
+  });
+}
+
+/** The admin panel sign-in alert, whose button ends every admin session of this admin. */
+export async function sendAdminSignInAlert(
+  to: string,
+  deviceLabel: string,
+  alertToken: string,
+): Promise<boolean> {
+  return await sendWhatsAppLink(to, adminSignInAlert(deviceLabel), {
+    label: "لستُ أنا",
+    url: `${adminSiteUrl()}/signout?t=${alertToken}`,
+  });
+}
+
+/** The new sign-in (or new account) alert, whose button signs the other devices out. */
+export async function sendSignInAlert(
+  to: string,
+  created: boolean,
+  deviceLabel: string,
+  alertToken: string,
+): Promise<boolean> {
+  return await sendWhatsAppLink(
+    to,
+    created ? accountCreatedAlert(deviceLabel) : signInAlert(deviceLabel),
+    { label: "لستُ أنا", url: `${siteUrl()}/signout?t=${alertToken}` },
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Inbound parsing
@@ -225,30 +284,70 @@ export function parseRelayed(payload: unknown): IncomingMessage | null {
 const SEND_ATTEMPTS = 2;
 const SEND_RETRY_DELAY_MS = 500;
 
+const textParams = (values: string[]) =>
+  values.map((text) => ({ type: "text", text: cleanParam(text) }));
+
 /**
- * Sends a text message through the Graph API. Never throws: a failed reply
- * must not undo the state change that triggered it. Message bodies (PINs,
- * sign-out links) are logged only in dev when no access token is set.
+ * A message payload as one readable string: the text; the text, then the
+ * button as `[label] url`; or `[template name]` and its parameters joined
+ * by ` | `. Dev logs print it, and tests compare it.
  */
-export async function sendWhatsAppText(
+export function describeMessage(payload: unknown): string {
+  if (!isObject(payload)) return "";
+  if (isObject(payload.text)) return String(payload.text.body);
+  const interactive = payload.interactive;
+  if (isObject(interactive)) {
+    const body = isObject(interactive.body) ? interactive.body.text : "";
+    const action = isObject(interactive.action) ? interactive.action : {};
+    const button = isObject(action.parameters) ? action.parameters : {};
+    return `${String(body)}\n[${String(button.display_text)}] ${String(button.url)}`;
+  }
+  const template = payload.template;
+  if (isObject(template)) {
+    const components = Array.isArray(template.components)
+      ? template.components
+      : [];
+    const params = components.flatMap((c: unknown) =>
+      isObject(c) && Array.isArray(c.parameters)
+        ? c.parameters.map((p: unknown) => (isObject(p) ? String(p.text) : ""))
+        : [],
+    );
+    return `[${String(template.name)}] ${params.join(" | ")}`;
+  }
+  return "";
+}
+
+/**
+ * Posts one message payload to the Graph API. Never throws: a failed reply
+ * must not undo the state change that triggered it. The message (which may
+ * hold a PIN or a sign-out link) is logged only in dev when no access token is
+ * set; prod logs keep to the HTTP status and Graph error code.
+ */
+/**
+ * `refused` means Graph answered with an error status, so nothing was sent;
+ * `failed` means no answer came (or nothing could be tried), so it may have been.
+ */
+type PostOutcome = "sent" | "refused" | "failed";
+
+async function postMessage(
   to: string,
-  body: string,
-): Promise<boolean> {
+  payload: Record<string, unknown>,
+): Promise<PostOutcome> {
   const digits = to.replace(/\D/g, "");
   const token = env("WHATSAPP_ACCESS_TOKEN");
   if (!token) {
     if (isDev()) {
-      console.log(`[whatsapp:dev] to +${digits}:\n${body}`);
-      return true;
+      console.log(`[whatsapp:dev] to +${digits}:\n${describeMessage(payload)}`);
+      return "sent";
     }
     console.error("whatsapp_not_configured: reply not sent");
-    return false;
+    return "failed";
   }
   const phoneNumberId = env("WHATSAPP_PHONE_NUMBER_ID");
   const version = env("WHATSAPP_GRAPH_VERSION");
   if (!phoneNumberId || !version) {
     console.error("whatsapp_not_configured: reply not sent");
-    return false;
+    return "failed";
   }
   const url = `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`;
   const init: RequestInit = {
@@ -260,8 +359,7 @@ export async function sendWhatsAppText(
     body: JSON.stringify({
       messaging_product: "whatsapp",
       to: digits,
-      type: "text",
-      text: { body },
+      ...payload,
     }),
   };
   for (let attempt = 1; ; attempt++) {
@@ -272,18 +370,98 @@ export async function sendWhatsAppText(
       console.error(
         `whatsapp send failed: ${err instanceof Error ? err.name : "error"}`,
       );
-      return false;
+      return "failed";
     }
-    if (res.ok) return true;
-    // Graph errors describe the request, not the message body, but keep
-    // prod logs to the status code.
-    const detail = isDev() ? ` ${await res.text().catch(() => "")}` : "";
-    console.error(`whatsapp send failed: HTTP ${res.status}${detail}`);
+    if (res.ok) return "sent";
+    console.error(
+      `whatsapp send failed: HTTP ${res.status}${await errorDetail(res)}`,
+    );
     // Throttling and server errors are retried once; other 4xx never are.
     const retryable = res.status === 429 || res.status >= 500;
-    if (!retryable || attempt >= SEND_ATTEMPTS) return false;
+    if (!retryable || attempt >= SEND_ATTEMPTS) return "refused";
     await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
   }
+}
+
+/**
+ * The whole error body in dev; in prod only Graph's numeric error code, which
+ * describes the request and never echoes the message.
+ */
+async function errorDetail(res: Response): Promise<string> {
+  const raw = await res.text().catch(() => "");
+  if (isDev()) return ` ${raw}`;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const code =
+      isObject(parsed) && isObject(parsed.error) ? parsed.error.code : null;
+    return typeof code === "number" ? ` code ${code}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** A free-form text message (only delivered inside the 24-hour window). */
+export async function sendWhatsAppText(
+  to: string,
+  body: string,
+): Promise<boolean> {
+  return (await postMessage(to, { type: "text", text: { body } })) === "sent";
+}
+
+/** An approved template in Arabic; empty components are left out. */
+export async function sendWhatsAppTemplate(
+  to: string,
+  message: TemplateMessage,
+): Promise<boolean> {
+  return (await postTemplate(to, message)) === "sent";
+}
+
+async function postTemplate(
+  to: string,
+  message: TemplateMessage,
+): Promise<PostOutcome> {
+  const components: Record<string, unknown>[] = [];
+  if (message.header !== undefined) {
+    components.push({
+      type: "header",
+      parameters: textParams([message.header]),
+    });
+  }
+  if (message.body && message.body.length > 0) {
+    components.push({ type: "body", parameters: textParams(message.body) });
+  }
+  if (message.buttonParam !== undefined) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: textParams([message.buttonParam]),
+    });
+  }
+  return await postMessage(to, {
+    type: "template",
+    template: { name: message.name, language: { code: "ar" }, components },
+  });
+}
+
+/** A text with one link button (inside the 24-hour window, no template needed). */
+export async function sendWhatsAppLink(
+  to: string,
+  body: string,
+  button: { label: string; url: string },
+): Promise<boolean> {
+  const outcome = await postMessage(to, {
+    type: "interactive",
+    interactive: {
+      type: "cta_url",
+      body: { text: body },
+      action: {
+        name: "cta_url",
+        parameters: { display_text: button.label, url: button.url },
+      },
+    },
+  });
+  return outcome === "sent";
 }
 
 export const sendText = internalAction({
@@ -402,7 +580,6 @@ export const recordInbound = internalMutation({
 export async function takeIncoming(
   ctx: ActionCtx,
   message: IncomingMessage,
-  send: (to: string, body: string) => Promise<unknown>,
 ): Promise<"taken" | "no_code" | "unknown_code"> {
   if (!WA_PHONE.test(message.from)) return "taken";
   const fresh = await ctx.runMutation(internal.whatsapp.recordInbound, {
@@ -425,10 +602,11 @@ export async function takeIncoming(
     case "no_match":
       return result.codeShaped ? "unknown_code" : "no_code";
     case "matched":
-      await send(phone, matchedReply(result.returnPath));
+      await sendVerified(phone, result.returnPath);
       return "taken";
     case "needs_pin":
-      await send(phone, result.admin ? adminPinReply(pin) : pinReply(pin));
+      // The same template for both; only the fallback text differs.
+      await sendPin(phone, pin, result.admin ? adminPinReply : pinReply);
       return "taken";
   }
 }
@@ -437,7 +615,7 @@ export async function takeIncoming(
 export const handleIncoming = internalAction({
   args: { waMessageId: v.string(), from: v.string(), text: v.string() },
   handler: async (ctx, args): Promise<void> => {
-    const outcome = await takeIncoming(ctx, args, sendWhatsAppText);
+    const outcome = await takeIncoming(ctx, args);
     if (outcome === "taken") return;
     // A code we don't have may have been started on staging.
     if (outcome === "unknown_code" && (await relayIncoming(args))) return;

@@ -104,11 +104,16 @@ describe("push after the first take", () => {
     expect(m.markAsked).toHaveBeenCalledTimes(1);
   });
 
-  it("stays quiet when push is unsupported, and after a failed take", async () => {
+  it("offers WhatsApp once where push is unsupported", async () => {
     m.support = "unsupported";
     await takeSuggestion();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "التنبيهات على واتساب" }),
+    ).toBeInTheDocument();
+    expect(m.markAsked).toHaveBeenCalledTimes(1);
+  });
 
+  it("stays quiet after a failed take", async () => {
     m.support = "ready";
     m.take.mockResolvedValue({ ok: false, reason: "taken" });
     await takeSuggestion();

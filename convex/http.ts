@@ -16,7 +16,6 @@ import {
   RELAY_TIMESTAMP_HEADER,
   relaySecret,
   relaySignature,
-  sendWhatsAppText,
   siteUrl,
   takeIncoming,
 } from "./whatsapp";
@@ -504,7 +503,7 @@ http.route({
     if (message === null) return json(400, { error: "bad_request" }, {});
     // Sent inline, not scheduled: a scheduled reply would store a PIN in the
     // clear in `_scheduled_functions`.
-    const outcome = await takeIncoming(ctx, message, sendWhatsAppText);
+    const outcome = await takeIncoming(ctx, message);
     return json(200, { handled: outcome === "taken" }, {});
   }),
 });

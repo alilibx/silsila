@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { t } from "../i18n/ar";
 import { Button } from "./Button";
 import { Sheet } from "./Sheet";
+import { WhatsAppOffer } from "./WhatsAppOffer";
 
 const icon = {
   width: 40,
@@ -80,6 +81,7 @@ export function InstallStepsSheet({ onClose }: { onClose: () => void }) {
       </ol>
       <div className="mt-5 grid gap-3">
         <Button onClick={onClose}>{t.install.added}</Button>
+        <WhatsAppOffer onDone={onClose} />
         <Button variant="ghost" onClick={onClose}>
           {t.install.notNow}
         </Button>

@@ -25,6 +25,7 @@ const m = vi.hoisted(() => ({
     signOutOne: vi.fn(),
     signOutOthers: vi.fn(),
     unsubscribe: vi.fn(),
+    setWhatsappNotes: vi.fn(),
   },
 }));
 
@@ -65,7 +66,8 @@ vi.mock("convex/react", async () => {
         | "signOut"
         | "signOutOne"
         | "signOutOthers"
-        | "unsubscribe";
+        | "unsubscribe"
+        | "setWhatsappNotes";
       return m.fns[name];
     },
   };
@@ -133,7 +135,11 @@ describe("SettingsPage", () => {
     m.endpoint = null;
     m.token = "tok";
     m.stored = "tok";
-    m.me = { displayName: "أبو علي", maskedPhone: "+971 •• ••• 4567" };
+    m.me = {
+      displayName: "أبو علي",
+      maskedPhone: "+971 •• ••• 4567",
+      whatsappNotes: false,
+    };
     localStorage.clear();
     m.list = [
       {
@@ -149,6 +155,30 @@ describe("SettingsPage", () => {
         isCurrent: false,
       },
     ];
+  });
+
+  it("turns WhatsApp messages on from their own switch, with what they'll get", async () => {
+    renderPage();
+    expect(screen.getByText(t.whatsappNotes.explain)).toBeInTheDocument();
+    const toggle = screen.getByRole("switch", { name: t.whatsappNotes.label });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(toggle);
+    expect(m.fns.setWhatsappNotes).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      on: true,
+    });
+  });
+
+  it("shows WhatsApp messages on, and turns them off", async () => {
+    m.me = { ...(m.me as object), whatsappNotes: true };
+    renderPage();
+    const toggle = screen.getByRole("switch", { name: t.whatsappNotes.label });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(toggle);
+    expect(m.fns.setWhatsappNotes).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      on: false,
+    });
   });
 
   it("shows the masked number left-to-right", () => {

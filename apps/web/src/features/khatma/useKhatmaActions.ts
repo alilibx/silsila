@@ -64,6 +64,7 @@ export type OpenSheet =
   | { kind: "release" }
   | { kind: "push" }
   | { kind: "install" }
+  | { kind: "whatsapp" }
   | null;
 
 /**
@@ -233,13 +234,22 @@ export function useKhatmaActions(
     setPendingJuz(juz);
   }
 
-  /** Once, after the first juz' taken in this browser: the push prompt, or the iPhone install steps. */
+  /**
+   * Once, after the first juz' taken in this browser: the push prompt, the iPhone install steps,
+   * or, where push can't work, the offer to send notifications on WhatsApp.
+   */
   function offerPush() {
     if (pushAsked()) return;
     const support = pushSupport();
-    if (support === "unsupported") return;
     markPushAsked();
-    setSheet({ kind: support === "ready" ? "push" : "install" });
+    setSheet({
+      kind:
+        support === "ready"
+          ? "push"
+          : support === "ios_install"
+            ? "install"
+            : "whatsapp",
+    });
   }
 
   async function confirmTake(juz: number) {
