@@ -33,6 +33,7 @@ const MAX_TOKEN = 200;
 /** How many requests `mine` returns, newest first. */
 const MINE_LIMIT = 10;
 const VISITOR_UPLOADS_GLOBAL_PER_HOUR = 300;
+const VISITOR_UPLOADS_PER_IP_PER_HOUR = 30;
 
 type SendError =
   "rate_limited" | "empty" | "bad_file" | "too_long" | "not_found";
@@ -361,5 +362,30 @@ export const markSeen = mutation({
     const request = await ownedRequest(ctx, args.requestId, owner);
     if (request) await ctx.db.patch(request._id, { seenAt: Date.now() });
     return null;
+  },
+});
+
+/** Called by `POST /api/help/upload-url` with the caller's IP. */
+export const uploadUrlInternal = internalMutation({
+  args: { reporterHash: v.string(), ip: v.union(v.string(), v.null()) },
+  handler: async (ctx, args): Promise<string | { error: "rate_limited" }> => {
+    const buckets: RateLimitBucket[] = [
+      await uploadBucket(ctx, { reporterHash: args.reporterHash }),
+      shardedBucket(
+        "helpUpload:visitorGlobal",
+        VISITOR_UPLOADS_GLOBAL_PER_HOUR,
+        HOUR_MS,
+      ),
+    ];
+    if (args.ip !== null) {
+      buckets.push({
+        key: `helpUpload:ip:${args.ip}`,
+        limit: VISITOR_UPLOADS_PER_IP_PER_HOUR,
+        windowMs: HOUR_MS,
+      });
+    }
+    if (!(await checkRateLimits(ctx, buckets)))
+      return { error: "rate_limited" };
+    return await ctx.storage.generateUploadUrl();
   },
 });

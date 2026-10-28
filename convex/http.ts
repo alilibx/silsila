@@ -1,7 +1,9 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction, type ActionCtx } from "./_generated/server";
+import { reporterHash } from "./help";
 import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
+import { cleanContext } from "./lib/help";
 import {
   adminSiteUrl,
   env,
@@ -248,6 +250,136 @@ http.route({
     });
     if ("error" in res) {
       return json(START_ERROR_STATUS[res.error], { error: res.error }, headers);
+    }
+    return json(200, res, headers);
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// Help requests from signed-out visitors (plan 3 spec 3.5). Over HTTP so the
+// per-IP limits can read the IP. Website origin only.
+
+const MAX_HELP_BODY = 8192;
+const MIN_REPORTER_TOKEN = 20;
+const MAX_REPORTER_TOKEN = 200;
+
+const HELP_ERROR_STATUS: Record<string, number> = {
+  rate_limited: 429,
+  empty: 400,
+  bad_file: 400,
+  too_long: 400,
+  bad_request: 400,
+};
+
+function helpPreflight(path: string) {
+  http.route({
+    path,
+    method: "OPTIONS",
+    handler: httpAction(async (_ctx, req) => {
+      const origin = req.headers.get("Origin");
+      if (origin === null || !allowedOrigin(origin)) {
+        return new Response(null, { status: 403, headers: corsHeaders(null) });
+      }
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...corsHeaders(origin),
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }),
+  });
+}
+
+/** The JSON body of a help call from the website, or the response that refuses it. */
+async function readHelpBody(
+  req: Request,
+): Promise<
+  | { body: Record<string, unknown>; headers: Record<string, string> }
+  | { refused: Response }
+> {
+  const origin = req.headers.get("Origin");
+  if (origin === null || !allowedOrigin(origin)) {
+    return {
+      refused: json(403, { error: "forbidden_origin" }, corsHeaders(null)),
+    };
+  }
+  const headers = corsHeaders(origin);
+  const raw = await readCappedText(req, MAX_HELP_BODY);
+  if (raw === null) {
+    return { refused: json(413, { error: "too_large" }, headers) };
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+  const token = (body as Record<string, unknown> | null)?.reporterToken;
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    typeof token !== "string" ||
+    token.length < MIN_REPORTER_TOKEN ||
+    token.length > MAX_REPORTER_TOKEN
+  ) {
+    return { refused: json(400, { error: "bad_request" }, headers) };
+  }
+  return { body: body as Record<string, unknown>, headers };
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+helpPreflight("/api/help/upload-url");
+http.route({
+  path: "/api/help/upload-url",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const read = await readHelpBody(req);
+    if ("refused" in read) return read.refused;
+    const res = await ctx.runMutation(internal.help.uploadUrlInternal, {
+      reporterHash: await reporterHash(read.body.reporterToken as string),
+      ip: await callerIp(ctx, req),
+    });
+    if (typeof res !== "string") {
+      return json(429, { error: res.error }, read.headers);
+    }
+    return json(200, { uploadUrl: res }, read.headers);
+  }),
+});
+
+helpPreflight("/api/help/request");
+http.route({
+  path: "/api/help/request",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const read = await readHelpBody(req);
+    if ("refused" in read) return read.refused;
+    const { body, headers } = read;
+    const voiceSeconds =
+      typeof body.voiceSeconds === "number" ? body.voiceSeconds : null;
+    let res: { requestId: string } | { error: string };
+    try {
+      res = await ctx.runMutation(internal.help.createAsVisitorInternal, {
+        reporterHash: await reporterHash(body.reporterToken as string),
+        ip: await callerIp(ctx, req),
+        inviteCode: optionalString(body.inviteCode)?.slice(0, 40) ?? null,
+        text: optionalString(body.text)?.slice(0, 4000) ?? null,
+        // A malformed id fails the mutation's validator: a bad request.
+        screenshotId: optionalString(body.screenshotId) as never,
+        voiceId: optionalString(body.voiceId) as never,
+        voiceSeconds,
+        context: cleanContext(body.context),
+      });
+    } catch {
+      return json(400, { error: "bad_request" }, headers);
+    }
+    if ("error" in res) {
+      return json(HELP_ERROR_STATUS[res.error] ?? 400, res, headers);
     }
     return json(200, res, headers);
   }),
