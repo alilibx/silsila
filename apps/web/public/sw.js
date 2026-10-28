@@ -8,7 +8,7 @@ self.addEventListener("activate", (event) =>
   event.waitUntil(self.clients.claim()),
 );
 
-// The server sends { title, body, url }; the text is the same as the in-app note.
+// The server sends { title, body, url, tag }; the text is the same as the in-app note.
 self.addEventListener("push", (event) => {
   let data;
   try {
@@ -21,6 +21,9 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title || "وِردك", {
       body: data.body || "",
       data: { url: data.url || "/" },
+      // the same tag replaces an earlier notification instead of stacking a duplicate
+      tag: data.tag || undefined,
+      renotify: false,
       icon: "/icons/icon-192.png",
       dir: "rtl",
       lang: "ar",

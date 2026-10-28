@@ -213,6 +213,8 @@ test("deliveryPlan builds the payload, and is null once the note is cleared", as
       title: "وِردك",
       body: "الجزء ٥ في انتظارك، يسّر الله لك.",
       url: `/j/${inviteCode}`,
+      // the note id tags the notification, so a repeat push replaces the earlier one
+      tag: noteId,
     },
   });
 

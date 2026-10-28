@@ -62,7 +62,7 @@ describe("NoteCard", () => {
     expect(small.className).toMatch(/min-h-14/);
   });
 
-  it("openForHelp card offers take and invite", async () => {
+  it("openForHelp card offers take, invite, and ok", async () => {
     const h = handlers();
     render(
       <NoteCard
@@ -71,11 +71,13 @@ describe("NoteCard", () => {
         {...h}
       />,
     );
-    expect(names()).toEqual(["خذ الجزء", "أرسل الدعوة"]);
+    expect(names()).toEqual(["خذ الجزء", "أرسل الدعوة", "حسناً"]);
     await userEvent.click(screen.getByRole("button", { name: "خذ الجزء" }));
     await userEvent.click(screen.getByRole("button", { name: "أرسل الدعوة" }));
+    await userEvent.click(screen.getByRole("button", { name: "حسناً" }));
     expect(h.onTake).toHaveBeenCalledWith(12);
     expect(h.onInvite).toHaveBeenCalledTimes(1);
+    expect(h.onDismiss).toHaveBeenCalledTimes(1);
   });
 
   it("openForHelp card has no take button when nothing can be taken", () => {
@@ -86,7 +88,7 @@ describe("NoteCard", () => {
         {...handlers()}
       />,
     );
-    expect(names()).toEqual(["أرسل الدعوة"]);
+    expect(names()).toEqual(["أرسل الدعوة", "حسناً"]);
   });
 
   it("behind card offers take and ok", async () => {

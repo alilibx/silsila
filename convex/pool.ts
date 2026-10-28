@@ -244,6 +244,12 @@ export const take = sessionMutation({
       kind: "openForHelp",
       juz: args.juz,
     });
+    // A behind invite is answered once they take a juz', so a push queued for the morning dies.
+    await clearNotes(ctx, {
+      khatmaId: khatma._id,
+      personId: person._id,
+      kind: "behind",
+    });
 
     // The grace the hold starts with stays with it (spec 3.4).
     const quiet = await quietHours(ctx);

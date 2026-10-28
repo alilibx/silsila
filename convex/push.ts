@@ -130,6 +130,8 @@ export const deliveryPlan = internalQuery({
         title: "وِردك" as const,
         body: noteText(note),
         url: `/j/${khatma.inviteCode}`,
+        // the note id tags the notification, so a repeat push replaces the earlier one
+        tag: note._id as string,
       },
     };
   },

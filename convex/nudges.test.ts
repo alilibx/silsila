@@ -452,6 +452,50 @@ test("behind invite goes to the fastest free members first and never to holders"
   expect((await roundOf(t, khatma._id)).behindInvitedAt).not.toBeNull();
 });
 
+test("taking a juz' clears the taker's behind invite and kills its queued push", async () => {
+  const { t, org, code, khatma } = await behindSetup();
+  const round = await roundOf(t, khatma._id);
+  vi.setSystemTime(round.startedAt + 0.1 * DAY); // 6.9 days left
+
+  const a = await signedIn(t, "أ");
+  const b = await signedIn(t, "ب");
+  await join(t, khatma._id, a);
+  await join(t, khatma._id, b);
+  for (const who of [a, b]) {
+    await t.run((ctx) =>
+      ctx.db.insert("pushSubscriptions", {
+        personId: who.personId,
+        sessionId: who.sessionId,
+        endpoint: `https://push.example/${who.personId}`,
+        p256dh: "p",
+        auth: "a",
+        createdAt: NOW,
+      }),
+    );
+  }
+  await seedPace(t, khatma, a, 1.0 * DAY);
+  await seedPace(t, khatma, b, 1.05 * DAY);
+  for (let juz = 1; juz <= 10; juz++) {
+    await insertDone(t, khatma, org, juz, 1.1 * DAY);
+  }
+  await sweep(t);
+  const [aNote] = await notesOf(t, a, "behind");
+  const [bNote] = await notesOf(t, b, "behind");
+  if (!aNote || !bNote) throw new Error("both members should be invited");
+  const plan = (noteId: Id<"notes">) =>
+    t.query(internal.push.deliveryPlan, { noteId });
+  expect(await plan(aNote._id)).not.toBeNull();
+
+  expect(await take(t, code, a, 11)).toEqual({ ok: true });
+  const [cleared] = await notesOf(t, a, "behind");
+  expect(cleared?.clearedAt).not.toBeNull();
+  expect(await plan(aNote._id)).toBeNull();
+  // someone else's invite is untouched
+  const [other] = await notesOf(t, b, "behind");
+  expect(other?.clearedAt).toBeNull();
+  expect(await plan(bNote._id)).not.toBeNull();
+});
+
 test("behind invite reaches only as many members as the shortfall", async () => {
   const { t, org, khatma } = await behindSetup();
   const round = await roundOf(t, khatma._id);

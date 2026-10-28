@@ -1,12 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSessionToken, setSessionToken } from "../../lib/session";
 import { HandoffGate } from "./HandoffGate";
 
 const m = vi.hoisted(() => ({
   redeem: vi.fn(),
   standalone: true,
+  iosStandalone: true,
   support: "ready" as string,
   markAsked: vi.fn(),
 }));
@@ -45,17 +46,38 @@ beforeEach(() => {
   m.redeem.mockReset();
   m.markAsked.mockReset();
   m.standalone = true;
+  m.iosStandalone = true;
   m.support = "ready";
+  Object.defineProperty(navigator, "standalone", {
+    configurable: true,
+    get: () => m.iosStandalone,
+  });
+});
+
+afterEach(() => {
+  Reflect.deleteProperty(navigator, "standalone");
 });
 
 describe("HandoffGate", () => {
-  it("redeems only in standalone mode", async () => {
+  it("redeems only in the iPhone home-screen app", async () => {
     m.standalone = false;
+    m.iosStandalone = false;
     ui();
     expect(await screen.findByText("التطبيق")).toBeInTheDocument();
     expect(m.redeem).not.toHaveBeenCalled();
     expect(getSessionToken()).toBeNull();
     // Never leave the token in the router's location, even when it was not redeemed.
+    expect(where()).toBe("/j/CODE?from=wa");
+  });
+
+  it("does not redeem in a display-mode standalone window that is not the iPhone home-screen app", async () => {
+    // an installed Android PWA can capture a crafted link; only iOS sets navigator.standalone
+    m.standalone = true;
+    m.iosStandalone = false;
+    ui();
+    expect(await screen.findByText("التطبيق")).toBeInTheDocument();
+    expect(m.redeem).not.toHaveBeenCalled();
+    expect(getSessionToken()).toBeNull();
     expect(where()).toBe("/j/CODE?from=wa");
   });
 

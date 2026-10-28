@@ -3,13 +3,22 @@ import { useLocation, useNavigate } from "react-router";
 import { PushPromptSheet } from "../../components/PushPromptSheet";
 import { t } from "../../i18n/ar";
 import { redeemHandoffToken } from "../../lib/handoff";
-import { isStandalone, markPushAsked, pushSupport } from "../../lib/push";
+import { markPushAsked, pushSupport } from "../../lib/push";
 import { getSessionToken, setSessionToken } from "../../lib/session";
+
+/**
+ * Only the iPhone home-screen app sets `navigator.standalone`. Other installed PWAs (Android)
+ * also match `display-mode: standalone`, and can capture a crafted `/?h=` link, so they must
+ * never redeem a token that arrived in their address.
+ */
+function inHomeScreenApp(): boolean {
+  return (navigator as { standalone?: boolean }).standalone === true;
+}
 
 /**
  * First launch of the iPhone home-screen app: a `?h=` token from the swapped-in manifest's
  * `start_url` is traded for a session of this app's own, then the push prompt follows. It only
- * redeems inside the home-screen app, and never over a session the app already has.
+ * redeems inside the iPhone home-screen app, and never over a session the app already has.
  */
 export function HandoffGate({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -20,7 +29,7 @@ export function HandoffGate({ children }: { children: ReactNode }) {
   const [redeeming, setRedeeming] = useState(
     () =>
       new URLSearchParams(location.search).has("h") &&
-      isStandalone() &&
+      inHomeScreenApp() &&
       getSessionToken() === null,
   );
   const [prompt, setPrompt] = useState(false);
@@ -42,7 +51,7 @@ export function HandoffGate({ children }: { children: ReactNode }) {
       },
       { replace: true },
     );
-    if (!isStandalone() || getSessionToken() !== null) return;
+    if (!inHomeScreenApp() || getSessionToken() !== null) return;
     void (async () => {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const sessionToken = await redeemHandoffToken(token, timeZone);

@@ -84,6 +84,9 @@ export function NoteCard({
             <Button variant="whatsapp" onClick={onInvite} disabled={busy}>
               {t.notes.sendInvite}
             </Button>
+            <Button variant="ghost" onClick={onDismiss} disabled={busy}>
+              {t.notes.ok}
+            </Button>
           </>
         )}
         {note.kind === "behind" && (
