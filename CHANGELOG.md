@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/alilibx/wirdak/compare/v0.2.2...v0.3.0) (2026-10-28)
+
+
+### Features
+
+* add the admin panel foundation and live settings (plan 3a) ([#25](https://github.com/alilibx/wirdak/issues/25)) ([1b55435](https://github.com/alilibx/wirdak/commit/1b55435d590649bf145ee07821b69485d2802ab5))
+
+
+### Bug Fixes
+
+* **web:** redirect wirdak.app/stg/* to staging ([#29](https://github.com/alilibx/wirdak/issues/29)) ([8eb7911](https://github.com/alilibx/wirdak/commit/8eb7911bc929187414306782c4ac8a8990fa9e7c))
+
 ## [0.2.2](https://github.com/alilibx/wirdak/compare/v0.2.1...v0.2.2) (2026-10-28)
 
 
