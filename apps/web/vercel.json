@@ -11,6 +11,10 @@
       "destination": "/api/invite?code=:code"
     },
     {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

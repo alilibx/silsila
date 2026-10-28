@@ -106,6 +106,16 @@ function NameStep({ v }: StepProps) {
       <p className="mt-3.5 rounded-xl bg-paper-2 p-3 text-base leading-relaxed">
         {t.verify.startHint}
       </p>
+      {/* A static page outside the SPA, so a plain link (a router Link would show NotFound).
+          A new tab keeps the sheet and the typed name. */}
+      <a
+        href="/privacy"
+        target="_blank"
+        rel="noopener"
+        className="mt-3 inline-flex min-h-11 items-center text-ink-soft underline underline-offset-4"
+      >
+        {t.verify.privacy}
+      </a>
     </form>
   );
 }
