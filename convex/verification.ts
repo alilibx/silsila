@@ -50,6 +50,7 @@ const TEN_MIN_MS = 10 * MINUTE_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 const MAX_CLIENT_KEY = 200;
 const MAX_DEVICE_LABEL = 40;
+const MAX_RETURN_PATH = 200;
 const UNKNOWN_DEVICE = "جهاز غير معروف";
 
 type Status = Doc<"verifications">["status"];
@@ -70,6 +71,17 @@ export function cleanDeviceLabel(raw: string): string {
     .trim();
   const capped = Array.from(cleaned).slice(0, MAX_DEVICE_LABEL).join("").trim();
   return /[\p{L}\p{N}]/u.test(capped) ? capped : UNKNOWN_DEVICE;
+}
+
+/**
+ * The page to link back to from the WhatsApp reply: a plain path on this site
+ * (letters, digits, `-._~/`), else `/`. No query or fragment, so nothing like a
+ * sign-out token ever lands in a message, and no `//` or `\`, so the link
+ * can't leave the site.
+ */
+export function cleanReturnPath(raw: unknown): string {
+  if (typeof raw !== "string" || raw.length > MAX_RETURN_PATH) return "/";
+  return /^\/(?![/\\])[A-Za-z0-9\-._~/]*$/.test(raw) ? raw : "/";
 }
 
 /** A valid IANA time zone, canonicalized, or `UTC`. */
@@ -204,6 +216,7 @@ export const startInternal = internalAction({
     displayName: v.string(),
     clientKey: v.string(),
     ip: v.union(v.string(), v.null()),
+    returnPath: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<StartResult> => {
     if (!isDev() && !whatsappConfigured()) {
@@ -222,6 +235,7 @@ export const startInternal = internalAction({
       displayName,
       clientKey: args.clientKey,
       ip: args.ip,
+      returnPath: cleanReturnPath(args.returnPath),
     });
     if ("error" in res) return res;
     const code = formatCode(res.code);
@@ -242,6 +256,7 @@ export const createPending = internalMutation({
     displayName: v.string(),
     clientKey: v.string(),
     ip: v.union(v.string(), v.null()),
+    returnPath: v.string(),
   },
   handler: async (
     ctx,
@@ -304,6 +319,7 @@ export const createPending = internalMutation({
       displayName: args.displayName,
       status: "pending",
       pinAttempts: 0,
+      returnPath: args.returnPath,
       createdAt: now,
       expiresAt,
     });
@@ -410,17 +426,20 @@ export const matchIncoming = internalMutation({
   handler: async (
     ctx,
     args,
-  ): Promise<"rate_limited" | "no_match" | "matched" | "needs_pin"> => {
+  ): Promise<
+    | { kind: "rate_limited" | "no_match" | "needs_pin" }
+    | { kind: "matched"; returnPath: string }
+  > => {
     const allowed = await checkRateLimit(
       ctx,
       `verifyPhone:${args.phone}`,
       await getSetting(ctx, "verifyPerPhonePerHour"),
       HOUR_MS,
     );
-    if (!allowed) return "rate_limited";
+    if (!allowed) return { kind: "rate_limited" };
 
     const doc = await findPendingByText(ctx, args.text);
-    if (!doc) return "no_match";
+    if (!doc) return { kind: "no_match" };
 
     const person = await personByPhone(ctx, args.phone);
     if (person) {
@@ -429,7 +448,7 @@ export const matchIncoming = internalMutation({
         pinHash: args.pinHash,
         existingPersonId: person._id,
       });
-      return "needs_pin";
+      return { kind: "needs_pin" };
     }
     // A fresh window to claim in, even if the message arrived at 9m59s.
     await ctx.db.patch(doc._id, {
@@ -437,7 +456,7 @@ export const matchIncoming = internalMutation({
       phone: args.phone,
       expiresAt: await freshExpiry(ctx, doc._id),
     });
-    return "matched";
+    return { kind: "matched", returnPath: doc.returnPath ?? "/" };
   },
 });
 

@@ -55,11 +55,16 @@ export const verificationMessage = (code: string) =>
   `رمز التحقق في وِردك: ${code}`;
 export const NO_MATCH_REPLY =
   "لم نجد رمز تحقق صالحاً. ارجع إلى وِردك واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
-/** Ends with a link back to the site (spec 5.2 step 5) when one is configured. */
-export const matchedReply = () => {
+/**
+ * Ends with a link back to the site (spec 5.2 step 5) when one is configured:
+ * this deployment's own `SITE_URL`, so staging links stay on staging, plus the
+ * page the sign-in started on (already cleaned by `cleanReturnPath`).
+ */
+export const matchedReply = (returnPath = "/") => {
   const url = siteUrl();
+  const path = returnPath === "/" ? "" : returnPath;
   return url
-    ? `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${url}`
+    ? `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${url}${path}`
     : "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.";
 };
 /** Says what the code is for, so a forwarded-link victim knows not to hand it over. */
@@ -256,14 +261,14 @@ export const handleIncoming = internalAction({
       text: args.text,
       pinHash: await sha256Hex(pin),
     });
-    switch (result) {
+    switch (result.kind) {
       case "rate_limited":
         return;
       case "no_match":
         await sendWhatsAppText(phone, NO_MATCH_REPLY);
         return;
       case "matched":
-        await sendWhatsAppText(phone, matchedReply());
+        await sendWhatsAppText(phone, matchedReply(result.returnPath));
         return;
       case "needs_pin":
         await sendWhatsAppText(phone, pinReply(pin));

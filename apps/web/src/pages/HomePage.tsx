@@ -3,8 +3,10 @@ import { toArabicDigits } from "@convex/lib/digits";
 import { JUZ, JUZ_COUNT } from "@convex/lib/juz";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Link } from "react-router";
+import { useState } from "react";
+import { Link, Navigate, useLocation } from "react-router";
 import { Button, buttonClass } from "../components/Button";
+import { pendingResumePath } from "../features/verify/progress";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { t } from "../i18n/ar";
 import { formatDate } from "../lib/format";
@@ -12,6 +14,16 @@ import { useSessionToken } from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
 
 export function HomePage() {
+  // Someone who left for WhatsApp mid-take or mid-create and came back here (an older reply's
+  // link, typing the address) goes back to the page that finishes it. Only when the app opened here
+  // ("default" is the first history entry's key): choosing home in the app stays home.
+  const opened = useLocation().key === "default";
+  const [resumePath] = useState(() => (opened ? pendingResumePath() : null));
+  if (resumePath !== null) return <Navigate to={resumePath} replace />;
+  return <Home />;
+}
+
+function Home() {
   const sessionToken = useSessionToken();
   const me = useQuery(api.sessions.me, { sessionToken });
   const mine = useQuery(api.khatmas.mine, { sessionToken });

@@ -96,6 +96,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.useRealTimers();
@@ -116,6 +117,7 @@ describe("useVerification: start", () => {
   it("posts name and client key, moves to waiting and persists progress", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(1_000_000);
+    window.history.replaceState(null, "", "/j/ABC123");
     const { result } = await started();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://x.convex.site/api/verification/start");
@@ -123,6 +125,8 @@ describe("useVerification: start", () => {
     const body = JSON.parse(init.body as string) as Record<string, string>;
     expect(body.displayName).toBe("علي");
     expect(body.clientKey).toMatch(/^[0-9a-f]{32}$/);
+    // The WhatsApp reply links back to this page, not the home page.
+    expect(body.returnPath).toBe("/j/ABC123");
     expect(result.current.step).toBe("waiting");
     expect(JSON.parse(localStorage.getItem(STORE) ?? "null")).toMatchObject({
       verificationId: "v1",

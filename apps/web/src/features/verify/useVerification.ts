@@ -186,7 +186,12 @@ export function useVerification(intent?: VerifyIntent) {
         res = await fetch(`${convexSiteUrl()}/api/verification/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName, clientKey: getClientKey() }),
+          // The WhatsApp reply links back to this page, where the sheet resumes.
+          body: JSON.stringify({
+            displayName,
+            clientKey: getClientKey(),
+            returnPath: window.location.pathname,
+          }),
         });
       } catch {
         closeBlank();

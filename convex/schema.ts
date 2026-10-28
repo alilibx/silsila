@@ -42,6 +42,8 @@ export default defineSchema({
     pinHash: v.optional(v.string()),
     pinAttempts: v.number(),
     existingPersonId: v.optional(v.id("people")),
+    /** The site path the sign-in started on; the WhatsApp reply links back to it. */
+    returnPath: v.optional(v.string()),
     createdAt: v.number(),
     expiresAt: v.number(),
   })

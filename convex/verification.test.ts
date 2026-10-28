@@ -466,6 +466,51 @@ test("new number: start → message → matched → claim → session", async ()
   expect(await sessionCount(t)).toBe(1);
 });
 
+test("the matched reply links back to the page the verification started on", async () => {
+  const t = convexTest(schema, modules);
+  let client = 0;
+  const startFrom = async (returnPath: unknown) => {
+    const res = await t.fetch("/api/verification/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: SITE },
+      body: JSON.stringify({
+        displayName: "علي",
+        clientKey: `c${++client}`,
+        returnPath,
+      }),
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Started;
+  };
+  const replyFor = async (returnPath: unknown, from: string) => {
+    const v = await startFrom(returnPath);
+    await send(t, v.message, from);
+    return sent.at(-1)!.body;
+  };
+
+  expect(await replyFor("/j/AbC-12_x", "971500000001")).toBe(
+    `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${SITE}/j/AbC-12_x`,
+  );
+  expect(await replyFor("/new", "971500000002")).toBe(`${MATCHED}/new`);
+
+  // Anything that is not a plain same-site path goes to the home page.
+  const unsafe = [
+    "//evil.example/j/x",
+    "/\\evil.example",
+    "https://evil.example/",
+    "/signout?t=secret",
+    "/j/x#frag",
+    "j/x",
+    "/" + "a".repeat(300),
+    42,
+    undefined,
+  ];
+  let n = 10;
+  for (const path of unsafe) {
+    expect(await replyFor(path, `9715000000${n++}`)).toBe(MATCHED);
+  }
+});
+
 test("existing number needs the PIN from the WhatsApp reply", async () => {
   const t = convexTest(schema, modules);
   const personId = await addPerson(t);
