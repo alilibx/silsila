@@ -11,6 +11,7 @@
 import type * as adminAuth from "../adminAuth.js";
 import type * as adminSettings from "../adminSettings.js";
 import type * as admins from "../admins.js";
+import type * as audit from "../audit.js";
 import type * as crons from "../crons.js";
 import type * as dev from "../dev.js";
 import type * as grace from "../grace.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   adminAuth: typeof adminAuth;
   adminSettings: typeof adminSettings;
   admins: typeof admins;
+  audit: typeof audit;
   crons: typeof crons;
   dev: typeof dev;
   grace: typeof grace;
