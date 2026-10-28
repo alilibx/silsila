@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadProgress, saveProgress, type Progress } from "./progress";
 
-const KEY = "silsila.verify";
+const KEY = "wirdak.verify";
 const base = () => ({
   verificationId: "v1",
   secret: "sec",
@@ -42,7 +42,8 @@ describe("progress intent", () => {
   });
 
   it("progress saved before intents existed still loads", () => {
-    localStorage.setItem(KEY, JSON.stringify(base()));
-    expect(loadProgress()).toEqual(base());
+    const saved = base();
+    localStorage.setItem(KEY, JSON.stringify(saved));
+    expect(loadProgress()).toEqual(saved);
   });
 });
