@@ -1,9 +1,10 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import type { AuditAction } from "@convex/lib/audit";
 import { SETTING_SPECS } from "@convex/lib/settingSpecs";
 import type { SettingKey } from "@convex/lib/settings";
 import { formatDate } from "@web/lib/format";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
@@ -33,23 +34,53 @@ function show(row: {
 export function AuditPage() {
   const adminToken = useAdminToken() ?? "";
   const filterId = useId();
+  const adminFilterId = useId();
+  // One filter at a time (the server reads one index): picking one clears the other.
   const [action, setAction] = useState<AuditAction | "">("");
+  const [adminId, setAdminId] = useState<Id<"admins"> | "">("");
+  const admins = useQuery(api.admins.list, { adminToken });
   const { results, status, loadMore } = usePaginatedQuery(
     api.audit.list,
-    { adminToken, ...(action === "" ? {} : { action }) },
+    {
+      adminToken,
+      ...(action !== "" ? { action } : {}),
+      ...(adminId !== "" ? { adminId } : {}),
+    },
     { initialNumItems: PAGE },
   );
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-3xl text-green-deep">{t.audit.title}</h1>
+      <label htmlFor={adminFilterId} className="sr-only">
+        {t.audit.byAdmin}
+      </label>
+      <select
+        id={adminFilterId}
+        value={adminId}
+        onChange={(e) => {
+          setAdminId(e.target.value as Id<"admins"> | "");
+          setAction("");
+        }}
+        className="rounded-ui border-2 border-line bg-white p-3"
+      >
+        <option value="">{t.audit.allAdmins}</option>
+        {(admins ?? []).map((a) => (
+          <option key={a.adminId} value={a.adminId}>
+            {a.phone}
+          </option>
+        ))}
+      </select>
       <label htmlFor={filterId} className="sr-only">
         {t.audit.filter}
       </label>
       <select
         id={filterId}
         value={action}
-        onChange={(e) => setAction(e.target.value as AuditAction | "")}
+        onChange={(e) => {
+          setAction(e.target.value as AuditAction | "");
+          setAdminId("");
+        }}
         className="rounded-ui border-2 border-line bg-white p-3"
       >
         <option value="">{t.audit.all}</option>

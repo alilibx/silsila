@@ -150,6 +150,8 @@ export const ar = {
     actions,
     all: "كل التغييرات",
     filter: "نوع التغيير",
+    byAdmin: "المشرف",
+    allAdmins: "كل المشرفين",
     system: "النظام",
     more: "المزيد",
     empty: "لا تغييرات بعد.",
