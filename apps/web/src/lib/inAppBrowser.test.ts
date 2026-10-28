@@ -11,6 +11,9 @@ const ANDROID_CHROME =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36";
 const ANDROID_WEBVIEW =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36";
+/** Ali's iPhone, inside WhatsApp's browser (2026-10-29): Safari's string plus a WAiOS tag. */
+const IOS_WHATSAPP =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1 [WAiOS/2.26.41]";
 const DESKTOP =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 
@@ -22,6 +25,7 @@ const nav = (userAgent: string, standalone = false) => ({
 
 describe("inAppBrowser", () => {
   it("finds an app's own browser on iPhone and Android", () => {
+    expect(inAppBrowser(nav(IOS_WHATSAPP))).toBe("ios");
     expect(inAppBrowser(nav(IOS_WEBVIEW))).toBe("ios");
     expect(inAppBrowser(nav(`${IOS_SAFARI} WhatsApp/24.1`))).toBe("ios");
     expect(inAppBrowser(nav(ANDROID_WEBVIEW))).toBe("android");

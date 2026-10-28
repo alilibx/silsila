@@ -4,8 +4,11 @@ type Nav = Pick<Navigator, "userAgent" | "maxTouchPoints"> & {
   standalone?: boolean;
 };
 
-/** Apps that name themselves in their built-in browser's user agent. */
-const APP_MARKERS = /WhatsApp|FBAN|FBAV|Instagram/i;
+/**
+ * Apps that name themselves in their built-in browser's user agent. WhatsApp
+ * on iPhone sends Safari's string plus `[WAiOS/<version>]`.
+ */
+const APP_MARKERS = /WhatsApp|WAiOS|FBAN|FBAV|Instagram/i;
 
 /**
  * Which phone's in-app browser this is (WhatsApp, Facebook, Instagram), or
