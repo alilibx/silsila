@@ -239,12 +239,15 @@ export const startInternal = internalAction({
     clientKey: v.string(),
     ip: v.union(v.string(), v.null()),
     returnPath: v.optional(v.string()),
+    surface: v.optional(v.literal("admin")),
   },
   handler: async (ctx, args): Promise<StartResult> => {
     if (!isDev() && !whatsappConfigured()) {
       return { error: "whatsapp_not_configured" };
     }
-    const displayName = cleanDisplayName(args.displayName);
+    // An admin sign-in has no display name: it never creates a person.
+    const displayName =
+      args.surface === "admin" ? "" : cleanDisplayName(args.displayName);
     if (displayName === null) return { error: "invalid_name" };
 
     const candidates = Array.from({ length: CODE_CANDIDATES }, () =>
@@ -258,6 +261,7 @@ export const startInternal = internalAction({
       clientKey: args.clientKey,
       ip: args.ip,
       returnPath: cleanReturnPath(args.returnPath),
+      ...(args.surface === "admin" ? { surface: "admin" as const } : {}),
     });
     if ("error" in res) return res;
     const code = formatCode(res.code);
