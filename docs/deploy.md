@@ -103,6 +103,16 @@ So each message gets one reply, from the environment the code belongs to. If sta
 
 Staging holds `WHATSAPP_ACCESS_TOKEN`, so anyone with staging env access can send messages from the business number. It never holds the app secret, so they can't make production accept a forged inbound message.
 
+### WhatsApp templates
+
+Messages that Wirdak starts (rather than replies to within 24 hours) need templates that Meta has approved. They live on the "Wirdak" messaging account of the Manzilo business, in Arabic (`ar`), and production and staging share them. The names are in `convex/lib/whatsappTemplates.ts` (`NOTE_TEMPLATES`, `OPEN_FOR_HELP_MANY`) and `convex/whatsapp.ts` (`PIN_TEMPLATE`). Design: `docs/superpowers/specs/2026-10-29-wirdak-whatsapp-templates-design.md`.
+
+- **`wirdak_pin`** (authentication): the 6-digit PIN with a copy-code button. If Meta refuses it, the PIN goes out as the old text reply, so sign-in never depends on it.
+- **One utility template per note kind**: the khatma title is the header, a plain update on the member's booking, role or khatma is the body, and an "open the khatma" button goes to `https://wirdak.app/{{1}}` (with Meta's click tracking off). They're sent only to people who turned on WhatsApp messages in Settings, at waking hours, at most once per note, and they expire after 1 hour.
+- **Staging links:** the button's domain is fixed in the template, so staging sends `stg/j/<code>`, and `apps/web/vercel.json` redirects `wirdak.app/stg/*` to `stg.wirdak.app/*`. The redirect works only once production has a release that includes it.
+- **Try one on a phone (staging or local only):** `bun run convex run --deployment manzilo:wirdak:staging whatsappNotes:sendSample '{"phone":"+9715…","kind":"reminder"}'`. Add `"many":true` with `openForHelp` for the plural. The phone must belong to a person with an active khatma on that deployment.
+- **Category:** Meta reviews each template and can approve it as MARKETING instead of UTILITY. Marketing messages cost more, can be capped by Meta, and need marketing consent, so reword it and submit it under a new name instead of sending it. Then delete the marketing one.
+
 ### GitHub (repository `alilibx/wirdak`)
 
 | Name                | Kind                         | What it is for                                                                                       | How to rotate                                                                                                                                                                                      |

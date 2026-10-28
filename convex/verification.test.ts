@@ -4,6 +4,7 @@ import { api, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
 import schema from "./schema";
+import { describeMessage } from "./whatsapp";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -15,9 +16,9 @@ const SITE = "https://wirdak.example";
 
 const NO_MATCH =
   "لم نجد رمز تحقق صالحاً. ارجع إلى وِردك واضغط «تحقّق عبر واتساب» ثم أرسل الرسالة الجاهزة كما هي.";
-const MATCHED = `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${SITE}`;
-const PIN_RE =
-  /^رمز الدخول إلى وِردك: (\d{6})\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك\. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً\. إن لم تطلبه الآن فتجاهل هذه الرسالة\.$/;
+const MATCHED = `تمّ التحقق ✅ ارجع إلى وِردك لتكمل.\n[ارجع إلى وِردك] ${SITE}`;
+/** The PIN template: the body and the copy-code button both carry the PIN. */
+const PIN_RE = /^\[wirdak_pin\] (\d{6}) \| \1$/;
 
 type T = TestConvexForDataModel<DataModel>;
 type Sent = { to: string; body: string };
@@ -38,11 +39,8 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init: RequestInit) => {
-      const payload = JSON.parse(String(init.body)) as {
-        to: string;
-        text: { body: string };
-      };
-      sent.push({ to: payload.to, body: payload.text.body });
+      const payload = JSON.parse(String(init.body)) as { to: string };
+      sent.push({ to: payload.to, body: describeMessage(payload) });
       return new Response("{}", { status: 200 });
     }),
   );
@@ -432,6 +430,7 @@ test("new number: start → message → matched → claim → session", async ()
   ).toEqual({
     displayName: "أم أحمد",
     maskedPhone: "+971 50 ••• 4567",
+    whatsappNotes: false,
   });
   const person = await t.run((ctx) =>
     ctx.db
@@ -452,7 +451,7 @@ test("new number: start → message → matched → claim → session", async ()
   const alert = sent.at(-1)!;
   expect(alert.to).toBe(PHONE);
   const m =
-    /^تمّ إنشاء حساب في وِردك برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/wirdak\.example\/signout\?t=([A-Za-z0-9_-]{43})$/.exec(
+    /^تمّ إنشاء حساب في وِردك برقمك من iPhone Safari\. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من كل الأجهزة\.\n\[لستُ أنا\] https:\/\/wirdak\.example\/signout\?t=([A-Za-z0-9_-]{43})$/.exec(
       alert.body,
     );
   expect(m).not.toBeNull();
@@ -489,7 +488,7 @@ test("the matched reply links back to the page the verification started on", asy
   };
 
   expect(await replyFor("/j/AbC-12_x", "971500000001")).toBe(
-    `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${SITE}/j/AbC-12_x`,
+    `${MATCHED}/j/AbC-12_x`,
   );
   expect(await replyFor("/new", "971500000002")).toBe(`${MATCHED}/new`);
 
@@ -551,6 +550,7 @@ test("existing number needs the PIN from the WhatsApp reply", async () => {
   ).toEqual({
     displayName: "سعيد",
     maskedPhone: "+971 50 ••• 4567",
+    whatsappNotes: false,
   });
   // no second person for the same phone
   expect(
@@ -558,7 +558,7 @@ test("existing number needs the PIN from the WhatsApp reply", async () => {
   ).toBe(1);
   // an existing account gets the normal sign-in alert, not the new-account one
   expect(sent.at(-1)!.body).toMatch(
-    /^تسجيل دخول جديد إلى وِردك من Android Chrome\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من الأجهزة الأخرى: https:\/\/wirdak\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
+    /^تسجيل دخول جديد إلى وِردك من Android Chrome\. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من الأجهزة الأخرى\.\n\[لستُ أنا\] https:\/\/wirdak\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
   );
   // the PIN is single use
   expect(await confirmPin(t, v, pin)).toEqual({ error: "expired" });
@@ -625,7 +625,7 @@ test("a forwarded link on a new number: the owner learns an account was created"
   const createdAlert = sent.at(-1)!;
   expect(createdAlert.to).toBe(PHONE);
   expect(createdAlert.body).toMatch(
-    /^تمّ إنشاء حساب في وِردك برقمك من iPhone Safari\. إن لم تكن أنت، اضغط هنا لتسجيل الخروج من كل الأجهزة: https:\/\/wirdak\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
+    /^تمّ إنشاء حساب في وِردك برقمك من iPhone Safari\. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من كل الأجهزة\.\n\[لستُ أنا\] https:\/\/wirdak\.example\/signout\?t=[A-Za-z0-9_-]{43}$/,
   );
 
   // the real owner later signs in with the PIN and is told about the other session
@@ -1051,14 +1051,11 @@ function twoDeployments(opts: { relayDown?: boolean } = {}) {
         if (opts.relayDown) throw new TypeError("fetch failed");
         return await asStaging(() => stg.fetch("/whatsapp/relay", init));
       }
-      const payload = JSON.parse(String(init.body)) as {
-        to: string;
-        text: { body: string };
-      };
+      const payload = JSON.parse(String(init.body)) as { to: string };
       sentBy.push({
         from: inStaging ? "stg" : "prod",
         to: payload.to,
-        body: payload.text.body,
+        body: describeMessage(payload),
       });
       return new Response("{}", { status: 200 });
     }),
@@ -1086,7 +1083,7 @@ test("a code started on staging gets exactly one reply, from staging, linking to
     {
       from: "stg",
       to: PHONE,
-      body: `تمّ التحقق ✅ ارجع إلى وِردك لتكمل:\n${STAGING_SITE}/j/AbC-12_x`,
+      body: `تمّ التحقق ✅ ارجع إلى وِردك لتكمل.\n[ارجع إلى وِردك] ${STAGING_SITE}/j/AbC-12_x`,
     },
   ]);
   expect(await asStaging(() => status(stg, v))).toEqual({

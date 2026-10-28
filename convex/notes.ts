@@ -7,6 +7,7 @@ import type { NoteKind } from "./lib/noteText";
 import { sessionMutation, sessionQuery } from "./lib/session";
 import { quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
+import { NOTE_TEMPLATES } from "./lib/whatsappTemplates";
 
 export type { NoteKind };
 
@@ -32,8 +33,9 @@ export type NotifyArgs = {
 
 /**
  * Every message to a member goes through here. Inserts the in-app note at
- * once; when the member has notifications on and a push subscription, also
- * schedules the push for the next waking moment in their time zone.
+ * once; when the member has notifications on, also schedules the push (with a
+ * push subscription) and the WhatsApp message (opted in) for the next waking
+ * moment in their time zone.
  */
 export async function notify(
   ctx: MutationCtx,
@@ -62,13 +64,15 @@ export async function notify(
     .first();
   const person = member?.notificationsOn ? await ctx.db.get(n.personId) : null;
   if (!person) return noteId;
+  const at = nextAwake(now, person.timeZone, await quietHours(ctx));
+  if (person.whatsappNotes && NOTE_TEMPLATES[n.kind] !== null) {
+    await ctx.scheduler.runAt(at, internal.whatsappNotes.deliver, { noteId });
+  }
   const subscription = await ctx.db
     .query("pushSubscriptions")
     .withIndex("by_person", (q) => q.eq("personId", n.personId))
     .first();
   if (!subscription) return noteId;
-
-  const at = nextAwake(now, person.timeZone, await quietHours(ctx));
   await ctx.scheduler.runAt(at, internal.pushNode.deliver, { noteId });
   return noteId;
 }

@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
 import schema from "./schema";
+import { describeMessage } from "./whatsapp";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -12,8 +13,8 @@ const ADMIN_PHONE = "971500000001";
 const OTHER_PHONE = "971500000002";
 const CODE = "ABCDEFGH23";
 
-const ADMIN_PIN_RE =
-  /^رمز الدخول إلى لوحة إدارة وِردك: (\d{6})\nلا تعطه لأحد\. إن لم تطلبه الآن فتجاهل هذه الرسالة\.$/;
+/** Admin codes go out as the PIN template, the same as member codes. */
+const ADMIN_PIN_RE = /^\[wirdak_pin\] (\d{6}) \| \1$/;
 
 type T = TestConvexForDataModel<DataModel>;
 type Sent = { to: string; body: string };
@@ -35,11 +36,8 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init: RequestInit) => {
-      const payload = JSON.parse(String(init.body)) as {
-        to: string;
-        text: { body: string };
-      };
-      sent.push({ to: payload.to, body: payload.text.body });
+      const payload = JSON.parse(String(init.body)) as { to: string };
+      sent.push({ to: payload.to, body: describeMessage(payload) });
       return new Response("{}", { status: 200 });
     }),
   );
@@ -183,7 +181,7 @@ test("a website verification still gets the member code", async () => {
 
   await send(t, OTHER_PHONE);
 
-  expect(sent[0]?.body).toMatch(/^رمز الدخول إلى وِردك: \d{6}\n/);
+  expect(sent[0]?.body).toMatch(/^\[wirdak_pin\] \d{6} \| \d{6}$/);
 });
 
 test("admin start works during maintenance; website start doesn't", async () => {

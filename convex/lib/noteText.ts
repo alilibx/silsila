@@ -40,7 +40,7 @@ const dayMonthFormat = new Intl.DateTimeFormat("ar", {
 });
 
 /** `١٢`, `١٢ و١٥`, `٣، ١٢ و١٥`. */
-function juzList(juz: readonly number[]): string {
+export function juzList(juz: readonly number[]): string {
   const digits = juz.map((n) => toArabicDigits(n));
   if (digits.length <= 1) return digits.join("");
   return `${digits.slice(0, -1).join("، ")} و${digits[digits.length - 1]}`;
@@ -63,6 +63,17 @@ function when(until: number, now: number): string {
     .join("");
 }
 
+/** `٣ أجزاء قبل الخميس`, or just `٣ أجزاء` with no target end ahead. */
+export function behindPhrase(
+  count: number,
+  until: number | null,
+  now: number,
+): string {
+  const before =
+    until !== null && until > now ? ` قبل ${when(until, now)}` : "";
+  return `${ajzaa(count)}${before}`;
+}
+
 export function noteText(n: NoteTextInput, now: number = Date.now()): string {
   switch (n.kind) {
     case "almostUp":
@@ -75,12 +86,8 @@ export function noteText(n: NoteTextInput, now: number = Date.now()): string {
       return `أحدهم يُكمل الجزء ${juzList(n.juz)} الآن. جزاكما الله خيراً.`;
     case "reminder":
       return `الجزء ${juzList(n.juz)} في انتظارك، يسّر الله لك.`;
-    case "behind": {
-      const count = ajzaa(n.count ?? 0);
-      const before =
-        n.until !== null && n.until > now ? ` قبل ${when(n.until, now)}` : "";
-      return `الختمة تحتاج ${count}${before}. هل تأخذ جزءاً؟`;
-    }
+    case "behind":
+      return `الختمة تحتاج ${behindPhrase(n.count ?? 0, n.until, now)}. هل تأخذ جزءاً؟`;
     case "completed":
       return "ختمنا القرآن معاً، الحمد لله";
     case "nowOrganizer":

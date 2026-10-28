@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { normalizeDigits } from "@convex/lib/digits";
 import { Button } from "@web/components/Button";
 import { convexSiteUrl } from "@web/lib/env";
 import { deviceLabel } from "@web/lib/format";
@@ -9,6 +10,8 @@ import { useAction, useQuery } from "convex/react";
 import { useState } from "react";
 import { t } from "../i18n/ar";
 import { setAdminToken } from "../lib/adminSession";
+
+const PIN_LENGTH = 6;
 
 type ErrorCode = keyof typeof t.signIn.errors;
 
@@ -43,6 +46,10 @@ export function SignInPage() {
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorCode | null>(null);
+  const [pasteEmpty, setPasteEmpty] = useState(false);
+  // Some browsers have no clipboard API at all, whatever the types say.
+  const clipboard = navigator.clipboard as Clipboard | undefined;
+  const canPaste = typeof clipboard?.readText === "function";
   const confirmPin = useAction(api.adminAuth.confirmPin);
   const live = useQuery(
     api.verification.status,
@@ -103,6 +110,19 @@ export function SignInPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Fills the field from what WhatsApp's "copy code" button copied (the browser may ask first). */
+  async function paste() {
+    let text = "";
+    try {
+      text = (await clipboard?.readText()) ?? "";
+    } catch {
+      // Refused or unreadable: same as an empty clipboard.
+    }
+    const digits = normalizeDigits(text).replace(/\D/gu, "");
+    setPasteEmpty(digits.length !== PIN_LENGTH);
+    if (digits.length === PIN_LENGTH) setPin(digits);
   }
 
   async function confirm() {
@@ -182,7 +202,10 @@ export function SignInPage() {
             <span>{t.signIn.pinLabel}</span>
             <input
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => {
+                setPin(e.target.value);
+                setPasteEmpty(false);
+              }}
               inputMode="numeric"
               autoComplete="one-time-code"
               autoFocus
@@ -191,6 +214,20 @@ export function SignInPage() {
               className="rounded-ui border-2 border-line bg-white p-3 text-center text-2xl tracking-[0.4em]"
             />
           </label>
+          {pasteEmpty && (
+            <p role="alert" className="text-center text-saffron-ink">
+              {t.signIn.pinPasteEmpty}
+            </p>
+          )}
+          {canPaste && (
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void paste()}
+            >
+              {t.signIn.pinPaste}
+            </Button>
+          )}
           <Button type="submit" disabled={busy || pin.trim() === ""}>
             {t.signIn.confirm}
           </Button>

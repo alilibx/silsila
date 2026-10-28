@@ -31,13 +31,11 @@ import { bumpCounter, dubaiDay, signInKey } from "./lib/stats";
 import { insertSession } from "./sessions";
 import { cleanDisplayName, maskPhone, normalizeDigits } from "./lib/text";
 import {
-  accountCreatedAlert,
   env,
   isDev,
   MAX_SCANNED_TEXT,
-  pinReply,
-  sendWhatsAppText,
-  signInAlert,
+  sendPin,
+  sendSignInAlert,
   verificationMessage,
   whatsappConfigured,
 } from "./whatsapp";
@@ -198,13 +196,6 @@ async function completeSignIn(
   });
   await ctx.db.patch(doc._id, { status: "claimed", pinHash: undefined });
   return sessionId;
-}
-
-/** New-account alert when this sign-in created the person, else the normal one. */
-function alertFor(created: boolean, deviceLabel: string, alertToken: string) {
-  return created
-    ? accountCreatedAlert(deviceLabel, alertToken)
-    : signInAlert(deviceLabel, alertToken);
 }
 
 /** Fresh session + alert tokens; raw values stay in the action. */
@@ -672,13 +663,15 @@ export const claim = action({
     });
     switch (res.kind) {
       case "ok":
-        await sendWhatsAppText(
+        await sendSignInAlert(
           res.phone,
-          alertFor(res.created, deviceLabel, tokens.alertToken),
+          res.created,
+          deviceLabel,
+          tokens.alertToken,
         );
         return { sessionToken: tokens.sessionToken };
       case "needs_pin":
-        if (res.phone) await sendWhatsAppText(res.phone, pinReply(pin));
+        if (res.phone) await sendPin(res.phone, pin);
         return { error: "needs_pin" };
       default:
         return { error: "expired" };
@@ -719,9 +712,11 @@ export const confirmPin = action({
     );
     switch (res.kind) {
       case "ok":
-        await sendWhatsAppText(
+        await sendSignInAlert(
           res.phone,
-          alertFor(res.created, deviceLabel, tokens.alertToken),
+          res.created,
+          deviceLabel,
+          tokens.alertToken,
         );
         return {
           sessionToken: tokens.sessionToken,

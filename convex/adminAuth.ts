@@ -11,7 +11,7 @@ import { randomToken, sha256Hex, timingSafeEqual } from "./lib/crypto";
 import { normalizeDigits } from "./lib/digits";
 import { getSetting } from "./lib/settings";
 import { cleanDeviceLabel } from "./verification";
-import { adminSignInAlert, sendWhatsAppText } from "./whatsapp";
+import { sendAdminSignInAlert } from "./whatsapp";
 
 type ConfirmResult =
   | { kind: "ok"; phone: string }
@@ -94,10 +94,7 @@ export const confirmPin = action({
       deviceLabel,
     });
     if (res.kind !== "ok") return { error: res.kind };
-    await sendWhatsAppText(
-      res.phone,
-      adminSignInAlert(deviceLabel, alertToken),
-    );
+    await sendAdminSignInAlert(res.phone, deviceLabel, alertToken);
     return { adminToken };
   },
 });

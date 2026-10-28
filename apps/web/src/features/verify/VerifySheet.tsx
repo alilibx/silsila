@@ -193,11 +193,24 @@ function ConfirmStep({ v }: StepProps) {
   );
 }
 
-/** One real input, drawn as six boxes: paste, autofill and the keyboard all behave like a normal field. */
+/** Reads the clipboard where the browser allows it (it may ask first); null elsewhere. */
+function clipboardReader(): (() => Promise<string>) | null {
+  const clipboard =
+    typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  return clipboard?.readText ? () => clipboard.readText() : null;
+}
+
+/**
+ * One real input, drawn as six boxes: paste, autofill and the keyboard all behave like a normal
+ * field. Phones never suggest a code that came by WhatsApp, and long-pressing an invisible field
+ * is hard to find, so a button pastes what WhatsApp's "copy code" button copied.
+ */
 function PinStep({ v }: StepProps) {
   const [pin, setPin] = useState("");
   const [focused, setFocused] = useState(false);
+  const [pasteError, setPasteError] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const readClipboard = clipboardReader();
 
   async function submit(value: string) {
     await v.submitPin(value);
@@ -211,8 +224,24 @@ function PinStep({ v }: StepProps) {
       .replace(/\D/gu, "")
       .slice(0, PIN_LENGTH);
     setPin(digits);
+    setPasteError(false);
     if (digits.length === PIN_LENGTH && !v.busy) void submit(digits);
   };
+
+  async function paste(read: () => Promise<string>) {
+    let text = "";
+    try {
+      text = await read();
+    } catch {
+      // Refused or unreadable: same as an empty clipboard.
+    }
+    const digits = normalizeDigits(text).replace(/\D/gu, "");
+    if (digits.length !== PIN_LENGTH) {
+      setPasteError(true);
+      return;
+    }
+    onChange(digits);
+  }
 
   return (
     <form
@@ -261,20 +290,31 @@ function PinStep({ v }: StepProps) {
           autoFocus
           value={pin}
           disabled={v.busy}
-          aria-invalid={v.error !== null}
-          aria-describedby={v.error ? "verify-pin-error" : undefined}
+          aria-invalid={v.error !== null || pasteError}
+          aria-describedby={
+            v.error || pasteError ? "verify-pin-error" : undefined
+          }
           onChange={(event) => onChange(event.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           className="absolute inset-0 size-full cursor-text opacity-0"
         />
       </div>
-      {v.error && (
+      {(v.error || pasteError) && (
         <p id="verify-pin-error" role="alert" className={errorText}>
-          {v.error}
+          {pasteError ? t.verify.pinPasteEmpty : v.error}
         </p>
       )}
       <div className="mt-5 grid gap-3">
+        {readClipboard && (
+          <Button
+            variant="ghost"
+            disabled={v.busy}
+            onClick={() => void paste(readClipboard)}
+          >
+            {t.verify.pinPaste}
+          </Button>
+        )}
         <Button type="submit" disabled={v.busy || pin.length !== PIN_LENGTH}>
           {t.verify.pinSubmit}
         </Button>

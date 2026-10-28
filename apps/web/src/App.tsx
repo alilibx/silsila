@@ -5,6 +5,7 @@ import { HelpButton } from "./features/help/HelpButton";
 import { HelpProvider } from "./features/help/helpUi";
 import { useClaimVisitorHelp } from "./features/help/useClaimVisitorHelp";
 import { useHelpDeepLink } from "./features/help/useHelpDeepLink";
+import { OpenInBrowser } from "./features/status/OpenInBrowser";
 import { StatusBanners } from "./features/status/StatusBanners";
 import { useTouch } from "./lib/useTouch";
 import { CreatePage } from "./pages/CreatePage";
@@ -29,6 +30,7 @@ export function App() {
     <HandoffGate>
       <HelpProvider>
         <StatusBanners />
+        <OpenInBrowser />
         <HelpButton />
         <HelpDeepLink />
         <Routes>

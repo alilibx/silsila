@@ -195,6 +195,56 @@ describe("VerifySheet", () => {
       await waitFor(() => expect(onVerified).toHaveBeenCalledTimes(1));
     });
 
+    it("pastes the code copied from WhatsApp with one tap, and submits it", async () => {
+      const user = userEvent.setup();
+      m.confirmPin.mockResolvedValue({ sessionToken: "tok", otherSessions: 0 });
+      const readText = vi.fn().mockResolvedValue(" 654321 ");
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { readText },
+      });
+      ui();
+      await signInStart(user);
+      await user.click(
+        await screen.findByRole("button", { name: t.verify.pinPaste }),
+      );
+      expect(readText).toHaveBeenCalledTimes(1);
+      expect(m.confirmPin).toHaveBeenCalledWith(
+        expect.objectContaining({ pin: "654321" }),
+      );
+    });
+
+    it("says so when the clipboard has no code", async () => {
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { readText: vi.fn().mockResolvedValue("مرحبا") },
+      });
+      ui();
+      await signInStart(user);
+      await user.click(
+        await screen.findByRole("button", { name: t.verify.pinPaste }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        t.verify.pinPasteEmpty,
+      );
+      expect(m.confirmPin).not.toHaveBeenCalled();
+    });
+
+    it("hides the paste button where the browser can't read the clipboard", async () => {
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: undefined,
+      });
+      ui();
+      await signInStart(user);
+      await screen.findByText(t.verify.pinTitle);
+      expect(
+        screen.queryByRole("button", { name: t.verify.pinPaste }),
+      ).not.toBeInTheDocument();
+    });
+
     it("a wrong pin shows the message and clears the input", async () => {
       const user = userEvent.setup();
       m.confirmPin.mockResolvedValue({ error: "wrong_pin" });

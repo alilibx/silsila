@@ -79,6 +79,38 @@ describe("SignInPage", () => {
     expect(m.statusArgs).toEqual({ verificationId: "v1", secret: "s1" });
   });
 
+  it("pastes the code copied from WhatsApp into the field", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText: vi.fn().mockResolvedValue(" 654321 ") },
+    });
+    const { rerender } = await startSignIn();
+    m.status = { status: "needs_pin", maskedPhone: null };
+    rerender(<SignInPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: t.signIn.pinPaste }),
+    );
+    expect(screen.getByLabelText(t.signIn.pinLabel)).toHaveValue("654321");
+  });
+
+  it("says so when the clipboard has no code", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText: vi.fn().mockResolvedValue("hello") },
+    });
+    const { rerender } = await startSignIn();
+    m.status = { status: "needs_pin", maskedPhone: null };
+    rerender(<SignInPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: t.signIn.pinPaste }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.signIn.pinPasteEmpty,
+    );
+  });
+
   it("takes the code in Arabic digits and stores the admin token", async () => {
     m.confirmPin.mockResolvedValue({ adminToken: "tok" });
     const { rerender } = await startSignIn();

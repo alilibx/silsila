@@ -31,7 +31,7 @@ Plan 2 answers that the way Ali put it: **"this is to help, not to shame."**
 
 ### Non-goals (plan 2)
 
-- WhatsApp messages sent by the app (reminders, alerts). They need Meta-approved templates and opt-in consent, so they come later.
+- WhatsApp messages sent by the app (reminders, alerts). They need Meta-approved templates and opt-in consent, so they come later. Since then, the WhatsApp templates design (`2026-10-29-wirdak-whatsapp-templates-design.md`, ARQ-275) sends notifications on WhatsApp to people who opt in.
 - The admin panel. That's plan 3. Plan 2 adds new settings with defaults in code (section 9); plan 3 makes them editable.
 - The English UI, the mobile apps, reading the Quran in the app, and AI. These are unchanged from the v1 spec.
 - A member leaving a khatma on their own. It isn't in the v1 spec, and "I can't finish it" already lets anyone step back from a juz' **[builder's call]**.
