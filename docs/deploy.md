@@ -176,6 +176,24 @@ After that, admins add and remove admins in the panel (المشرفون). Every 
 
 **Signing in.** WhatsApp, like the website, but the 6-digit code step is always required and only allowlisted numbers get in. On staging the code goes through the production relay like member sign-ins (see "WhatsApp on staging"). Admin sessions end 12 hours after sign-in. Every sign-in sends a WhatsApp alert whose link ends all of that admin's sessions.
 
+### Admin stats and alerts
+
+The admin dashboard reads one `dailyStats` row per Dubai day (plan 3 spec 6.2). After the first deploy of plan 3c to an environment, fill in the past days once:
+
+```sh
+bun run convex run stats:backfill --deployment manzilo:wirdak:<staging|production>
+```
+
+It's safe to run again: each day's row is rewritten, not added. It also marks the milestones already passed, so launch doesn't push a burst of old ones. Sign-in success has no history before 3c, because verifications are purged after a day.
+
+The crons that keep it going:
+
+| Cron | When | What |
+| ---- | ---- | ---- |
+| `roll up yesterday's stats` | daily, 00:10 Dubai (20:10 UTC) | Writes yesterday's row, and catches up any day a failed run missed. |
+| `send the admins' morning summary` | hourly, at minute 5 | At the `summaryHour` setting (Dubai time), pushes yesterday's numbers once to admins with the summary alert on. |
+| `push milestones` | every 10 minutes | When a total passes a milestone, marks it and pushes it, at most one per `milestonePushSpacingMs`. |
+
 ### Local only
 
 `CONVEX_DEPLOYMENT`, `CONVEX_URL` and `CONVEX_SITE_URL` in `.env.local` point at the local anonymous backend (git-ignored). `bun run e2e` sets `WIRDAK_ENV=dev`, `SITE_URL` and `WHATSAPP_PUBLIC_NUMBER` on that local backend itself and refuses to run if a WhatsApp token is set there. The VAPID keys are left unset locally, so dev logs `push skipped (no VAPID)` instead of pushing. With `WIRDAK_ENV=dev`, `dev:forceGraceEnd` ends a juz' grace at once (see the README); it refuses on any other value.

@@ -52,12 +52,23 @@ export function AdminPushCard() {
       <h2 className="font-semibold">{t.adminPush.title}</h2>
       {mine.thisDevice ? (
         <>
-          <SwitchRow
-            label={t.adminPush.help}
-            on={mine.notifyHelp}
-            disabled={busy}
-            onChange={(on) => void setNotify({ adminToken, kind: "help", on })}
-          />
+          {(
+            [
+              ["help", t.adminPush.help, mine.notifyHelp],
+              ["summary", t.adminPush.summary, mine.notifySummary],
+              ["milestones", t.adminPush.milestones, mine.notifyMilestones],
+            ] as const
+          ).map(([kind, label, on]) => (
+            <SwitchRow
+              key={kind}
+              label={label}
+              on={on}
+              disabled={busy}
+              onChange={(next) =>
+                void setNotify({ adminToken, kind, on: next })
+              }
+            />
+          ))}
           <button
             type="button"
             disabled={busy}
