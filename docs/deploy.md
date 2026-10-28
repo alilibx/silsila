@@ -21,6 +21,8 @@ GitHub Actions does every deploy. Vercel's Git integration is off (`"git": {"dep
 
 Before 1.0 a `feat:` bumps the minor version and a `fix:` the patch (`bump-minor-pre-major`). A `feat!:` or a `BREAKING CHANGE:` footer bumps the minor version too, until 1.0.
 
+release-please runs only after the staging deploy succeeds, so production only gets code that reached staging first. If staging itself is broken (an expired key, a Convex outage) and production needs a fix, push the tag by hand (`git tag vX.Y.Z && git push origin vX.Y.Z`) and run the Deploy workflow for production with that tag. Then fix staging.
+
 Pull requests opened by release-please use the workflow's `GITHUB_TOKEN`, so GitHub does not run `ci.yml` on them. They only touch `package.json`, `CHANGELOG.md` and `.release-please-manifest.json`, and the code they release already passed the checks on `main`.
 
 ### Redeploy or roll back
@@ -36,9 +38,13 @@ For an instant web-only rollback, `vercel rollback` (or "Instant Rollback" in th
 
 ```sh
 vercel pull --environment=<staging|production>
-vercel build --target=staging      # or: vercel build --prod
-vercel deploy --prebuilt --target=staging   # or: vercel deploy --prebuilt --prod
+vercel build --target=<staging|production>
+vercel deploy --prebuilt --target=<staging|production>
 ```
+
+`VERCEL_TOKEN` reaches only these three steps and `CONVEX_DEPLOY_KEY` only the build, never `pnpm install`. Production checks out `refs/tags/<ref>`, so a branch named like a tag cannot be deployed.
+
+Every push to `main` gets its own run. Deploys to one environment queue one at a time (`concurrency: deploy-<environment>`); when several pile up, GitHub keeps only the newest waiting one, so staging always ends on the latest commit.
 
 `vercel build` runs the build command from `apps/web/vercel.json`:
 
