@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
+import { isHeld } from "./grace";
 import { JUZ_COUNT } from "./lib/juz";
 import { paceSettings, personPace } from "./lib/pace";
 import { getSetting } from "./lib/settings";
@@ -24,8 +25,7 @@ export const reminderDue = internalMutation({
     const a = await ctx.db.get(args.assignmentId);
     if (
       !a ||
-      a.finishedAt !== null ||
-      a.releasedAt !== null ||
+      !isHeld(a) ||
       a.openedForHelpAt !== null ||
       a.remindedAt !== null ||
       a.noticeSentAt !== null
@@ -136,8 +136,12 @@ export const behindCheck = internalMutation({
     for (const member of members) {
       const { paceMs } = await personPace(ctx, member.personId, settings);
       capacity += Math.floor(remainingMs / paceMs);
-      if (heldAssignment(assignments, member.personId)) capacity -= 1;
-      else free.push({ member, paceMs });
+      // A hold opened for help is already counted as an open juz' above, so
+      // only a hold the reader is still working on takes one off their capacity.
+      const held = heldAssignment(assignments, member.personId);
+      if (held) {
+        if (held.openedForHelpAt === null) capacity -= 1;
+      } else free.push({ member, paceMs });
     }
     if (remainingMs > 0 && open <= capacity) return;
 

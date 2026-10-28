@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
-import { endGraceIfDue } from "./grace";
+import { endGraceIfDue, isHeld } from "./grace";
 import { randomToken } from "./lib/crypto";
 import { isDev } from "./whatsapp";
 
@@ -47,9 +47,7 @@ export const forceGraceEnd = internalMutation({
         q.eq("roundId", roundId).eq("juz", args.juz),
       )
       .collect();
-    const hold = rows.find(
-      (a) => a.finishedAt === null && a.releasedAt === null,
-    );
+    const hold = rows.find(isHeld);
     if (!hold) throw new Error(`juz ${args.juz} has no current hold`);
     await endGraceIfDue(ctx, hold, hold.graceEndsAt);
   },

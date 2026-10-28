@@ -145,7 +145,8 @@ export default defineSchema({
     .index("by_person_khatma", ["personId", "khatmaId", "clearedAt"])
     .index("by_khatma_kind", ["khatmaId", "kind", "clearedAt"])
     .index("by_assignment", ["assignmentId"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_clearedAt", ["clearedAt"]),
 
   pushSubscriptions: defineTable({
     personId: v.id("people"),

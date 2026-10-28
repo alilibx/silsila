@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { alertOrganizer, scheduleGrace } from "./grace";
+import { alertOrganizer, isHeld, scheduleGrace } from "./grace";
 import { graceTimes, graceWakingMs } from "./lib/grace";
 import { JUZ_COUNT } from "./lib/juz";
 import { personPace } from "./lib/pace";
@@ -166,7 +166,7 @@ export const take = sessionMutation({
       .withIndex("by_round", (q) => q.eq("roundId", round._id))
       .filter((q) => q.eq(q.field("personId"), person._id))
       .collect();
-    if (mine.some((a) => a.finishedAt === null && a.releasedAt === null)) {
+    if (mine.some(isHeld)) {
       return soft("already_holding");
     }
 
@@ -219,12 +219,7 @@ export const take = sessionMutation({
 
     const takenAt = Date.now();
     // Someone else's hold that opened for help ends quietly, with thanks.
-    const helped = sameJuz.find(
-      (a) =>
-        a.finishedAt === null &&
-        a.releasedAt === null &&
-        a.openedForHelpAt !== null,
-    );
+    const helped = sameJuz.find((a) => isHeld(a) && a.openedForHelpAt !== null);
     if (helped) {
       await ctx.db.patch(helped._id, {
         releasedAt: takenAt,

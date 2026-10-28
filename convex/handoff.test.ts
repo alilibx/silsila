@@ -236,20 +236,79 @@ test("redeem refreshes the person's time zone, cleaned", async () => {
   expect((await t.run((ctx) => ctx.db.get(personId)))?.timeZone).toBe("UTC");
 });
 
-test("redeem is rate-limited and answers the same invalid", async () => {
-  const t = convexTest(schema, modules);
-  const { token } = await signedIn(t);
-  const raw = await mint(t, token);
+async function setRedeemLimit(t: T, perMinute: number) {
   await t.run((ctx) =>
     ctx.db.insert("settings", {
       key: "handoffRedeemGlobalPerMinute",
-      value: 0,
+      value: perMinute,
       updatedAt: 0,
     }),
   );
+}
+
+test("unknown tokens spend the global limit and past it still answer invalid", async () => {
+  const t = convexTest(schema, modules);
+  await setRedeemLimit(t, 10); // one hit per shard
+  const results = [];
+  for (let i = 0; i < 200; i++) {
+    results.push(
+      await t.action(api.handoff.redeem, {
+        token: `garbage${i}`,
+        timeZone: "UTC",
+      }),
+    );
+  }
+  expect(results.every((r) => "error" in r && r.error === "invalid")).toBe(
+    true,
+  );
+  const buckets = await t.run((ctx) => ctx.db.query("rateLimits").collect());
+  expect(buckets.length).toBeGreaterThan(0);
+  expect(buckets.every((b) => b.key.startsWith("handoffRedeem:global:"))).toBe(
+    true,
+  );
+});
+
+test("a flood of unknown tokens never blocks a valid redeem", async () => {
+  const t = convexTest(schema, modules);
+  const { token } = await signedIn(t);
+  const raw = await mint(t, token);
+  await setRedeemLimit(t, 10);
+  // exhaust every shard of the global bucket with misses
+  for (let i = 0; i < 200; i++) {
+    await t.action(api.handoff.redeem, {
+      token: `garbage${i}`,
+      timeZone: "UTC",
+    });
+  }
+  // a further miss is refused by the limiter, a real token is not
   expect(
-    await t.action(api.handoff.redeem, { token: raw, timeZone: "UTC" }),
+    await t.action(api.handoff.redeem, {
+      token: "garbage-more",
+      timeZone: "UTC",
+    }),
   ).toEqual({ error: "invalid" });
-  const rows = await t.run((ctx) => ctx.db.query("handoffTokens").collect());
-  expect(rows[0]?.usedAt).toBeNull();
+  const res = await t.action(api.handoff.redeem, {
+    token: raw,
+    timeZone: "UTC",
+  });
+  expect("sessionToken" in res).toBe(true);
+});
+
+test("a real token, used or expired, never touches the limiter and answers the same invalid", async () => {
+  const t = convexTest(schema, modules);
+  const { token } = await signedIn(t);
+  const used = await mint(t, token);
+  const expired = await mint(t, token);
+  await t.action(api.handoff.redeem, { token: used, timeZone: "UTC" });
+  vi.setSystemTime(NOW + 30 * MIN + 1);
+  await setRedeemLimit(t, 0);
+  expect(
+    await t.action(api.handoff.redeem, { token: used, timeZone: "UTC" }),
+  ).toEqual({ error: "invalid" });
+  expect(
+    await t.action(api.handoff.redeem, { token: expired, timeZone: "UTC" }),
+  ).toEqual({ error: "invalid" });
+  expect(await t.run((ctx) => ctx.db.query("rateLimits").collect())).toEqual(
+    [],
+  );
 });

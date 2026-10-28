@@ -452,6 +452,49 @@ test("behind invite goes to the fastest free members first and never to holders"
   expect((await roundOf(t, khatma._id)).behindInvitedAt).not.toBeNull();
 });
 
+test("a hold opened for help counts once: as an open juz', not also as lost capacity", async () => {
+  const { t, org, khatma } = await behindSetup();
+  const round = await roundOf(t, khatma._id);
+  // 1.5 days left: every member (pace 1 day) can read 1 more juz'
+  vi.setSystemTime((round.targetEndAt as number) - 1.5 * DAY);
+
+  const free = [org];
+  for (let i = 0; i < 7; i++) {
+    const who = await signedIn(t, `حر${i}`);
+    await join(t, khatma._id, who);
+    free.push(who);
+  }
+  const helpers: Who[] = [];
+  for (let i = 0; i < 3; i++) {
+    const who = await signedIn(t, `مساعد${i}`);
+    await join(t, khatma._id, who);
+    helpers.push(who);
+  }
+  for (const who of [...free, ...helpers]) {
+    await seedPace(t, khatma, who, 1.0 * DAY);
+  }
+  for (let juz = 1; juz <= 16; juz++) {
+    await insertDone(t, khatma, org, juz, 1.0 * DAY);
+  }
+  for (const [i, who] of helpers.entries()) {
+    await insertHeld(t, khatma, who, 17 + i);
+  }
+  await t.run(async (ctx) => {
+    for (const a of await ctx.db.query("assignments").collect()) {
+      if (a.finishedAt === null) {
+        await ctx.db.patch(a._id, { openedForHelpAt: Date.now() });
+      }
+    }
+  });
+  // open = 30 - 16 done = 14 (the 3 opened holds are open); capacity = 11
+  // members x 1 = 11, so the shortfall is 3. Taking 1 more off for each opened
+  // hold would give capacity 8 and invite 6.
+  await sweep(t);
+
+  const notes = await t.run((ctx) => ctx.db.query("notes").collect());
+  expect(notes.filter((n) => n.kind === "behind")).toHaveLength(3);
+});
+
 test("taking a juz' clears the taker's behind invite and kills its queued push", async () => {
   const { t, org, code, khatma } = await behindSetup();
   const round = await roundOf(t, khatma._id);

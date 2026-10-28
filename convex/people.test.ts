@@ -3,6 +3,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
+import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
+import { touchPerson } from "./people";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -204,4 +207,24 @@ test("a held juz' shows its reader their pace in days, and others nothing", asyn
   });
   if ("notFound" in held) throw new Error("not found");
   expect(held.me.hold?.paceDays).toBe(2);
+});
+
+test("touch writes only what changed: nothing at all when the person was seen within the hour in the same zone", async () => {
+  const person = {
+    _id: "p1",
+    lastSeenAt: NOW - 1000,
+    timeZone: "Asia/Dubai",
+  } as unknown as Doc<"people">;
+  const patch = vi.fn();
+  const ctx = { db: { patch } } as unknown as MutationCtx;
+
+  await touchPerson(ctx, person, NOW, "Asia/Dubai");
+  expect(patch).not.toHaveBeenCalled();
+
+  await touchPerson(ctx, person, NOW, "Europe/London");
+  expect(patch).toHaveBeenLastCalledWith("p1", { timeZone: "Europe/London" });
+
+  await touchPerson(ctx, person, NOW + HOUR, "Asia/Dubai");
+  expect(patch).toHaveBeenLastCalledWith("p1", { lastSeenAt: NOW + HOUR });
+  expect(patch).toHaveBeenCalledTimes(2);
 });

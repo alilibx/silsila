@@ -41,6 +41,7 @@ export const purge = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     const notesRetention = await getSetting(ctx, "notesRetentionMs");
+    const notesUnclearedCap = await getSetting(ctx, "notesUnclearedCapMs");
 
     const rateLimits = await ctx.db
       .query("rateLimits")
@@ -59,10 +60,28 @@ export const purge = internalMutation({
       )
       .take(BATCH + 1);
 
-    const notes = await ctx.db
+    // Notes stay while they apply (a monthly round outlives 30 days, and its
+    // `behind` notes are how nobody is invited twice in a round). Cleared notes
+    // go `notesRetention` after clearing. `gt(0)` keeps the `null` of an
+    // uncleared note out of the range. An uncleared note is deleted only past
+    // the safety cap. A note can match both, so merge by id.
+    const clearedNotes = await ctx.db
       .query("notes")
-      .withIndex("by_createdAt", (q) => q.lt("createdAt", now - notesRetention))
+      .withIndex("by_clearedAt", (q) =>
+        q.gt("clearedAt", 0).lt("clearedAt", now - notesRetention),
+      )
       .take(BATCH + 1);
+    const cappedNotes = await ctx.db
+      .query("notes")
+      .withIndex("by_createdAt", (q) =>
+        q.lt("createdAt", now - notesUnclearedCap),
+      )
+      .take(BATCH + 1);
+    const notes = [
+      ...new Map(
+        [...clearedNotes, ...cappedNotes].map((n) => [n._id, n] as const),
+      ).values(),
+    ];
     const handoffs = await ctx.db
       .query("handoffTokens")
       .withIndex("by_createdAt", (q) => q.lt("createdAt", now - HANDOFF_TTL_MS))

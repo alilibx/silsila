@@ -1,4 +1,6 @@
 import { ConvexError, v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { paceDays, personPace, weekStreak } from "./lib/pace";
 import { checkRateLimit } from "./lib/rateLimit";
 import {
@@ -35,24 +37,33 @@ export const updateDisplayName = sessionMutation({
 });
 
 /**
+ * Records that `person` was just here (at most once an hour, the same as the
+ * session's `lastUsedAt`) and keeps their time zone current. Writes only when
+ * one of the two changed.
+ */
+export async function touchPerson(
+  ctx: MutationCtx,
+  person: Doc<"people">,
+  now: number,
+  timeZone: string,
+): Promise<void> {
+  const changes: Partial<Pick<Doc<"people">, "lastSeenAt" | "timeZone">> = {};
+  if (now - person.lastSeenAt >= LAST_USED_REFRESH_MS) changes.lastSeenAt = now;
+  if (timeZone !== person.timeZone) changes.timeZone = timeZone;
+  if (Object.keys(changes).length > 0) await ctx.db.patch(person._id, changes);
+}
+
+/**
  * The app calls this when it opens or comes back to the foreground. Records
- * that the caller was just here (at most once an hour, the same as the
- * session's `lastUsedAt`) and keeps their time zone current, which waking time
- * and quiet hours read. Signed-out callers get `{ ok: false }`.
+ * that the caller was just here and keeps their time zone current, which
+ * waking time and quiet hours read. Signed-out callers get `{ ok: false }`.
  */
 export const touch = sessionMutation({
   args: { timeZone: v.string() },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
     const person = ctx.person;
     if (!person) return { ok: false };
-    const now = Date.now();
-    const timeZone = cleanTimeZone(args.timeZone);
-    await ctx.db.patch(person._id, {
-      ...(now - person.lastSeenAt >= LAST_USED_REFRESH_MS
-        ? { lastSeenAt: now }
-        : {}),
-      ...(timeZone !== person.timeZone ? { timeZone } : {}),
-    });
+    await touchPerson(ctx, person, Date.now(), cleanTimeZone(args.timeZone));
     return { ok: true };
   },
 });

@@ -18,6 +18,8 @@ const m = vi.hoisted(() => ({
     handOver: vi.fn(),
   },
   resetInvite: vi.fn(),
+  /** When set, navigate() does nothing, so a test can stop between the action and the route change. */
+  holdNavigation: false,
 }));
 
 vi.mock("../lib/session", () => ({
@@ -25,6 +27,18 @@ vi.mock("../lib/session", () => ({
   getSessionToken: () => "tok",
   clearSessionToken: () => {},
 }));
+vi.mock("react-router", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-router")>("react-router");
+  return {
+    ...actual,
+    useNavigate: () => {
+      const navigate = actual.useNavigate();
+      return ((...args: Parameters<typeof navigate>) =>
+        m.holdNavigation ? undefined : navigate(...args)) as typeof navigate;
+    },
+  };
+});
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
@@ -87,6 +101,7 @@ describe("OrganizerPage", () => {
       f.mockReset().mockResolvedValue({ ok: true }),
     );
     m.resetInvite.mockReset().mockResolvedValue({ inviteCode: "NEWCODE" });
+    m.holdNavigation = false;
     m.settings = structuredClone(organizerView);
   });
 
@@ -465,5 +480,53 @@ describe("OrganizerPage", () => {
     expect(await screen.findByText("khatma-page")).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/j\/NEWCODE\|/);
     expect(visited).not.toContain("/j/CODE");
+  });
+
+  it("the old code turning forbidden after the reset succeeds but before the route changes does not bounce", async () => {
+    m.holdNavigation = true;
+    const user = userEvent.setup();
+    const view = renderPage();
+    await user.click(
+      within(section(t.organizer.resetHeading)).getByRole("button", {
+        name: t.organizer.reset,
+      }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: t.organizer.resetConfirm,
+      }),
+    );
+    await vi.waitFor(() => expect(m.resetInvite).toHaveBeenCalled());
+    await act(async () => {});
+    // The action resolved and navigate() was called, but the route is still the old one.
+    m.settings = { forbidden: true };
+    view.rerender(tree());
+    expect(screen.queryByText("khatma-page")).toBeNull();
+    expect(screen.getByTestId("where")).toHaveTextContent(
+      /^\/j\/CODE\/settings\|/,
+    );
+    expect(visited).not.toContain("/j/CODE");
+  });
+
+  it("a failed reset gives the page back: a later forbidden state still leaves it", async () => {
+    m.resetInvite.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    const view = renderPage();
+    await user.click(
+      within(section(t.organizer.resetHeading)).getByRole("button", {
+        name: t.organizer.reset,
+      }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: t.organizer.resetConfirm,
+      }),
+    );
+    expect(
+      await within(section(t.organizer.resetHeading)).findByRole("alert"),
+    ).toBeInTheDocument();
+    m.settings = { forbidden: true };
+    view.rerender(tree());
+    expect(await screen.findByText("khatma-page")).toBeInTheDocument();
   });
 });

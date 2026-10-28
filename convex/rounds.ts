@@ -6,6 +6,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { isHeld } from "./grace";
 import { onRoundCompleted } from "./hooks";
 import { JUZ_COUNT } from "./lib/juz";
 import { targetEndFor } from "./lib/schedule";
@@ -52,14 +53,7 @@ export function heldAssignment(
   assignments: readonly Doc<"assignments">[],
   personId: Id<"people">,
 ): Doc<"assignments"> | null {
-  return (
-    assignments.find(
-      (a) =>
-        a.personId === personId &&
-        a.finishedAt === null &&
-        a.releasedAt === null,
-    ) ?? null
-  );
+  return assignments.find((a) => a.personId === personId && isHeld(a)) ?? null;
 }
 
 /**

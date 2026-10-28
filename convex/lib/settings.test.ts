@@ -75,6 +75,7 @@ test("defaults match the spec", () => {
     organizerInactiveMs: 30 * 86_400_000,
     successorActiveMs: 7 * 86_400_000,
     notesRetentionMs: 30 * 86_400_000,
+    notesUnclearedCapMs: 180 * 86_400_000,
     handoffTtlMs: 30 * 60_000,
     previewPerIpPerMinute: 30,
     handoffRedeemGlobalPerMinute: 60,

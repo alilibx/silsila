@@ -71,21 +71,23 @@ export const redeemInternal = internalMutation({
     timeZone: v.string(),
   },
   handler: async (ctx, args): Promise<boolean> => {
-    const allowed = await checkShardedRateLimit(
-      ctx,
-      "handoffRedeem:global",
-      await getSetting(ctx, "handoffRedeemGlobalPerMinute"),
-      MINUTE_MS,
-    );
-    if (!allowed) return false;
-
     const row = await ctx.db
       .query("handoffTokens")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
       .first();
-    if (!row || row.usedAt !== null || Date.now() >= row.expiresAt) {
+    // Only a guess (a hash nobody holds) spends the global bucket, so a flood
+    // of random tokens can't lock out a real one. Every failure is still the
+    // same `false`.
+    if (!row) {
+      await checkShardedRateLimit(
+        ctx,
+        "handoffRedeem:global",
+        await getSetting(ctx, "handoffRedeemGlobalPerMinute"),
+        MINUTE_MS,
+      );
       return false;
     }
+    if (row.usedAt !== null || Date.now() >= row.expiresAt) return false;
     const creator = await ctx.db.get(row.sessionId);
     if (!creator || creator.personId !== row.personId) return false;
     const person = await ctx.db.get(row.personId);

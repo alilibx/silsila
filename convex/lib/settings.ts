@@ -42,7 +42,10 @@ export const SETTING_DEFAULTS = {
   openForHelpBatchMs: HOUR,
   organizerInactiveMs: 30 * DAY,
   successorActiveMs: 7 * DAY,
+  /** how long a cleared note is kept after it was cleared */
   notesRetentionMs: 30 * DAY,
+  /** safety cap: an uncleared note this old is deleted anyway */
+  notesUnclearedCapMs: 180 * DAY,
   handoffTtlMs: 30 * MINUTE,
   previewPerIpPerMinute: 30,
   handoffRedeemGlobalPerMinute: 60,

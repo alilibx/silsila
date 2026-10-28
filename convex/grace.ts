@@ -7,7 +7,7 @@ import { getSetting, quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
 
 /** Neither finished nor released: the reader still has it (opened for help or not). */
-function isHeld(a: Doc<"assignments">): boolean {
+export function isHeld(a: Doc<"assignments">): boolean {
   return a.finishedAt === null && a.releasedAt === null;
 }
 

@@ -176,8 +176,12 @@ function OrganizerContent({
             replace: true,
             state: { openInvite: true },
           });
-        } finally {
+        } catch (error) {
+          // Only a failed reset gives the old code back. After a success the
+          // page is about to leave, so the flag stays and the old code's
+          // forbidden state can't bounce the organizer to the dead link.
           resetting.current = false;
+          throw error;
         }
         return null;
       });
