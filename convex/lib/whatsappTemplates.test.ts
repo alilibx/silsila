@@ -21,7 +21,7 @@ const note = (kind: NoteKind, juz = [12]) => ({
 test("every note kind maps to its template and body values", () => {
   const cases: [NoteKind, string, string[]][] = [
     ["almostUp", "wirdak_almost_up", ["١٢"]],
-    ["openForHelp", "wirdak_open_for_help_v2", ["١٢"]],
+    ["openForHelp", "wirdak_open_for_help_v3", ["١٢"]],
     ["thanks", "wirdak_juz_helped", ["١٢"]],
     ["reminder", "wirdak_reminder_v2", ["١٢"]],
     ["completed", "wirdak_completed_v2", []],
@@ -47,21 +47,19 @@ test("open for help with several ajza' uses the plural template", () => {
     "https://wirdak.app",
     NOW,
   );
-  expect(t.name).toBe(OPEN_FOR_HELP_MANY);
-  expect(t.body).toEqual(["٣، ١٢ و١٥"]);
+  expect(t?.name).toBe(OPEN_FOR_HELP_MANY);
+  expect(t?.body).toEqual(["٣، ١٢ و١٥"]);
 });
 
-test("behind carries the count, and the day only while it is ahead", () => {
-  const behind = (until: number | null) =>
+test("behind never goes to WhatsApp", () => {
+  expect(
     noteTemplate(
-      { kind: "behind", juz: [], count: 3, until },
+      { kind: "behind", juz: [], count: 3, until: NOW + 2 * DAY },
       khatma,
       "https://wirdak.app",
       NOW,
-    ).body;
-  expect(behind(NOW + 2 * DAY)).toEqual(["٣ أجزاء قبل السبت"]);
-  expect(behind(NOW - DAY)).toEqual(["٣ أجزاء"]);
-  expect(behind(null)).toEqual(["٣ أجزاء"]);
+    ),
+  ).toBeNull();
 });
 
 test("khatmaTitle: the name as one clean line, or the untitled date", () => {

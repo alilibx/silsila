@@ -82,16 +82,18 @@ Each template has the khatma's title as its header, the note's own text as its b
 | Name | Note kind | Body |
 | --- | --- | --- |
 | `wirdak_almost_up` | almostUp | مهلة الجزء {{1}} أوشكت على الانتهاء. هل تحتاج وقتاً أطول؟ |
-| `wirdak_open_for_help_v2` | openForHelp, 1 juz' | تحديث على الختمة التي تنظّمها: الجزء {{1}} لم يعد محجوزاً لأحد، وصار متاحاً لأي عضو. |
-| `wirdak_open_for_help_many_v2` | openForHelp, 2 or more | تحديث على الختمة التي تنظّمها: الأجزاء {{1}} لم تعد محجوزة لأحد، وصارت متاحة لأي عضو. |
+| `wirdak_open_for_help_v3` | openForHelp, 1 juz' | تحديث على الختمة التي تنظّمها: الجزء {{1}} عاد إلى الأجزاء غير المحجوزة. |
+| `wirdak_open_for_help_many_v3` | openForHelp, 2 or more | تحديث على الختمة التي تنظّمها: الأجزاء {{1}} عادت إلى الأجزاء غير المحجوزة. |
 | `wirdak_juz_helped` | thanks | تحديث على حجزك: عضو آخر يُكمل الآن الجزء {{1}} الذي كان محجوزاً لك، فلم يعد عليك. |
 | `wirdak_reminder_v2` | reminder | تذكير بحجزك: الجزء {{1}} محجوز لك في هذه الختمة، ولم يُسجَّل أنك أتممته بعد. |
-| `wirdak_behind_v2` | behind | تحديث على الختمة: لتنتهي في موعدها تحتاج {{1}}، وهذه الأجزاء غير محجوزة الآن. |
+| (none) | behind | Not sent on WhatsApp: in-app and push only. |
 | `wirdak_completed_v2` | completed | تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين كلها. |
 | `wirdak_now_organizer_v2` | nowOrganizer | تغيير في دورك: أصبحت منظّم هذه الختمة. |
 | `wirdak_organizer_moved_v2` | organizerMoved | تغيير في دورك: انتقل تنظيم هذه الختمة إلى عضو آخر لأنك لم تفتح وِردك منذ مدة. ما زلت عضواً فيها. |
 
 **What review taught us (2026-10-29).** The first versions used `noteText` word for word, with the opt-out footer. Meta approved 8 of the 9 as MARKETING: it read the prayers ("يسّر الله لك", "جزاك الله خيراً"), the questions ("هل تأخذ…؟") and the opt-out footer as promotional. Only `wirdak_almost_up` passed as UTILITY. Ali approved neutral rewordings, written as updates on the member's own booking, role or khatma, with no footer. They're submitted under `_v2` names, because a deleted template's name stays taken. Every URL button has Meta's click tracking off, so invite codes don't pass through Meta's tracker. `wirdak_almost_up` keeps its first wording and footer.
+
+The second round was MARKETING again for both "open for help" templates ("صار متاحاً لأي عضو" reads as an invitation) and for `behind`. The organizer alerts became plain status updates (`_v3`, "returned to the unbooked ajza'"). `behind` invites members who hold nothing to take a juz', which is a call to take part however it's worded, so Ali chose to keep it off WhatsApp (in-app and push only).
 
 Body parameters:
 

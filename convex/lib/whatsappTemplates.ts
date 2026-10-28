@@ -23,24 +23,27 @@ export function cleanParam(value: string): string {
 }
 
 /**
- * The approved utility template for each note kind (Meta's names, `ar`).
- * Each has the khatma title as its header and an "open the khatma" button
- * on `https://wirdak.app/{{1}}`. The bodies are plain updates about the
- * member's own khatma, not `noteText`'s wording, which Meta read as
- * marketing; `_v2` because a deleted template's name stays taken for a while.
+ * The approved utility template for each note kind (Meta's names, `ar`), or
+ * null for a kind that never goes to WhatsApp. Each has the khatma title as
+ * its header and an "open the khatma" button on `https://wirdak.app/{{1}}`.
+ * The bodies are plain updates about the member's own booking, role or
+ * khatma, not `noteText`'s wording, which Meta read as marketing. Suffixes
+ * count rewordings, because a deleted template's name stays taken.
  */
-export const NOTE_TEMPLATES: Record<NoteKind, string> = {
+export const NOTE_TEMPLATES: Record<NoteKind, string | null> = {
   almostUp: "wirdak_almost_up",
-  openForHelp: "wirdak_open_for_help_v2",
+  openForHelp: "wirdak_open_for_help_v3",
   thanks: "wirdak_juz_helped",
   reminder: "wirdak_reminder_v2",
-  behind: "wirdak_behind_v2",
+  // An invitation to members who hold nothing, which Meta counts as
+  // marketing however it's worded: in-app and push only.
+  behind: null,
   completed: "wirdak_completed_v2",
   nowOrganizer: "wirdak_now_organizer_v2",
   organizerMoved: "wirdak_organizer_moved_v2",
 };
 /** "Open for help" with two or more ajza': Arabic agreement needs its own body. */
-export const OPEN_FOR_HELP_MANY = "wirdak_open_for_help_many_v2";
+export const OPEN_FOR_HELP_MANY = "wirdak_open_for_help_many_v3";
 
 /** A template header holds at most 60 characters. */
 const MAX_HEADER = 60;
@@ -73,16 +76,21 @@ export function buttonSuffix(inviteCode: string, site: string): string {
   return site === STAGING_SITE ? `stg/j/${inviteCode}` : `j/${inviteCode}`;
 }
 
-/** The template that carries a note, with its header, body and button values. */
+/**
+ * The template that carries a note, with its header, body and button values;
+ * null for a kind that never goes to WhatsApp.
+ */
 export function noteTemplate(
   note: NoteTextInput,
   khatma: { name: string | null; createdAt: number; inviteCode: string },
   site: string,
   now: number = Date.now(),
-): TemplateMessage {
+): TemplateMessage | null {
   const many = note.kind === "openForHelp" && note.juz.length > 1;
+  const name = many ? OPEN_FOR_HELP_MANY : NOTE_TEMPLATES[note.kind];
+  if (name === null) return null;
   return {
-    name: many ? OPEN_FOR_HELP_MANY : NOTE_TEMPLATES[note.kind],
+    name,
     header: khatmaTitle(khatma),
     body: noteParams(note, now),
     buttonParam: buttonSuffix(khatma.inviteCode, site),

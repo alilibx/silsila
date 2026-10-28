@@ -7,6 +7,7 @@ import type { NoteKind } from "./lib/noteText";
 import { sessionMutation, sessionQuery } from "./lib/session";
 import { quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
+import { NOTE_TEMPLATES } from "./lib/whatsappTemplates";
 
 export type { NoteKind };
 
@@ -64,7 +65,7 @@ export async function notify(
   const person = member?.notificationsOn ? await ctx.db.get(n.personId) : null;
   if (!person) return noteId;
   const at = nextAwake(now, person.timeZone, await quietHours(ctx));
-  if (person.whatsappNotes) {
+  if (person.whatsappNotes && NOTE_TEMPLATES[n.kind] !== null) {
     await ctx.scheduler.runAt(at, internal.whatsappNotes.deliver, { noteId });
   }
   const subscription = await ctx.db

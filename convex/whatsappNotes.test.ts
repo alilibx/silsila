@@ -145,6 +145,23 @@ test("nothing goes to WhatsApp without the opt-in or with the khatma's notificat
   expect(sent).toEqual([]);
 });
 
+test("a behind invite isn't sent on WhatsApp", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await setup(t);
+  await t.run((ctx) =>
+    notify(ctx, {
+      personId: ali.personId,
+      khatmaId: ali.khatmaId,
+      kind: "behind",
+      count: 3,
+      until: NOW + 2 * 86_400_000,
+      roundNumber: 1,
+    }),
+  );
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
+});
+
 test("deliver skips when opted out after scheduling", async () => {
   const t = convexTest(schema, modules);
   const ali = await setup(t);
@@ -234,7 +251,7 @@ test("a grown openForHelp alert is not sent again on WhatsApp", async () => {
   await alert(7);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent.map((s) => s.text)).toEqual([
-    `[wirdak_open_for_help_v2] ختمة رمضان | ٣ | j/${organizer.inviteCode}`,
+    `[wirdak_open_for_help_v3] ختمة رمضان | ٣ | j/${organizer.inviteCode}`,
   ]);
 });
 
@@ -263,7 +280,7 @@ test("sendSample sends a template on staging and refuses on production", async (
     many: true,
   });
   expect(sent.map((s) => s.text)).toEqual([
-    `[wirdak_open_for_help_many_v2] ختمة رمضان | ٣، ١٢ و١٥ | j/${ali.inviteCode}`,
+    `[wirdak_open_for_help_many_v3] ختمة رمضان | ٣، ١٢ و١٥ | j/${ali.inviteCode}`,
   ]);
   vi.stubEnv("WIRDAK_ENV", "prod");
   await expect(

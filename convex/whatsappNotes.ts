@@ -10,7 +10,7 @@ import { activeMembership } from "./khatmas";
 import { NOTE_KINDS, type NoteKind } from "./lib/noteText";
 import { quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
-import { noteTemplate } from "./lib/whatsappTemplates";
+import { NOTE_TEMPLATES, noteTemplate } from "./lib/whatsappTemplates";
 import { sendWhatsAppTemplate, siteUrl } from "./whatsapp";
 
 // Convex provides `process.env`; the project doesn't pull in @types/node.
@@ -36,6 +36,7 @@ export const plan = internalQuery({
   > => {
     const note = await ctx.db.get(args.noteId);
     if (!note || note.clearedAt !== null || note.whatsappSentAt) return null;
+    if (NOTE_TEMPLATES[note.kind] === null) return null;
     const member = await activeMembership(ctx, note.khatmaId, note.personId);
     if (!member?.notificationsOn) return null;
     const person = await ctx.db.get(note.personId);
@@ -81,11 +82,10 @@ export const deliver = internalAction({
       );
       return;
     }
+    const message = noteTemplate(plan.note, plan.khatma, siteUrl());
+    if (!message) return;
     await ctx.runMutation(internal.whatsappNotes.markSent, args);
-    await sendWhatsAppTemplate(
-      plan.phone,
-      noteTemplate(plan.note, plan.khatma, siteUrl()),
-    );
+    await sendWhatsAppTemplate(plan.phone, message);
   },
 });
 
@@ -144,9 +144,8 @@ export const sendSample = internalAction({
       count: 3,
       until: now + 2 * 86_400_000,
     };
-    return await sendWhatsAppTemplate(
-      args.phone,
-      noteTemplate(note, khatma, siteUrl(), now),
-    );
+    const message = noteTemplate(note, khatma, siteUrl(), now);
+    if (!message) throw new Error(`${args.kind} never goes to WhatsApp`);
+    return await sendWhatsAppTemplate(args.phone, message);
   },
 });
