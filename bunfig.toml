@@ -1,0 +1,4 @@
+[install]
+# pnpm's strict layout: a package sees only the dependencies it declares. Pinned here so a
+# regenerated bun.lock or a new Bun default can't silently switch to a hoisted node_modules.
+linker = "isolated"

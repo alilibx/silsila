@@ -49,7 +49,7 @@ Every push to `main` gets its own run. Deploys to one environment queue one at a
 `vercel build` runs the build command from `apps/web/vercel.json`:
 
 ```sh
-cd ../.. && bunx convex deploy --check-build-environment "${CONVEX_CHECK_BUILD_ENVIRONMENT:-enable}" --cmd 'bun run --filter web build' --cmd-url-env-var-name VITE_CONVEX_URL
+cd ../.. && bun run convex deploy --check-build-environment "${CONVEX_CHECK_BUILD_ENVIRONMENT:-enable}" --cmd 'bun run --filter web build' --cmd-url-env-var-name VITE_CONVEX_URL
 ```
 
 The project's root directory is `apps/web`, so the command first moves to the repository root (where `convex/` and the `convex` CLI live). `convex deploy` pushes the functions to the deployment that `CONVEX_DEPLOY_KEY` belongs to, then runs `bun run --filter web build` with `VITE_CONVEX_URL` set to that deployment's URL. If the push fails, the web build never runs, so a site cannot ship without its backend. The web app derives the HTTP actions URL (`https://<name>.eu-west-1.convex.site`) from `VITE_CONVEX_URL` when `VITE_CONVEX_SITE_URL` is unset (`apps/web/src/lib/env.ts`).
@@ -62,7 +62,7 @@ Names only. Values never go in the repo.
 
 ### Convex deployments
 
-Set per deployment in the Convex dashboard (Settings, Environment Variables) or with `bunx convex env set --deployment manzilo:wirdak:<staging|production> NAME <value>`. Staging and production need the same names. `WIRDAK_ENV` is `staging` and `SITE_URL` is `https://stg.wirdak.app` on staging.
+Set per deployment in the Convex dashboard (Settings, Environment Variables) or with `bun run convex env set --deployment manzilo:wirdak:<staging|production> NAME <value>`. Staging and production need the same names. `WIRDAK_ENV` is `staging` and `SITE_URL` is `https://stg.wirdak.app` on staging.
 
 | Name                       | What it is for                                                                                                          | How to rotate                                                                                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -85,7 +85,7 @@ Each deployment answers `whatsapp_not_configured` from `/api/verification/start`
 
 | Name                | Kind                         | What it is for                                                                                       | How to rotate                                                                                                                                                                                      |
 | ------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONVEX_DEPLOY_KEY` | Secret, environment `staging`    | Deploy key for `manzilo:wirdak:staging`. Lets the staging build push functions.                       | `bunx convex deployment token create <name> --deployment manzilo:wirdak:staging \| gh secret set CONVEX_DEPLOY_KEY --env staging`, run the Deploy workflow for staging, then delete the old key in the Convex dashboard. |
+| `CONVEX_DEPLOY_KEY` | Secret, environment `staging`    | Deploy key for `manzilo:wirdak:staging`. Lets the staging build push functions.                       | `bun run convex deployment token create <name> --deployment manzilo:wirdak:staging \| gh secret set CONVEX_DEPLOY_KEY --env staging`, run the Deploy workflow for staging, then delete the old key in the Convex dashboard. |
 | `CONVEX_DEPLOY_KEY` | Secret, environment `production` | Deploy key for `manzilo:wirdak:production`.                                                       | The same with `--deployment manzilo:wirdak:production` and `--env production`. Redeploy the current tag to confirm.                                                                                |
 | `VERCEL_TOKEN`      | Secret, repository           | Vercel token scoped to the team `arqqin` ("wirdak github actions (team)"). The Vercel CLI cannot use project-scoped tokens: `vercel pull` also reads the user and the team, which such tokens are refused. | Create a new token scoped to the `arqqin` team (Vercel, Account Settings, Tokens), `gh secret set VERCEL_TOKEN`, run a deploy, then delete the old token. |
 | `VERCEL_ORG_ID`     | Variable                     | The Vercel team (`arqqin`, Manzilo Global).                                                           | Not a secret.                                                                                                                                                                                      |
@@ -100,10 +100,10 @@ Until all three `VAPID_*` values are set, nothing is pushed: `pushNode.deliver` 
 Generate a key pair once per deployment (dev and production get different pairs):
 
 ```sh
-npx web-push generate-vapid-keys
-bunx convex env set --deployment manzilo:wirdak:<staging|production> VAPID_PUBLIC_KEY <public key>
-bunx convex env set --deployment manzilo:wirdak:<staging|production> VAPID_PRIVATE_KEY <private key>
-bunx convex env set --deployment manzilo:wirdak:<staging|production> VAPID_SUBJECT mailto:<contact address>
+bun run web-push generate-vapid-keys
+bun run convex env set --deployment manzilo:wirdak:<staging|production> VAPID_PUBLIC_KEY <public key>
+bun run convex env set --deployment manzilo:wirdak:<staging|production> VAPID_PRIVATE_KEY <private key>
+bun run convex env set --deployment manzilo:wirdak:<staging|production> VAPID_SUBJECT mailto:<contact address>
 ```
 
 Staging and production each get their own pair. Never commit the private key.
@@ -123,7 +123,7 @@ Nothing else is set by hand. The Convex deploy keys live in GitHub, and `VITE_CO
 
 Settings: root directory `apps/web`, "Include source files outside of the Root Directory" on (the web app imports from `convex/` through the `@convex` alias, and the link-preview function imports `convex/lib/digits.ts`), framework Vite, Node 22, custom environment `staging` with the domain `stg.wirdak.app`, production domains `wirdak.app` and `www.wirdak.app` (redirect). The domain is registered at Vercel and uses Vercel DNS, so there are no records to manage.
 
-Link previews: `/j/:code` is rewritten to the Vercel function `apps/web/api/invite.ts`, which fetches `${WIRDAK_CONVEX_SITE_URL}/api/preview` and injects Open Graph tags into `index.html` so WhatsApp shows the khatma name, progress and inviter. If either variable is missing, or Convex is slow or rate-limiting, the page still loads with generic tags and is not cached. The function fetches its own `/index.html`, so `/j/*` links fail (502) if Vercel Authentication or Deployment Protection is ever turned on for an environment. `apps/web/public/og.png` is rendered from `scripts/images/og.html` with `bunx tsx scripts/render-images.ts` (needs `bunx playwright install chromium` once); commit the PNG after changing the HTML.
+Link previews: `/j/:code` is rewritten to the Vercel function `apps/web/api/invite.ts`, which fetches `${WIRDAK_CONVEX_SITE_URL}/api/preview` and injects Open Graph tags into `index.html` so WhatsApp shows the khatma name, progress and inviter. If either variable is missing, or Convex is slow or rate-limiting, the page still loads with generic tags and is not cached. The function fetches its own `/index.html`, so `/j/*` links fail (502) if Vercel Authentication or Deployment Protection is ever turned on for an environment. `apps/web/public/og.png` is rendered from `scripts/images/og.html` with `bun run tsx scripts/render-images.ts` (needs `bun run playwright install chromium` once); commit the PNG after changing the HTML.
 
 ### Local only
 
@@ -143,7 +143,7 @@ The admin panel (plan 3) will live at `admin.wirdak.app` as its own Vercel proje
 
 Plan 2 (grace, notes, push, hand-off, previews) adds the steps below. No agent could run the device checks (5, 6, 8, 10), so they are yours. Try each on staging (`stg.wirdak.app`) first, then production.
 
-4. **Generate the VAPID keys and set them on both Convex deployments.** One pair per deployment, set with `bunx convex env set --deployment manzilo:wirdak:<staging|production> …` (see "Web Push keys"). Without them nothing is pushed; in-app notes still work.
+4. **Generate the VAPID keys and set them on both Convex deployments.** One pair per deployment, set with `bun run convex env set --deployment manzilo:wirdak:<staging|production> …` (see "Web Push keys"). Without them nothing is pushed; in-app notes still work.
 5. **Desktop Chrome push round trip.** Open the site in desktop Chrome, take a juz', press "فعّل الإشعارات" in the prompt, and allow notifications. Then end that juz' grace and check that the push arrives and that tapping it opens the khatma. `dev:forceGraceEnd` refuses outside dev, so create the khatma with the minimum grace of 30 minutes (the create page's grace field) and wait; pushes are held between 22:00 and 07:00 in your time zone, so run this in the daytime.
 6. **Real iPhone hand-off (iOS 16.4 or later).** In Safari open the site, sign in, take a juz', and follow the install steps ("أضف وِردك إلى الشاشة الرئيسية"). Open Wirdak from the home screen and confirm that it is signed in without a WhatsApp verification and that the push prompt appears. Two fallbacks, in order: if iOS opens the home-screen app signed out, change the manifest URL in `installHandoffManifest` from `blob:` to a `data:` URL (one line) and try again; if iOS ignores `start_url` entirely, do not put the token in the page address (it would land in history and referrers): stop and decide how else to carry the sign-in across.
 7. **Set the preview secret on both sides, per environment.** For staging and for production, generate a random string and set it as `PREVIEW_SECRET` on that Convex deployment and in Vercel for the matching environment, plus `WIRDAK_CONVEX_SITE_URL` in Vercel (`https://basic-mockingbird-167.eu-west-1.convex.site` for staging, `https://healthy-rabbit-33.eu-west-1.convex.site` for production). Redeploy with the Deploy workflow. Leave "Include source files outside of the Root Directory" enabled: `apps/web/api/invite.ts` imports `convex/lib/digits.ts`.

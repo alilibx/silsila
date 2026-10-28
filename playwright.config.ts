@@ -42,7 +42,7 @@ export default defineConfig({
   webServer: [
     {
       // Local anonymous backend; ready once the functions are pushed.
-      command: "bunx convex dev --tail-logs disable",
+      command: "bun run convex dev --tail-logs disable",
       env: { CONVEX_AGENT_MODE: "anonymous" },
       wait: { stderr: /Convex functions ready/ },
       timeout: 180_000,
@@ -51,7 +51,7 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGINT", timeout: 15_000 },
     },
     {
-      command: `bunx vite --host localhost --port ${WEB_PORT} --strictPort`,
+      command: `bun run vite --host localhost --port ${WEB_PORT} --strictPort`,
       cwd: "apps/web",
       env: {
         VITE_CONVEX_URL: `http://127.0.0.1:${CONVEX_PORT}`,

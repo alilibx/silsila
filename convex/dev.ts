@@ -7,7 +7,7 @@ import { isDev } from "./whatsapp";
 
 /**
  * Dev-only stand-in for a WhatsApp message arriving at the webhook:
- * `npx convex run dev:simulateIncoming '{"from":"971501234567","text":"…"}'`.
+ * `bun run convex run dev:simulateIncoming '{"from":"971501234567","text":"…"}'`.
  */
 export const simulateIncoming = internalAction({
   args: { from: v.string(), text: v.string() },
@@ -27,7 +27,7 @@ export const simulateIncoming = internalAction({
  * Dev-only: ends the grace of the current hold of a juz' right now, the way the
  * scheduled `grace.endDue` would at its end (same checks, same effects), so a
  * test needn't wait hours:
- * `npx convex run dev:forceGraceEnd '{"inviteCode":"…","juz":5}'`.
+ * `bun run convex run dev:forceGraceEnd '{"inviteCode":"…","juz":5}'`.
  */
 export const forceGraceEnd = internalMutation({
   args: { inviteCode: v.string(), juz: v.number() },

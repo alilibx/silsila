@@ -16,6 +16,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       # Bun installs packages; Vite, Vitest, Convex and the rest still run on Node.
       - uses: actions/setup-node@v4
         with:

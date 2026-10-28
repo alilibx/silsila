@@ -15,7 +15,7 @@ const BACKEND_ENV: Record<string, string> = {
 const REAL_WHATSAPP = ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"];
 
 const convex = (...args: string[]) =>
-  run("bunx", ["convex", ...args], { cwd: root });
+  run("bun", ["run", "convex", ...args], { cwd: root });
 
 /** Runs after the webServers are up (the backend has pushed its functions). */
 export default async function globalSetup(): Promise<void> {
@@ -26,7 +26,7 @@ export default async function globalSetup(): Promise<void> {
   if (present.length > 0) {
     throw new Error(
       `Refusing to run e2e: the local backend has ${present.join(", ")} set, so it would message real phones. ` +
-        `Remove them first: bunx convex env remove <NAME>`,
+        `Remove them first: bun run convex env remove <NAME>`,
     );
   }
   for (const [name, value] of Object.entries(BACKEND_ENV)) {
