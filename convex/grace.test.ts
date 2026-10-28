@@ -801,3 +801,46 @@ test("notifications off: no push scheduled, note still exists, juz still opens",
   expectNear((await rowOf(t, khatma._id, 3)).openedForHelpAt, row.graceEndsAt);
   expect(await scheduled(t, "pushNode")).toHaveLength(0);
 });
+
+test("dev:forceGraceEnd refuses outside dev and leaves the hold alone", async () => {
+  const { t, code, khatma } = await setup();
+  const ali = await signedIn(t, "علي");
+  await take(t, code, ali, 5);
+
+  for (const env of ["prod", ""]) {
+    vi.stubEnv("WIRDAK_ENV", env);
+    await expect(
+      t.mutation(internal.dev.forceGraceEnd, { inviteCode: code, juz: 5 }),
+    ).rejects.toThrow(/only when WIRDAK_ENV is dev/);
+  }
+  vi.unstubAllEnvs();
+  expect((await rowOf(t, khatma._id, 5)).openedForHelpAt).toBeNull();
+});
+
+test("dev:forceGraceEnd opens the current hold of a juz in dev, and only a held one", async () => {
+  const { t, org, code, khatma } = await setup();
+  const ali = await signedIn(t, "علي");
+  const bob = await signedIn(t, "B");
+  await join(t, khatma._id, bob);
+  await take(t, code, bob, 6);
+  await release(t, code, bob); // an old, released row for juz' 6
+  await take(t, code, ali, 6);
+  vi.stubEnv("WIRDAK_ENV", "dev");
+  try {
+    await t.mutation(internal.dev.forceGraceEnd, { inviteCode: code, juz: 6 });
+    const opened = await rowOf(t, khatma._id, 6);
+    expect(opened.personId).toBe(ali.personId);
+    expectNear(opened.openedForHelpAt, Date.now());
+    // the organizer is told, the same as at a real grace end
+    expect(uncleared(await notesOf(t, org, "openForHelp"))).toHaveLength(1);
+    const view = await viewAs(t, code, org);
+    expect(view.tiles[5]?.state).toBe("open");
+
+    // no hold left to end
+    await expect(
+      t.mutation(internal.dev.forceGraceEnd, { inviteCode: code, juz: 9 }),
+    ).rejects.toThrow(/no current hold/);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

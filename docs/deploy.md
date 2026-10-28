@@ -59,7 +59,7 @@ pnpm exec convex env set --prod VAPID_SUBJECT mailto:<contact address>
 
 Leave out `--prod` for the dev deployment. Never commit the private key.
 
-Rotating: generate a new pair and set both values. A subscription is bound to the public key it was created with, so rotating invalidates every stored subscription: the push services reject pushes to them (usually with 403). Browsers subscribe again with the new key on their next visit to the app (Task 9 of plan 2 builds that), and the stored row for the same endpoint is replaced, so nobody gets pushes until they have opened Wirdak once. Only rotate if the private key leaked.
+Rotating: generate a new pair and set both values. A subscription is bound to the public key it was created with, so rotating invalidates every stored subscription: the push services reject pushes to them (usually with 403). Browsers subscribe again with the new key on their next visit to the app (the web app re-syncs its subscription on load), and the stored row for the same endpoint is replaced, so nobody gets pushes until they have opened Wirdak once. Only rotate if the private key leaked.
 
 ### Vercel project `wirdak-web`
 
@@ -80,7 +80,7 @@ There is no GitHub secret: CI deploys nothing.
 
 ### Local only
 
-`CONVEX_DEPLOYMENT`, `CONVEX_URL` and `CONVEX_SITE_URL` in `.env.local` point at the local anonymous backend (git-ignored). `pnpm e2e` sets `WIRDAK_ENV=dev`, `SITE_URL` and `WHATSAPP_PUBLIC_NUMBER` on that local backend itself and refuses to run if a WhatsApp token is set there.
+`CONVEX_DEPLOYMENT`, `CONVEX_URL` and `CONVEX_SITE_URL` in `.env.local` point at the local anonymous backend (git-ignored). `pnpm e2e` sets `WIRDAK_ENV=dev`, `SITE_URL` and `WHATSAPP_PUBLIC_NUMBER` on that local backend itself and refuses to run if a WhatsApp token is set there. The VAPID keys are left unset locally, so dev logs `push skipped (no VAPID)` instead of pushing. With `WIRDAK_ENV=dev`, `dev:forceGraceEnd` ends a juz' grace at once (see the README); it refuses on any other value.
 
 ## Checklist (Ali)
 
@@ -93,6 +93,15 @@ These need accounts and real systems, so they are not automated.
 5. **Point the domain** `wirdak.app` at Vercel (ARQ-249), then make sure `SITE_URL` in Convex is exactly `https://wirdak.app`. The admin panel (plan 2) will live at `admin.wirdak.app` as its own Vercel project.
 6. **WhatsApp setup (ARQ-246).** In the Meta app, set the webhook callback URL to `https://<prod>.convex.site/whatsapp/webhook` and the verify token to the value of `WHATSAPP_VERIFY_TOKEN`, then subscribe to `messages`. Set the six `WHATSAPP_*` variables in Convex production.
 7. **Real-phone test.** On a real phone open the production site, start a khatma, press the WhatsApp button, send the ready-made message, confirm "نعم، هذا رقمي", then create a khatma, take a juz', and finish it. Repeat with a second phone using the invite link.
+
+Plan 2 (grace, notes, push, hand-off, previews) adds the steps below. No agent could run the device checks (9, 10, 12, 13), so they are yours.
+
+8. **Generate the VAPID keys and set them in Convex production.** `npx web-push generate-vapid-keys`, then `pnpm exec convex env set --prod VAPID_PUBLIC_KEY <public>`, the same for `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT mailto:<your address>` (see "Web Push keys"). Without them nothing is pushed; in-app notes still work.
+9. **Desktop Chrome push round trip.** Open the production site in desktop Chrome, take a juz', press "فعّل الإشعارات" in the prompt, and allow notifications. Then end that juz' grace and check that the push arrives and that tapping it opens the khatma. `dev:forceGraceEnd` refuses on production, so create the khatma with the minimum grace of 30 minutes (the create page's grace field) and wait; pushes are held between 22:00 and 07:00 in your time zone, so run this in the daytime.
+10. **Real iPhone hand-off (iOS 16.4 or later).** In Safari open the production site, sign in, take a juz', and follow the install steps ("أضف وِردك إلى الشاشة الرئيسية"). Open Wirdak from the home screen and confirm that it is signed in without a WhatsApp verification and that the push prompt appears. Two fallbacks, in order: if iOS opens the home-screen app signed out, change the manifest URL in `installHandoffManifest` from `blob:` to a `data:` URL (one line) and try again; if iOS ignores `start_url` entirely, do not put the token in the page address (it would land in history and referrers): stop and decide how else to carry the sign-in across.
+11. **Set the preview secret on both sides.** Generate a random string and set it as `PREVIEW_SECRET` in Convex production and as `PREVIEW_SECRET` in Vercel (Production), plus `WIRDAK_CONVEX_SITE_URL` in Vercel (`https://<prod>.convex.site`). Redeploy Vercel. Leave "Include source files outside of the Root Directory" enabled: `apps/web/api/invite.ts` imports `convex/lib/digits.ts`.
+12. **Check a WhatsApp link preview.** Paste a real invite link (`https://wirdak.app/j/<code>`) into a WhatsApp chat and confirm the card shows the khatma name, its progress, and the inviter, with the Wirdak image. If it shows the generic card, check the two preview variables and the Vercel function log.
+13. **Real-iPhone push.** From the home-screen app, enable push and repeat the round trip from step 9 on the iPhone (a pushed note arrives, tapping it opens the khatma).
 
 ## First cloud deploy: check the client IP
 
@@ -107,5 +116,3 @@ Client IP addresses exist only inside the `verifyStart:ip:<address>` rate-limit 
 - **Content-Security-Policy.** `vercel.json` has no CSP on purpose: it must allow the Convex origins (`https://*.convex.cloud` for the client, including `wss:`) and the Google Fonts origins, and a wrong CSP breaks the site silently. Add one deliberately, in report-only mode first.
 - **End-to-end test in CI.** `pnpm e2e` runs only on a developer machine. CI would need the Playwright Chromium install and the Convex local backend binary download.
 - **Self-host the fonts (M9).** `apps/web/index.html` loads Readex Pro, Aref Ruqaa and Amiri Quran from Google Fonts, which tells Google about every visit and fails offline. Serve them from `apps/web/public` (with their licences) and drop the Google origins from the future CSP.
-- **Refresh `lastUsedAt` on views (M8).** `sessionQuery` never writes, so a session's "last used" date (settings, the devices step) moves only when the person takes, finishes, or otherwise changes something. Someone who only looks at the khatma appears idle. Add a cheap, rate-limited "touch" mutation the app calls on open.
-- **Manifest icons.** `apps/web/public/manifest.webmanifest` has no icons yet, so "add to home screen" gets a generic icon.

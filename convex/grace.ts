@@ -134,6 +134,21 @@ export const noticeDue = internalMutation({
 });
 
 /**
+ * What `endDue` does for a job scheduled for `endsAt`: open the juz' unless the
+ * job is stale (the end has moved) or the row is no longer held or already open.
+ */
+export async function endGraceIfDue(
+  ctx: MutationCtx,
+  a: Doc<"assignments">,
+  endsAt: number,
+): Promise<void> {
+  if (!isHeld(a) || a.openedForHelpAt !== null || a.graceEndsAt !== endsAt) {
+    return;
+  }
+  await openForHelpNow(ctx, a);
+}
+
+/**
  * Opens the juz' for help when its grace ends. `endsAt` is the end this job
  * was scheduled for; a job for an end that has since moved (an extension) is
  * stale and does nothing, as does one for a row no longer held or already
@@ -143,14 +158,6 @@ export const endDue = internalMutation({
   args: { assignmentId: v.id("assignments"), endsAt: v.number() },
   handler: async (ctx, args) => {
     const a = await ctx.db.get(args.assignmentId);
-    if (
-      !a ||
-      !isHeld(a) ||
-      a.openedForHelpAt !== null ||
-      a.graceEndsAt !== args.endsAt
-    ) {
-      return;
-    }
-    await openForHelpNow(ctx, a);
+    if (a) await endGraceIfDue(ctx, a, args.endsAt);
   },
 });

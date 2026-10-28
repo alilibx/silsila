@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { t } from "../apps/web/src/i18n/ar";
-import { blockExternal, randomPhone, verifyInSheet } from "./support";
+import {
+  blockExternal,
+  dismissPushPrompt,
+  randomPhone,
+  verifyInSheet,
+} from "./support";
 
 const KHATMA_NAME = "ختمة الأسرة";
 
@@ -50,6 +55,8 @@ test("core loop: create, take, finish, invite, join", async ({
   ).toBeVisible();
   await takeSheet.getByRole("button", { name: t.take.confirm }).click();
   await expect(page.getByText(t.card.held)).toBeVisible();
+  // The first juz' in a browser offers push once; the answer is "not now".
+  await dismissPushPrompt(page);
   const mine = page.getByRole("button", { name: new RegExp(t.tile.mine) });
   await expect(mine).toHaveCount(1);
   const firstJuzLabel = (await mine.getAttribute("aria-label")) ?? "";
@@ -98,6 +105,7 @@ test("core loop: create, take, finish, invite, join", async ({
       .getByRole("button", { name: t.take.confirm })
       .click();
     await expect(b.getByText(t.card.held)).toBeVisible();
+    await dismissPushPrompt(b);
 
     // B sees A's name on exactly one tile: the one A is reading. Never on a done tile.
     const tiles = b.getByRole("button", {
