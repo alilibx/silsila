@@ -8,6 +8,10 @@ import {
   parseIncoming,
   relayIncoming,
   relaySignature,
+  describeMessage,
+  sendPin,
+  sendSignInAlert,
+  sendVerified,
   sendWhatsAppLink,
   sendWhatsAppTemplate,
   whatsappConfigured,
@@ -431,6 +435,54 @@ test("template and link sends in dev without a token log a summary", async () =>
   expect(logged).toContain("wirdak_pin");
   expect(logged).toContain("123456");
   expect(logged).toContain("https://wirdak.example/x");
+});
+
+test("the verified reply links back with a button, not a raw URL", async () => {
+  await sendVerified("+971501234567", "/j/AbC-12_x");
+  await sendVerified("+971501234567");
+  expect(payloads.map(describeMessage)).toEqual([
+    "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.\n[ارجع إلى وِردك] https://wirdak.example/j/AbC-12_x",
+    "تمّ التحقق ✅ ارجع إلى وِردك لتكمل.\n[ارجع إلى وِردك] https://wirdak.example",
+  ]);
+  // the text itself never holds the link
+  const body = (payloads[0]!.interactive as { body: { text: string } }).body;
+  expect(body.text).not.toContain("https://");
+});
+
+test("the sign-in alert puts the sign-out link behind a button", async () => {
+  await sendSignInAlert("+971501234567", false, "iPhone Safari", "tok_123");
+  await sendSignInAlert("+971501234567", true, "iPhone Safari", "tok_456");
+  expect(payloads.map(describeMessage)).toEqual([
+    "تسجيل دخول جديد إلى وِردك من iPhone Safari. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من الأجهزة الأخرى.\n[لستُ أنا] https://wirdak.example/signout?t=tok_123",
+    "تمّ إنشاء حساب في وِردك برقمك من iPhone Safari. إن لم تكن أنت، اضغط «لستُ أنا» لتسجيل الخروج من كل الأجهزة.\n[لستُ أنا] https://wirdak.example/signout?t=tok_456",
+  ]);
+});
+
+test("sendPin sends the PIN template with the PIN on its copy-code button", async () => {
+  expect(await sendPin("+971501234567", "123456")).toBe(true);
+  expect(payloads.map(describeMessage)).toEqual([
+    "[wirdak_pin] 123456 | 123456",
+  ]);
+});
+
+test("sendPin falls back to text when the template fails", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const bodies: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const payload = JSON.parse(String(init.body)) as { type: string };
+      bodies.push(payload);
+      return new Response("{}", {
+        status: payload.type === "template" ? 400 : 200,
+      });
+    }),
+  );
+  expect(await sendPin("+971501234567", "123456")).toBe(true);
+  expect(bodies.map(describeMessage)).toEqual([
+    "[wirdak_pin] 123456 | 123456",
+    "رمز الدخول إلى وِردك: 123456\nهذا الرمز يُدخل جهازاً جديداً إلى حسابك. لا تعطه لأحد، فوِردك لا يطلبه منك أبداً. إن لم تطلبه الآن فتجاهل هذه الرسالة.",
+  ]);
 });
 
 test("cleanParam collapses whitespace WhatsApp refuses in parameters", () => {
