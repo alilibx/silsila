@@ -143,7 +143,14 @@ export function CreatePage() {
             })}
           </div>
         </fieldset>
-        <GraceField value={grace} schedule={schedule} onChange={setGrace} />
+        <GraceField
+          value={grace}
+          schedule={schedule}
+          onChange={(next) => {
+            setGrace(next);
+            setError(null);
+          }}
+        />
 
         {error && (
           <p role="alert" className="mt-4 font-medium text-[#8A2B1E]">

@@ -39,6 +39,15 @@ export function GraceField({ value, schedule, onChange }: Props) {
   const shown = value ?? DEFAULT_GRACE[schedule];
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(String(shown.value));
+  // While the grace still follows the default, a new default (another schedule) replaces the text.
+  const [seen, setSeen] = useState(shown);
+  if (
+    value === null &&
+    (seen.value !== shown.value || seen.unit !== shown.unit)
+  ) {
+    setSeen(shown);
+    setText(String(shown.value));
+  }
   const errorId = useId();
   const invalid = !isValidGrace(shown);
 
@@ -92,7 +101,12 @@ export function GraceField({ value, schedule, onChange }: Props) {
               key={unit}
               type="button"
               aria-pressed={shown.unit === unit}
-              onClick={() => onChange({ value: parseAmount(text), unit })}
+              onClick={() => {
+                const amount = parseAmount(text);
+                // Re-tapping the unit already shown changes nothing, so it must not count as an edit.
+                if (unit === shown.unit && amount === shown.value) return;
+                onChange({ value: amount, unit });
+              }}
               className="min-h-14 flex-1 rounded-ui border-2 border-line bg-card px-3 font-medium aria-pressed:border-green aria-pressed:bg-[#E7F5EC] aria-pressed:text-green-deep"
             >
               {t.grace.units[unit]}

@@ -132,4 +132,30 @@ describe("GraceField", () => {
       screen.getByRole("button", { name: "مهلة كل جزء: ٣ أيام · تغيير" }),
     ).toBeInTheDocument();
   });
+
+  it("an open field still following the default re-syncs when the schedule changes", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <GraceField value={null} schedule="weekly" onChange={() => {}} />,
+    );
+    await user.click(screen.getByRole("button", { name: /تغيير/ }));
+    expect(screen.getByRole("textbox")).toHaveValue("2");
+    rerender(<GraceField value={null} schedule="daily" onChange={() => {}} />);
+    expect(screen.getByRole("textbox")).toHaveValue("6");
+    expect(screen.getByRole("button", { name: "ساعات" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("tapping the unit already shown is not an edit", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<GraceField value={null} schedule="weekly" onChange={onChange} />);
+    await user.click(screen.getByRole("button", { name: /تغيير/ }));
+    await user.click(screen.getByRole("button", { name: "أيام" }));
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "ساعات" }));
+    expect(onChange).toHaveBeenCalledWith({ value: 2, unit: "hours" });
+  });
 });

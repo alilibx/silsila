@@ -302,4 +302,19 @@ describe("CreatePage", () => {
     await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
     expect(m.create).not.toHaveBeenCalled();
   });
+
+  it("the submit-time grace error goes away once the grace is corrected", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /تغيير/ }));
+    await user.click(screen.getByRole("button", { name: "دقائق" }));
+    const input = screen.getByRole("textbox", { name: "المدة" });
+    await user.clear(input);
+    await user.type(input, "10");
+    await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    await user.clear(input);
+    await user.type(input, "45");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

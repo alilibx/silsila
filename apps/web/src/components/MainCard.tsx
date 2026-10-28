@@ -57,7 +57,7 @@ export function MainCard({
         )}
         {hold?.paceDays != null && (
           <p className="mb-4 text-base text-ink-soft">
-            {t.card.pace(Math.min(7, Math.max(1, Math.round(hold.paceDays))))}
+            {t.card.pace(hold.paceDays)}
           </p>
         )}
         <div className="grid gap-3">

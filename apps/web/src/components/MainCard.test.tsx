@@ -185,6 +185,8 @@ describe("MainCard", () => {
     [2, "عادةً تُتمّ الجزء في نحو يومين"],
     [3, "عادةً تُتمّ الجزء في نحو ٣ أيام"],
     [7, "عادةً تُتمّ الجزء في نحو ٧ أيام"],
+    // the server decides the number; the client never clamps or rounds it
+    [12, "عادةً تُتمّ الجزء في نحو ١٢ يوماً"],
   ])("pace of %s days shows its line", (paceDays, text) => {
     render(
       <MainCard
