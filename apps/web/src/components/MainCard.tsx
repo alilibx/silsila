@@ -11,6 +11,8 @@ type Props = {
   onRelease: () => void;
   /** "Still reading": one more grace period, offered only while `hold.canExtend`. */
   onStillReading: () => void;
+  /** "Pick it yourself" on the tabbed page opens the grid's tab; without it the link scrolls. */
+  onPickYourself?: () => void;
   /** A mutation is running: its buttons are disabled so a double tap cannot repeat it. */
   busy?: boolean;
 };
@@ -18,12 +20,16 @@ type Props = {
 const card =
   "rounded-3xl border border-line bg-card p-4.5 shadow-[0_2px_0_rgba(0,0,0,0.03)]";
 
+const pickClass =
+  "inline-flex min-h-14 items-center px-2.5 font-semibold text-green underline underline-offset-4";
+
 export function MainCard({
   view,
   onTake,
   onFinish,
   onRelease,
   onStillReading,
+  onPickYourself,
   busy = false,
 }: Props) {
   const { holding, suggestion, hold } = view.me;
@@ -90,12 +96,19 @@ export function MainCard({
           </p>
         )}
         <div className="text-center">
-          <a
-            href="#pool"
-            className="inline-flex min-h-14 items-center px-2.5 font-semibold text-green underline underline-offset-4"
-          >
-            {t.card.pickYourself}
-          </a>
+          {onPickYourself ? (
+            <button
+              type="button"
+              onClick={onPickYourself}
+              className={pickClass}
+            >
+              {t.card.pickYourself}
+            </button>
+          ) : (
+            <a href="#pool" className={pickClass}>
+              {t.card.pickYourself}
+            </a>
+          )}
         </div>
       </div>
     );

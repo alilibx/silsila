@@ -112,6 +112,13 @@ describe("OrganizerPage", () => {
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/j\/CODE\|/);
   });
 
+  it("links back to the khatma's group tab", () => {
+    renderPage();
+    expect(
+      screen.getByRole("link", { name: t.organizer.back }),
+    ).toHaveAttribute("href", "/j/CODE?tab=group");
+  });
+
   it("shows a loading state until the settings arrive", () => {
     m.settings = undefined;
     renderPage();

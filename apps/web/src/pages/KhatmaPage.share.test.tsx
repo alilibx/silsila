@@ -62,7 +62,7 @@ describe("KhatmaPage invite and remind", () => {
   });
 
   it("shows the two buttons to members only", () => {
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     expect(screen.getByRole("button", { name: "ادعُ أحبابك" })).toBeVisible();
     expect(screen.getByRole("button", { name: "ذكّر المجموعة" })).toBeVisible();
   });
@@ -87,7 +87,7 @@ describe("KhatmaPage invite and remind", () => {
 
   it("the invite sheet fetches the share token and links to WhatsApp with the member link", async () => {
     const user = userEvent.setup();
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     await user.click(screen.getByRole("button", { name: "ادعُ أحبابك" }));
     const link = await screen.findByRole("link", { name: "أرسل على واتساب" });
     expect(m.ensure).toHaveBeenCalledWith({
@@ -119,7 +119,7 @@ describe("KhatmaPage invite and remind", () => {
   it("uses a dated name when the khatma has none", async () => {
     m.view = member({ name: null });
     const user = userEvent.setup();
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     await user.click(screen.getByRole("button", { name: "ادعُ أحبابك" }));
     expect(
       await screen.findByText(/انضم إلينا في «ختمة .*أكتوبر»/),
@@ -129,7 +129,7 @@ describe("KhatmaPage invite and remind", () => {
   it("shows the network copy when the share token cannot be fetched, and no link", async () => {
     m.ensure.mockRejectedValue(new Error("offline"));
     const user = userEvent.setup();
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     await user.click(screen.getByRole("button", { name: "ادعُ أحبابك" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("تعذّر الاتصال");
     expect(screen.queryByRole("link", { name: "أرسل على واتساب" })).toBeNull();
@@ -138,7 +138,7 @@ describe("KhatmaPage invite and remind", () => {
   it("the remind sheet lists open ajza', adds the note, and never names anyone", async () => {
     m.view = member({ targetEndAt: Date.UTC(2026, 9, 30, 12) });
     const user = userEvent.setup();
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     await user.click(screen.getByRole("button", { name: "ذكّر المجموعة" }));
     const link = await screen.findByRole("link", { name: "أرسل على واتساب" });
     expect(screen.getByText("الرسالة لا تذكر أسماء أحد")).toBeVisible();
@@ -163,7 +163,7 @@ describe("KhatmaPage invite and remind", () => {
         ),
       ),
     });
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     expect(screen.queryByRole("button", { name: "ذكّر المجموعة" })).toBeNull();
     expect(screen.getByRole("button", { name: "ادعُ أحبابك" })).toBeVisible();
   });
@@ -180,7 +180,7 @@ describe("KhatmaPage invite and remind", () => {
 
   it("closes with its labelled button", async () => {
     const user = userEvent.setup();
-    renderAt("/j/CODE");
+    renderAt("/j/CODE?tab=group");
     await user.click(screen.getByRole("button", { name: "ادعُ أحبابك" }));
     await user.click(await screen.findByRole("button", { name: "تمّ" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -190,7 +190,7 @@ describe("KhatmaPage invite and remind", () => {
     const user = userEvent.setup();
     render(
       <StrictMode>
-        <MemoryRouter initialEntries={["/j/CODE"]}>
+        <MemoryRouter initialEntries={["/j/CODE?tab=group"]}>
           <Routes>
             <Route path="/j/:inviteCode" element={<KhatmaPage />} />
           </Routes>

@@ -75,8 +75,8 @@ vi.mock("convex/react", async () => {
   };
 });
 
-const tree = () => (
-  <MemoryRouter initialEntries={["/j/CODE"]}>
+const tree = (url = "/j/CODE") => (
+  <MemoryRouter initialEntries={[url]}>
     <Routes>
       <Route path="/j/:inviteCode" element={<KhatmaPage />} />
     </Routes>
@@ -97,7 +97,7 @@ const signedIn = (over: Partial<KhatmaView["me"]> = {}): KhatmaView["me"] => ({
 
 const NOW = Date.UTC(2026, 9, 28, 12);
 
-function setup(view: KhatmaView | undefined) {
+function setup(view: KhatmaView | undefined, url?: string) {
   m.query.mockReturnValue(view);
   const raw = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   // A click starts a server call; let its promise and the resulting render settle before asserting.
@@ -107,13 +107,13 @@ function setup(view: KhatmaView | undefined) {
       await act(async () => {});
     },
   };
-  const utils = render(tree());
+  const utils = render(tree(url));
   return {
     user,
     ...utils,
     show: (next: KhatmaView | undefined) => {
       m.query.mockReturnValue(next);
-      utils.rerender(tree());
+      utils.rerender(tree(url));
     },
   };
 }
@@ -173,7 +173,7 @@ describe("take", () => {
   });
 
   it("opens the sheet for the tile that was tapped, and 'not now' closes it", async () => {
-    const { user } = setup(makeView({ me: signedIn() }));
+    const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=pool");
     await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
     const sheet = screen.getByRole("dialog", { name: "الجزء ٩" });
     await user.click(within(sheet).getByRole("button", { name: "ليس الآن" }));
@@ -196,6 +196,28 @@ describe("take", () => {
       }),
     );
     expect(screen.getByRole("dialog", { name: "الجزء ٤" })).toBeInTheDocument();
+  });
+
+  it("switches to جزئي after a take from الأجزاء", async () => {
+    m.take.mockResolvedValue({ ok: true });
+    const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=pool");
+    await user.click(screen.getByRole("button", { name: /^الجزء ٥،/ }));
+    await user.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
+    expect(screen.getByRole("tab", { name: t.nav.tabs.mine })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("stays on the pool tab when the take fails", async () => {
+    m.take.mockResolvedValue({ ok: false, reason: "taken" });
+    const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=pool");
+    await user.click(screen.getByRole("button", { name: /^الجزء ٥،/ }));
+    await user.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
+    expect(screen.getByRole("tab", { name: t.nav.tabs.pool })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("taken with nothing left open closes the sheet and leaves the all-taken card", async () => {
@@ -283,7 +305,7 @@ describe("a session revoked elsewhere", () => {
 
   it("a take forgets the dead token and opens verification for the same juz'", async () => {
     m.take.mockRejectedValue(signedOutError());
-    const { user } = setup(makeView({ me: signedIn() }));
+    const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=pool");
     await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
     await user.click(screen.getByRole("button", { name: t.take.confirm }));
     expect(m.cleared).toHaveBeenCalledTimes(1);
@@ -361,7 +383,10 @@ describe("whose account takes the juz' (shared phone)", () => {
 
   it("'not you?' signs out, forgets the token, verifies, then offers the same juz' to the new account", async () => {
     m.signOut.mockResolvedValue(null);
-    const { user, show } = setup(makeView({ me: signedIn() }));
+    const { user, show } = setup(
+      makeView({ me: signedIn() }),
+      "/j/CODE?tab=pool",
+    );
     await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
     await user.click(
       screen.getByRole("button", { name: t.take.notYou("علي") }),
@@ -443,6 +468,7 @@ describe("stale state", () => {
 
   it("any user action ends the wait", async () => {
     const { user, show } = await lostRace();
+    await user.click(screen.getByRole("tab", { name: t.nav.tabs.pool }));
     await user.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
     await user.click(screen.getByRole("button", { name: "ليس الآن" }));
     show(later());
@@ -824,7 +850,10 @@ describe("celebration", () => {
       inviteCode: "CODE",
     });
     show(makeView({ me: signedIn() }));
-    expect(screen.getByText("الأجزاء الثلاثون")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: t.nav.tabs.mine })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("a failed or thrown markCelebrated shows a toast and allows a retry", async () => {
@@ -1025,6 +1054,7 @@ describe("page switches and links", () => {
     m.setNotifications.mockResolvedValue({ ok: true });
     const { user } = setup(
       makeView({ me: signedIn({ notificationsOn: true }) }),
+      "/j/CODE?tab=group",
     );
     const sw = screen.getByRole("switch", { name: "إشعارات هذه الختمة" });
     expect(sw).toBeChecked();
@@ -1041,6 +1071,7 @@ describe("page switches and links", () => {
     m.setNotifications.mockResolvedValue({ ok: true });
     const { user } = setup(
       makeView({ me: signedIn({ notificationsOn: false }) }),
+      "/j/CODE?tab=group",
     );
     const sw = screen.getByRole("switch", { name: "إشعارات هذه الختمة" });
     expect(sw).not.toBeChecked();
@@ -1055,7 +1086,7 @@ describe("page switches and links", () => {
 
   it("a failed switch toasts the generic error", async () => {
     m.setNotifications.mockResolvedValue({ ok: false });
-    const { user } = setup(makeView({ me: signedIn() }));
+    const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=group");
     await user.click(screen.getByRole("switch"));
     expect(toast()).toHaveTextContent(t.errors.generic);
   });
@@ -1068,12 +1099,18 @@ describe("page switches and links", () => {
   });
 
   it("the organizer gets the settings link, others do not", () => {
-    const { unmount } = setup(makeView({ isOrganizer: true, me: signedIn() }));
+    const { unmount } = setup(
+      makeView({ isOrganizer: true, me: signedIn() }),
+      "/j/CODE?tab=group",
+    );
     expect(
       screen.getByRole("link", { name: "إعدادات الختمة" }),
     ).toHaveAttribute("href", "/j/CODE/settings");
     unmount();
-    setup(makeView({ isOrganizer: false, me: signedIn() }));
+    setup(
+      makeView({ isOrganizer: false, me: signedIn() }),
+      "/j/CODE?tab=group",
+    );
     expect(
       screen.queryByRole("link", { name: "إعدادات الختمة" }),
     ).not.toBeInTheDocument();

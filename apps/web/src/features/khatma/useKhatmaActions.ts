@@ -86,6 +86,7 @@ export function undoWindowMs(undoUntil: number, now: number): number {
 export function useKhatmaActions(
   view: KhatmaView | { notFound: true } | undefined,
   inviteCode: string,
+  options: { onTaken?: (juz: number) => void } = {},
 ) {
   const sessionToken = useSessionToken();
   const loaded = view !== undefined && !("notFound" in view) ? view : null;
@@ -255,6 +256,7 @@ export function useKhatmaActions(
     setSheet(null);
     if (result.ok) {
       posthog.capture("juz_taken", { juz_number: juz });
+      options.onTaken?.(juz);
       showToast(t.toast.taken(toArabicDigits(juz)));
       return offerPush();
     }
