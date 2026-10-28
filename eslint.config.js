@@ -10,6 +10,7 @@ export default tseslint.config(
       ".claude/**",
       ".superpowers/**",
       ".convex/**",
+      ".vercel/**",
     ],
   },
   js.configs.recommended,
