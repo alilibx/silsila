@@ -365,33 +365,28 @@ export const mine = sessionQuery({
       .sort(
         (a, b) => b.joinedAt - a.joinedAt || b._creationTime - a._creationTime,
       );
-    const out: {
-      inviteCode: string;
-      name: string | null;
-      createdAt: number;
-      schedule: Schedule;
-      done: number;
-      holding: number | null;
-    }[] = [];
-    for (const m of active) {
-      const khatma = await ctx.db.get(m.khatmaId);
-      if (!khatma) continue;
-      const assignments = khatma.currentRoundId
-        ? await roundAssignments(ctx, khatma.currentRoundId)
-        : [];
-      const done = [...juzStates(assignments).values()].filter(
-        (s) => s.state === "done",
-      ).length;
-      out.push({
-        inviteCode: khatma.inviteCode,
-        name: khatma.name,
-        createdAt: khatma.createdAt,
-        schedule: khatma.schedule,
-        done,
-        holding: heldAssignment(assignments, personId)?.juz ?? null,
-      });
-    }
-    return out;
+    // One khatma and one round's assignments per membership, read in parallel.
+    const cards = await Promise.all(
+      active.map(async (m) => {
+        const khatma = await ctx.db.get(m.khatmaId);
+        if (!khatma) return null;
+        const assignments = khatma.currentRoundId
+          ? await roundAssignments(ctx, khatma.currentRoundId)
+          : [];
+        const done = [...juzStates(assignments).values()].filter(
+          (s) => s.state === "done",
+        ).length;
+        return {
+          inviteCode: khatma.inviteCode,
+          name: khatma.name,
+          createdAt: khatma.createdAt,
+          schedule: khatma.schedule,
+          done,
+          holding: heldAssignment(assignments, personId)?.juz ?? null,
+        };
+      }),
+    );
+    return cards.filter((card) => card !== null);
   },
 });
 
