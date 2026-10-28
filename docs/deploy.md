@@ -82,6 +82,7 @@ Staging and production share one WhatsApp number, so the WhatsApp names differ (
 | `WHATSAPP_GRAPH_VERSION`   | The Graph API version used in send URLs.                                                                                | Not a secret. Move to a newer supported version before the current one is retired, and check that sending still works.                                           |
 | `WHATSAPP_RELAY_URL`       | Production only. Staging's relay endpoint, `https://basic-mockingbird-167.eu-west-1.convex.site/whatsapp/relay`. Production relays a message it has no code for there. Unset, production relays nothing. Not a secret. Must be `https://`. | Change it if staging's Convex deployment changes. |
 | `WHATSAPP_RELAY_SECRET`    | Shared by production and staging, never equal to the Meta app secret. Signs each relay (`X-Wirdak-Relay-Signature`, HMAC-SHA256 over `X-Wirdak-Relay-Timestamp` and the body). Staging refuses a relay that is unsigned, signed with another secret, or more than 5 minutes old. Values shorter than 32 characters count as unset. Secret. | `openssl rand -hex 32`, then set the new value on staging and production one right after the other. Relays fail in between, and staging-started codes get production's "no code found" reply. |
+| `ADMIN_SITE_URL`           | The admin panel's origin, no trailing slash: `https://admin.wirdak.app`, or `https://stg-admin.wirdak.app` on staging. `/api/admin/verification/start` allows it as its only CORS origin, and the admin sign-in alert links to it. Not a secret. | Change it when the admin domain changes. Read at runtime, so no redeploy is needed. |
 | `PREVIEW_SECRET`           | Shared secret the Vercel link-preview function sends in `X-Preview-Secret`. `GET /api/preview` answers 401 without it. Secret. Must equal the Vercel value. | Generate a new random string, set it in that environment's Convex deployment and in Vercel (same environment) to the same value, then redeploy Vercel. Previews fall back to the generic card in between. |
 | `VAPID_PUBLIC_KEY`         | Web Push (VAPID) public key. The browser subscribes with it (`api.push.publicKey` serves it to the web app) and the push services check it. Public. | Rotate the pair together, see "Web Push keys" below.                                                                                                              |
 | `VAPID_PRIVATE_KEY`        | The matching VAPID private key. Signs every push from `convex/pushNode.ts`. Secret.                                      | Rotate the pair together, see "Web Push keys" below.                                                                                                              |
@@ -145,6 +146,35 @@ Nothing else is set by hand. The Convex deploy keys live in GitHub, and `VITE_CO
 Settings: root directory `apps/web`, "Include source files outside of the Root Directory" on (the web app imports from `convex/` through the `@convex` alias, and the link-preview function imports `convex/lib/digits.ts`), framework Vite, Node 22, custom environment `staging` with the domain `stg.wirdak.app`, production domains `wirdak.app` and `www.wirdak.app` (redirect). The domain is registered at Vercel and uses Vercel DNS, so there are no records to manage.
 
 Link previews: `/j/:code` is rewritten to the Vercel function `apps/web/api/invite.ts`, which fetches `${WIRDAK_CONVEX_SITE_URL}/api/preview` and injects Open Graph tags into `index.html` so WhatsApp shows the khatma name, progress and inviter. If either variable is missing, or Convex is slow or rate-limiting, the page still loads with generic tags and is not cached. The function fetches its own `/index.html`, so `/j/*` links fail (502) if Vercel Authentication or Deployment Protection is ever turned on for an environment. `apps/web/public/og.png` is rendered from `scripts/images/og.html` with `bun run tsx scripts/render-images.ts` (needs `bun run playwright install chromium` once); commit the PNG after changing the HTML.
+
+### Admin app (`apps/admin`)
+
+The admin panel (plan 3, spec section 4) is its own Vite app and its own Vercel project, `wirdak-admin`, in the same team. It talks to the same Convex deployment as the website of its environment.
+
+| Environment | Admin address | Convex deployment |
+| ----------- | ------------- | ----------------- |
+| Staging | https://stg-admin.wirdak.app | `manzilo:wirdak:staging` |
+| Production | https://admin.wirdak.app | `manzilo:wirdak:production` |
+
+`deploy.yml` deploys it after the website, in the same run, so both ship the same commit. Its build doesn't run `convex deploy`; the website's build already pushed the functions.
+
+Vercel project settings: root directory `apps/admin`, framework Vite, Node 22, Git deploys off (`apps/admin/vercel.json`), Vercel Authentication off, custom environment `staging` with the domain `stg-admin.wirdak.app`, production domain `admin.wirdak.app`. Every page answers `X-Robots-Tag: noindex, nofollow`.
+
+| Where | Name | What |
+| ----- | ---- | ---- |
+| Vercel `wirdak-admin`, per environment | `VITE_CONVEX_URL` | That environment's Convex client URL (`https://<name>.eu-west-1.convex.cloud`). Public. |
+| GitHub repository variable | `VERCEL_ADMIN_PROJECT_ID` | The `wirdak-admin` project ID. Not a secret. |
+| Convex, per deployment | `ADMIN_SITE_URL` | See the Convex table above. |
+
+**The first admin.** The allowlist starts empty, and only the command line can add the first admin, once:
+
+```sh
+bun run convex run admins:bootstrap '{"phone": "+9715XXXXXXXX"}' --deployment manzilo:wirdak:<staging|production>
+```
+
+After that, admins add and remove admins in the panel (المشرفون). Every change is in the audit log (السجل).
+
+**Signing in.** WhatsApp, like the website, but the 6-digit code step is always required and only allowlisted numbers get in. On staging the code goes through the production relay like member sign-ins (see "WhatsApp on staging"). Admin sessions end 12 hours after sign-in. Every sign-in sends a WhatsApp alert whose link ends all of that admin's sessions.
 
 ### Local only
 
