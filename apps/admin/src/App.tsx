@@ -6,7 +6,11 @@ import { Route, Routes } from "react-router";
 import { Layout } from "./components/Layout";
 import { t } from "./i18n/ar";
 import { clearAdminToken, useAdminToken } from "./lib/adminSession";
+import { AdminsPage } from "./pages/AdminsPage";
 import { AlertSignOutPage } from "./pages/AlertSignOutPage";
+import { AuditPage } from "./pages/AuditPage";
+import { HomePage } from "./pages/HomePage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SignInPage } from "./pages/SignInPage";
 
 /** True for the server's "this admin session is gone" error. */
@@ -86,11 +90,11 @@ function SignedIn({
             <Layout actions={<SignOutButton adminToken={adminToken} />} />
           }
         >
-          <Route path="/" element={null} />
-          <Route path="/settings" element={null} />
-          <Route path="/audit" element={null} />
-          <Route path="/admins" element={null} />
-          <Route path="*" element={null} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/audit" element={<AuditPage />} />
+          <Route path="/admins" element={<AdminsPage />} />
+          <Route path="*" element={<HomePage />} />
         </Route>
       </Routes>
     </AdminErrorBoundary>
