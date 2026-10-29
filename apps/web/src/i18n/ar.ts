@@ -474,6 +474,7 @@ export const ar = {
     startLabel: "نبدأ",
     endLabel: "ننتهي",
     tomorrow: (date: string) => `غداً، ${date}`,
+    today: (date: string) => `اليوم، ${date}`,
     noEnd: "تستمر دائماً",
     change: "تغيير",
     startDateInput: "تاريخ البداية",
@@ -483,8 +484,7 @@ export const ar = {
     errors: {
       not_signed_in: "سجّل دخولك أولاً ثم حاول مرة أخرى.",
       rota_not_allowed: "الختمة بالتناوب غير متاحة لحسابك بعد.",
-      rota_cap:
-        "وصلتَ إلى الحد الأقصى من الختمات بالتناوب. أرشِف إحداها ثم حاول مرة أخرى.",
+      rota_cap: "لديك العدد الأقصى من الختمات بالتناوب.",
       invalid_name: "اكتب اسماً للختمة",
       invalid_days: "اختر يوماً واحداً على الأقل.",
       invalid_dates: "تاريخ البداية أو النهاية غير صحيح. عدّله وحاول مرة أخرى.",
@@ -497,6 +497,7 @@ export const ar = {
       invalid_zone: "التوقيت غير صحيح.",
       not_reading_date: "هذا اليوم ليس يوم قراءة.",
       past: "هذا اليوم مضى.",
+      archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
     } as Record<string, string>,
     setupTitle: "من سيقرأ معك؟",
     personName: "الاسم",
@@ -560,6 +561,9 @@ export const ar = {
     pausedBanner:
       "الختمة موقوفة الآن. لا رسائل ولا يتقدّم رقم الختمة حتى تعيد تشغيلها.",
     archivedBanner: "هذه الختمة مؤرشفة.",
+    archivedSettings: "هذه الختمة مؤرشفة، فلا يمكن تغيير إعداداتها.",
+    setupNotDone: "أضف من سيقرأ معك، ثم اضغط «ابدأ الختمة».",
+    startKhatma: "ابدأ الختمة",
     completeBanner: (number: number) =>
       `اكتملت الختمة ${toArabicDigits(number)}. تقبّل الله منكم.`,
     gridLabel: "أجزاء اليوم",
@@ -611,6 +615,9 @@ export const ar = {
     giveMoreHint: (juz: number) =>
       `يقرأ معه الجزء ${toArabicDigits(juz)} كل يوم`,
     remove: "أزله من الختمة",
+    stopReading: "لن أقرأ جزءاً",
+    stopReadingHint: "تبقى منظّم الختمة، ويصبح جزؤك بلا قارئ.",
+    orGiveTo: "أو أعطه لمن في الختمة",
     removeTitle: (name: string) => `أزل ${name} من الختمة؟`,
     removeBody: "يصبح جزؤه بلا قارئ، وتبقى قراءته اليوم كما هي.",
     removeConfirm: "نعم، أزله",

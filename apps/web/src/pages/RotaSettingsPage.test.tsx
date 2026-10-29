@@ -47,6 +47,7 @@ const baseSettings = {
   pauseDates: ["2026-11-27"],
   upcoming: ["2026-11-27", "2026-11-28", "2026-11-29"],
   quiet: { startHour: 22, endHour: 7 },
+  archived: false,
 };
 
 function Landing() {
@@ -376,6 +377,20 @@ describe("RotaSettingsPage", () => {
       });
     });
 
+    it("an end date can't be picked before today, even for a khatma that started long ago", async () => {
+      m.settings = { ...baseSettings, firstDate: "2026-10-01" };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(
+        within(details()).getByRole("button", {
+          name: `${t.rota.endLabel}: ${t.rota.change}`,
+        }),
+      );
+      expect(
+        within(details()).getByLabelText(t.rota.endDateInput),
+      ).toHaveAttribute("min", "2026-10-29");
+    });
+
     it("changing the days of a khatma still ahead moves its start to the first reading day", async () => {
       m.settings = { ...baseSettings, firstDatePassed: false };
       const user = userEvent.setup();
@@ -431,5 +446,25 @@ describe("RotaSettingsPage", () => {
         t.rota.errors.forbidden ?? "",
       );
     });
+  });
+
+  it("an archived khatma says so and can't be changed", () => {
+    m.settings = { ...baseSettings, archived: true };
+    renderPage();
+    expect(screen.getByText(t.rota.archivedSettings)).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: t.rota.pauseNow }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: t.rota.addDate })).toBeDisabled();
+    expect(
+      within(section(t.rota.detailsHeading)).getByLabelText(t.rota.nameLabel),
+    ).toBeDisabled();
+    for (const button of screen.getAllByRole("button")) {
+      expect(button).toBeDisabled();
+    }
+    // The way back still works.
+    expect(
+      screen.getByRole("link", { name: t.organizer.back }),
+    ).toBeInTheDocument();
   });
 });

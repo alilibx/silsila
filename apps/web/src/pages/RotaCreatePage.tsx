@@ -35,7 +35,8 @@ export function RotaCreatePage() {
   if (me === null || !me.rotaAllowed) return <Navigate to="/new" replace />;
 
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const tomorrow = addDays(localDate(Date.now(), timeZone), 1);
+  const today = localDate(Date.now(), timeZone);
+  const tomorrow = addDays(today, 1);
   // The first day must be a reading day, so the start moves on to the next one.
   const start = firstReadingDay(days, pickedStart ?? tomorrow);
 
@@ -105,14 +106,16 @@ export function RotaCreatePage() {
           <DateLine
             label={t.rota.startLabel}
             value={
-              start === tomorrow
-                ? t.rota.tomorrow(formatIsoDate(start))
-                : formatIsoDate(start)
+              start === today
+                ? t.rota.today(formatIsoDate(start))
+                : start === tomorrow
+                  ? t.rota.tomorrow(formatIsoDate(start))
+                  : formatIsoDate(start)
             }
             inputLabel={t.rota.startDateInput}
             // A start that is not a reading day moves on; the field shows where it landed.
             inputValue={pickedStart === null ? "" : start}
-            min={tomorrow}
+            min={today}
             onPick={(date) => {
               setPickedStart(date);
               setError(null);

@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
   people: undefined as unknown,
   mine: [] as unknown,
   me: null as unknown,
+  notes: [] as unknown,
   fns: {
     reassign: vi.fn(),
     markDone: vi.fn(),
@@ -22,6 +23,9 @@ const m = vi.hoisted(() => ({
     giveJuz: vi.fn(),
     moveJuz: vi.fn(),
     removeParticipant: vi.fn(),
+    freeJuz: vi.fn(),
+    finishSetup: vi.fn(),
+    dismiss: vi.fn(),
   },
 }));
 
@@ -48,6 +52,7 @@ vi.mock("convex/react", async () => {
       if (name === "rota:people") return m.people;
       if (name === "khatmas:mine") return m.mine;
       if (name === "sessions:me") return m.me;
+      if (name === "notes:forKhatma") return m.notes;
       throw new Error(`unexpected query ${name}`);
     },
     useMutation: (ref: never) =>
@@ -93,6 +98,7 @@ function todayView(overrides: Record<string, unknown> = {}) {
     next: { number: 13, date: "2026-11-11" },
     paused: false,
     archived: false,
+    setupDone: true,
     tiles: Array.from({ length: 30 }, (_, i) => {
       const juz = i + 1;
       const state =
@@ -170,6 +176,7 @@ beforeEach(() => {
   m.people = peopleView(roster);
   m.mine = [];
   m.me = { displayName: "علي" };
+  m.notes = [];
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -380,6 +387,78 @@ describe("Today", () => {
     );
   });
 
+  it("shows the organizer's notes first, and «حسناً» dismisses one", async () => {
+    m.notes = [
+      {
+        noteId: "n1",
+        kind: "rotaUnread",
+        juz: [8, 10],
+        count: null,
+        until: null,
+        createdAt: 1,
+      },
+    ];
+    const user = userEvent.setup();
+    renderAt();
+    const notes = screen.getByRole("region", { name: t.notes.heading });
+    expect(notes).toHaveTextContent(
+      t.notes.text({
+        kind: "rotaUnread",
+        juz: [8, 10],
+        count: null,
+        until: null,
+      }),
+    );
+    await user.click(within(notes).getByRole("button", { name: t.notes.ok }));
+    expect(m.fns.dismiss).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      noteId: "n1",
+    });
+  });
+
+  it("shows no notes on the People tab", () => {
+    m.notes = [
+      {
+        noteId: "n1",
+        kind: "rotaSummary",
+        juz: [1],
+        count: 1,
+        until: null,
+        createdAt: 1,
+      },
+    ];
+    renderAt("/j/CODE?tab=people");
+    expect(screen.queryByRole("region", { name: t.notes.heading })).toBeNull();
+  });
+
+  it("before setup is done, asks to start the khatma and starts it", async () => {
+    m.today = todayView({
+      day: null,
+      tiles: [],
+      setupDone: false,
+      next: { number: 1, date: "2026-11-10" },
+    });
+    const user = userEvent.setup();
+    renderAt();
+    expect(screen.getByText(t.rota.setupNotDone)).toBeInTheDocument();
+    expect(screen.queryByText(/^تبدأ الختمة ١/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: t.rota.startKhatma }));
+    expect(m.fns.finishSetup).toHaveBeenCalledWith(args);
+  });
+
+  it("says a change was refused because the khatma is archived", async () => {
+    m.fns.markDone.mockRejectedValue(new ConvexError({ code: "archived" }));
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ٨، لم يُقرأ" }),
+    );
+    await user.click(screen.getByRole("button", { name: t.rota.markDone }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.errors.archived ?? "",
+    );
+  });
+
   it("leaves the grid alone once the khatma is archived", () => {
     m.today = todayView({ archived: true });
     renderAt();
@@ -414,6 +493,13 @@ describe("page", () => {
     expect(
       screen.getByRole("dialog", { name: t.signIn.title }),
     ).toHaveTextContent('{"kind":"signin"}');
+  });
+
+  it("falls back to the WhatsApp page when the settings are not the organizer's", () => {
+    m.settings = null;
+    renderAt();
+    expect(screen.getByText(t.rota.whatsappOnly)).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 
   it("waits for the answer", () => {
@@ -663,6 +749,60 @@ describe("People", () => {
     await user.click(rows()[0]?.querySelector("button") as HTMLElement);
     expect(screen.getByRole("dialog", { name: t.rota.me })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: t.rota.remove })).toBeNull();
+  });
+
+  it("the organizer can stop reading: each of their ajza' is freed, and they stay", async () => {
+    m.people = peopleView([
+      { id: "p1", name: "علي", isMe: true, juz: [1, 5] },
+      { id: "p2", name: "مريم", isMe: false, juz: [2] },
+    ]);
+    const user = userEvent.setup();
+    renderAt("/j/CODE?tab=people");
+    await user.click(rows()[0]?.querySelector("button") as HTMLElement);
+    await user.click(
+      screen.getByRole("button", { name: new RegExp(t.rota.stopReading) }),
+    );
+    expect(m.fns.freeJuz.mock.calls).toEqual([
+      [{ ...args, juz: 1 }],
+      [{ ...args, juz: 5 }],
+    ]);
+    expect(m.fns.removeParticipant).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("only the organizer's own sheet offers to stop reading", async () => {
+    const user = userEvent.setup();
+    renderAt("/j/CODE?tab=people");
+    await user.click(rows()[3]?.querySelector("button") as HTMLElement);
+    expect(
+      screen.queryByRole("button", { name: new RegExp(t.rota.stopReading) }),
+    ).toBeNull();
+  });
+
+  it("an empty row can go to someone already in the khatma", async () => {
+    m.people = peopleView([
+      { id: "p1", name: "علي", isMe: true, juz: [1] },
+      { id: "p2", name: "مريم", isMe: false, juz: [2, 3, 4] },
+      { id: "p3", name: "سارة", isMe: false, juz: [] },
+    ]);
+    const user = userEvent.setup();
+    renderAt("/j/CODE?tab=people");
+    await user.click(rows()[6]?.querySelector("button") as HTMLElement);
+    const sheet = screen.getByRole("dialog", { name: "قارئ الجزء ٧" });
+    const existing = within(sheet).getByRole("list", {
+      name: t.rota.orGiveTo,
+    });
+    // Maryam reads the most already.
+    expect(
+      within(existing).getByRole("button", { name: /مريم/ }),
+    ).toBeDisabled();
+    await user.click(within(existing).getByRole("button", { name: /سارة/ }));
+    expect(m.fns.giveJuz).toHaveBeenCalledWith({
+      ...args,
+      participantId: "p3",
+      juz: 7,
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows a refused move without closing", async () => {

@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
@@ -17,7 +17,10 @@ type Person = View["participants"][number];
 
 const peopleErrors: Record<string, string> = t.rota.peopleErrors;
 
-/** Someone's juz' of the next khatma: move it, add a second one, or take them out. */
+/**
+ * Someone's juz' of the next khatma: move it, add a second one, or take them out. The organizer
+ * can't leave the khatma, but can stop reading: their ajza' go, and they stay its organizer.
+ */
 function PersonSheet({
   inviteCode,
   view,
@@ -34,6 +37,7 @@ function PersonSheet({
 }) {
   const moveJuz = useMutation(api.rota.moveJuz);
   const giveJuz = useMutation(api.rota.giveJuz);
+  const freeJuz = useMutation(api.rota.freeJuz);
   const removeParticipant = useMutation(api.rota.removeParticipant);
   const holderOf = (n: number) => view.rows[n - 1]?.participant ?? null;
   const others = view.rows.filter((row) => row.juz !== juz);
@@ -47,6 +51,15 @@ function PersonSheet({
   const swapWith = holderOf(target);
 
   const name = person.isMe ? t.rota.me : person.name;
+
+  /** Frees each of the person's ajza' in turn, stopping at the first refusal. */
+  const freeAll = async () => {
+    for (const held of person.juz) {
+      const result = await freeJuz({ ...args, juz: held });
+      if ("error" in result) return result;
+    }
+    return { ok: true as const };
+  };
 
   if (confirming) {
     return (
@@ -141,7 +154,20 @@ function PersonSheet({
             </span>
           </Button>
         )}
-        {!person.isMe && (
+        {person.isMe ? (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => void run(freeAll, onClose)}
+          >
+            <span>
+              <span className="block">{t.rota.stopReading}</span>
+              <span className="block text-base font-normal">
+                {t.rota.stopReadingHint}
+              </span>
+            </span>
+          </Button>
+        ) : (
           <Button
             variant="ghost"
             disabled={busy}
@@ -152,6 +178,76 @@ function PersonSheet({
         )}
       </div>
       <ErrorLine error={error} />
+    </Sheet>
+  );
+}
+
+/** An empty juz' of the next khatma: a new person for it, or someone already in the khatma. */
+function EmptyRowSheet({
+  inviteCode,
+  view,
+  juz,
+  onClose,
+}: {
+  inviteCode: string;
+  view: View;
+  juz: number;
+  onClose: () => void;
+}) {
+  const giveJuz = useMutation(api.rota.giveJuz);
+  const { busy, error, run } = useRotaCall(peopleErrors);
+  const listId = useId();
+  return (
+    <Sheet title={t.rota.readerTitle(juz)} onClose={onClose}>
+      <p className="mb-4 leading-relaxed text-ink-soft">
+        {t.rota.walk(juz, view.target.number)}
+      </p>
+      <AddPersonForm
+        inviteCode={inviteCode}
+        juz={juz}
+        variant="primary"
+        onAdded={onClose}
+      />
+      {view.participants.length > 0 && (
+        <>
+          <h3 id={listId} className="mt-6 font-medium">
+            {t.rota.orGiveTo}
+          </h3>
+          <ul aria-labelledby={listId} className="mt-2 grid gap-2">
+            {view.participants.map((person) => (
+              <li key={person.id}>
+                <button
+                  type="button"
+                  disabled={busy || person.juz.length >= view.maxSlots}
+                  onClick={() =>
+                    void run(
+                      () =>
+                        giveJuz({
+                          sessionToken: getSessionToken() ?? undefined,
+                          inviteCode,
+                          participantId: person.id,
+                          juz,
+                        }),
+                      onClose,
+                    )
+                  }
+                  className="flex min-h-14 w-full items-center justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 text-start disabled:opacity-50"
+                >
+                  <span className="font-medium">
+                    {person.isMe ? t.rota.me : person.name}
+                  </span>
+                  {person.juz.length > 0 && (
+                    <span className="text-base text-ink-soft">
+                      {t.rota.juzOf(person.juz)}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <ErrorLine error={error} />
+        </>
+      )}
     </Sheet>
   );
 }
@@ -245,20 +341,12 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
       </ol>
 
       {open?.kind === "add" && (
-        <Sheet
-          title={t.rota.readerTitle(open.juz)}
+        <EmptyRowSheet
+          inviteCode={inviteCode}
+          view={view}
+          juz={open.juz}
           onClose={() => setOpen(null)}
-        >
-          <p className="mb-4 leading-relaxed text-ink-soft">
-            {t.rota.walk(open.juz, view.target.number)}
-          </p>
-          <AddPersonForm
-            inviteCode={inviteCode}
-            juz={open.juz}
-            variant="primary"
-            onAdded={() => setOpen(null)}
-          />
-        </Sheet>
+        />
       )}
       {open?.kind === "person" && person && (
         <PersonSheet

@@ -1,9 +1,9 @@
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
-import { Link, Navigate, useParams } from "react-router";
+import { Navigate, useNavigate, useParams } from "react-router";
 import { toArabicDigits } from "@convex/lib/digits";
-import { buttonClass } from "../../components/Button";
+import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { getSessionToken, useSessionToken } from "../../lib/session";
@@ -71,17 +71,21 @@ function GiveJuzSheet({
   );
 }
 
-/** Step 2 of 2: add people in order, hand out the leftover ajza', then on to the khatma. */
+/** Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. */
 export function RotaPeopleSetup() {
   const { inviteCode = "" } = useParams();
+  const navigate = useNavigate();
   const sessionToken = useSessionToken();
   const view = useQuery(api.rota.people, { sessionToken, inviteCode });
+  const finishSetup = useMutation(api.rota.finishSetup);
+  const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
+  const khatmaPath = `/j/${encodeURIComponent(inviteCode)}`;
 
   if (view === undefined) return <main className="mx-auto max-w-xl p-5" />;
   // Only the organizer sets people up.
   if (view === null) {
-    return <Navigate to={`/j/${encodeURIComponent(inviteCode)}`} replace />;
+    return <Navigate to={khatmaPath} replace />;
   }
 
   return (
@@ -132,12 +136,23 @@ export function RotaPeopleSetup() {
       )}
 
       <div className="mt-6">
-        <Link
-          to={`/j/${encodeURIComponent(inviteCode)}`}
-          className={buttonClass("primary")}
+        {/* The khatma's days start only once setup is done. */}
+        <Button
+          disabled={finishing.busy}
+          onClick={() =>
+            void finishing.run(
+              () =>
+                finishSetup({
+                  sessionToken: getSessionToken() ?? undefined,
+                  inviteCode,
+                }),
+              () => void navigate(khatmaPath),
+            )
+          }
         >
           {t.rota.done}
-        </Link>
+        </Button>
+        <ErrorLine error={finishing.error} />
       </div>
 
       {giving && view.freeJuz.length > 0 && (

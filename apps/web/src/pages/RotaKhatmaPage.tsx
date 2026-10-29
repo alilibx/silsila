@@ -1,14 +1,18 @@
 import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
+import type { NoteView } from "@convex/notes";
+import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { KhatmaTabs } from "../components/KhatmaTabs";
+import { NoteCard } from "../components/NoteCard";
 import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
+import { ErrorLine } from "../features/rota/ErrorLine";
 import { PeoplePanel } from "../features/rota/PeoplePanel";
 import { TodayPanel } from "../features/rota/TodayPanel";
+import { useRotaCall } from "../features/rota/useRotaCall";
 import { t } from "../i18n/ar";
-import { useSessionToken } from "../lib/session";
+import { getSessionToken, useSessionToken } from "../lib/session";
 
 type RotaTab = "today" | "people";
 
@@ -68,6 +72,41 @@ function WhatsAppPage({
   );
 }
 
+const noop = () => {};
+
+/** The organizer's notes about the khatma (the unread list, the day's summary), each to dismiss. */
+function RotaNotes({ notes }: { notes: NoteView[] }) {
+  const dismiss = useMutation(api.notes.dismiss);
+  const { busy, error, run } = useRotaCall(t.rota.errors);
+  if (notes.length === 0) return null;
+  return (
+    <section aria-label={t.notes.heading} className="mt-4 grid gap-3">
+      {notes.map((note) => (
+        <NoteCard
+          key={note.noteId}
+          note={note}
+          takeJuz={null}
+          onStillReading={noop}
+          onFinish={noop}
+          onRelease={noop}
+          onTake={noop}
+          onInvite={noop}
+          onDismiss={() =>
+            void run(async () => {
+              await dismiss({
+                sessionToken: getSessionToken() ?? undefined,
+                noteId: note.noteId,
+              });
+            })
+          }
+          busy={busy}
+        />
+      ))}
+      <ErrorLine error={error} />
+    </section>
+  );
+}
+
 /** A rotating khatma's page: the organizer's Today and People tabs, or the short WhatsApp page for anyone else. */
 export function RotaKhatmaPage({
   inviteCode,
@@ -84,6 +123,10 @@ export function RotaKhatmaPage({
   const today = useQuery(api.rota.today, { sessionToken, inviteCode });
   const settings = useQuery(
     api.rota.settings,
+    today ? { sessionToken, inviteCode } : "skip",
+  );
+  const notes = useQuery(
+    api.notes.forKhatma,
     today ? { sessionToken, inviteCode } : "skip",
   );
   const mine = useQuery(api.khatmas.mine, { sessionToken });
@@ -103,8 +146,11 @@ export function RotaKhatmaPage({
       { replace: true },
     );
 
-  if (today === undefined) return <Loading />;
-  if (today === null) {
+  if (today === undefined || (today !== null && settings === undefined)) {
+    return <Loading />;
+  }
+  // Anyone but the organizer; also when the settings say so before today has caught up.
+  if (today === null || !settings) {
     // The sheet sits outside the page body so it survives the reload a new session token triggers.
     return (
       <>
@@ -116,7 +162,6 @@ export function RotaKhatmaPage({
       </>
     );
   }
-  if (settings === undefined || settings === null) return <Loading />;
 
   return (
     <>
@@ -172,12 +217,15 @@ export function RotaKhatmaPage({
           aria-labelledby={`${ids}-tab-${tab}`}
         >
           {tab === "today" ? (
-            <TodayPanel
-              inviteCode={inviteCode}
-              view={today}
-              dayAt={settings.messages.dayAt}
-              timeZone={settings.timeZone}
-            />
+            <>
+              <RotaNotes notes={notes ?? []} />
+              <TodayPanel
+                inviteCode={inviteCode}
+                view={today}
+                dayAt={settings.messages.dayAt}
+                timeZone={settings.timeZone}
+              />
+            </>
           ) : (
             <PeoplePanel inviteCode={inviteCode} />
           )}

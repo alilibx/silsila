@@ -209,6 +209,33 @@ function nextLine(view: TodayView, dayAt: number, timeZone: string) {
   );
 }
 
+/** Setup was left unfinished: no day starts until the organizer starts the khatma here. */
+function StartKhatma({ inviteCode }: { inviteCode: string }) {
+  const finishSetup = useMutation(api.rota.finishSetup);
+  const { busy, error, run } = useRotaCall(t.rota.errors);
+  return (
+    <div className="rounded-ui border-2 border-line bg-card p-4">
+      <p className="text-xl leading-relaxed">{t.rota.setupNotDone}</p>
+      <div className="mt-4">
+        <Button
+          disabled={busy}
+          onClick={() =>
+            void run(() =>
+              finishSetup({
+                sessionToken: getSessionToken() ?? undefined,
+                inviteCode,
+              }),
+            )
+          }
+        >
+          {t.rota.startKhatma}
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+    </div>
+  );
+}
+
 /** The organizer's Today screen: the day, how many are done, and the 30 ajza' to tap. */
 export function TodayPanel({
   inviteCode,
@@ -237,6 +264,16 @@ export function TodayPanel({
       : view.paused
         ? null
         : t.rota.ended;
+  const noDay =
+    !view.setupDone && !view.archived ? (
+      <StartKhatma inviteCode={inviteCode} />
+    ) : (
+      before && (
+        <p className="rounded-ui border-2 border-line bg-card p-4 text-xl leading-relaxed">
+          {before}
+        </p>
+      )
+    );
 
   return (
     <div className="mt-4">
@@ -258,11 +295,7 @@ export function TodayPanel({
       )}
 
       {day === null ? (
-        before && (
-          <p className="rounded-ui border-2 border-line bg-card p-4 text-xl leading-relaxed">
-            {before}
-          </p>
-        )
+        noDay
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

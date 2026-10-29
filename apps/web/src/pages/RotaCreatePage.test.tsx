@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   create: vi.fn(),
   addParticipant: vi.fn(),
   giveJuz: vi.fn(),
+  finishSetup: vi.fn(),
   me: undefined as unknown,
   people: undefined as unknown,
   listeners: new Set<() => void>(),
@@ -39,10 +40,12 @@ vi.mock("convex/react", async () => {
       return getFunctionName(ref) === "people:me" ? m.me : people;
     },
     useAction: () => m.create,
-    useMutation: (ref: never) =>
-      getFunctionName(ref) === "rota:addParticipant"
-        ? m.addParticipant
-        : m.giveJuz,
+    useMutation: (ref: never) => {
+      const name = getFunctionName(ref);
+      if (name === "rota:addParticipant") return m.addParticipant;
+      if (name === "rota:finishSetup") return m.finishSetup;
+      return m.giveJuz;
+    },
   };
 });
 
@@ -124,6 +127,8 @@ beforeEach(() => {
   m.create.mockResolvedValue({ inviteCode: "NEWCODE" });
   m.addParticipant.mockReset();
   m.giveJuz.mockReset();
+  m.finishSetup.mockReset();
+  m.finishSetup.mockResolvedValue({ ok: true });
   m.me = { rotaAllowed: true };
   setRoster([{ id: "p1", name: "علي", isMe: true, juz: [1] }]);
 });
@@ -220,6 +225,27 @@ describe("RotaCreatePage (step 1)", () => {
         firstDate: "2026-11-05",
         endDate: "2027-03-01",
       }),
+    );
+  });
+
+  it("lets the start be today, but no day before", async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await user.type(screen.getByLabelText(t.rota.nameQuestion), "ختمة");
+    await user.click(
+      screen.getByRole("button", {
+        name: `${t.rota.startLabel}: ${t.rota.change}`,
+      }),
+    );
+    const field = screen.getByLabelText(t.rota.startDateInput);
+    expect(field).toHaveAttribute("min", "2026-10-29");
+    fireEvent.change(field, { target: { value: "2026-10-29" } });
+    expect(
+      screen.getByText(t.rota.today("الخميس ٢٩ أكتوبر")),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(m.create).toHaveBeenCalledWith(
+      expect.objectContaining({ firstDate: "2026-10-29" }),
     );
   });
 
@@ -530,12 +556,26 @@ describe("RotaPeopleSetup (step 2)", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("«تمّ» goes to the khatma page", () => {
+  it("«تمّ» finishes setup, then goes to the khatma page", async () => {
+    const user = userEvent.setup();
     renderSetup();
-    expect(screen.getByRole("link", { name: "تمّ" })).toHaveAttribute(
-      "href",
-      "/j/CODE",
+    await user.click(screen.getByRole("button", { name: t.rota.done }));
+    expect(m.finishSetup).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      inviteCode: "CODE",
+    });
+    expect(await screen.findByText("landed /j/CODE")).toBeInTheDocument();
+  });
+
+  it("stays on the page and says why when setup can't be finished", async () => {
+    m.finishSetup.mockRejectedValue(new ConvexError({ code: "archived" }));
+    const user = userEvent.setup();
+    renderSetup();
+    await user.click(screen.getByRole("button", { name: t.rota.done }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.errors.archived ?? "",
     );
+    expect(screen.queryByText("landed /j/CODE")).toBeNull();
   });
 
   it("sends a non-organizer to the khatma page", () => {
