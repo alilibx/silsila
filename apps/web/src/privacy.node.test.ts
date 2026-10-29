@@ -40,12 +40,7 @@ describe("privacy policy: help requests", () => {
   it("explains help requests in Arabic, with their own retention", () => {
     const ar = section(html, "طلبات المساعدة");
     expect(ar).not.toBe("");
-    for (const words of [
-      "صورة الشاشة",
-      "تسجيل صوتي",
-      "٣٠ يوماً",
-      "١٨٠ يوماً",
-    ]) {
+    for (const words of ["صورة الشاشة", "تسجيل صوتي", "٣٠ يوماً", "١٨٠ يوماً"]) {
       expect(ar).toContain(words);
     }
   });
@@ -69,6 +64,10 @@ describe("privacy policy: rotating khatma messages", () => {
       "رسالة الانضمام",
       "جزأه اليومي",
       "رسالة الختم",
+      "أرقام الأجزاء أو رقم الختمة",
+      "اسم المشارك كما أدخله",
+      "طلب انضمام",
+      "اسم ملفه في واتساب",
       "إيقاف",
       "Meta",
     ]) {
@@ -83,6 +82,10 @@ describe("privacy policy: rotating khatma messages", () => {
       "join message",
       "daily juz'",
       "completion message",
+      "juz' numbers or the khatma's number",
+      "participant's name as the organizer entered it",
+      "join request",
+      "WhatsApp profile name",
       "إيقاف",
       "Meta receives",
     ]) {

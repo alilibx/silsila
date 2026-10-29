@@ -123,6 +123,17 @@ test("dev:rotaPayload builds the participant's payload for the open day, in dev 
     t.query(internal.dev.rotaPayload, { ...args, phone: "+971500000999" }),
   ).rejects.toThrow(/no such participant/);
 
+  // A removed participant isn't found, and neither is anyone while no day is open.
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { removedAt: 1 }));
+  await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
+    /no such participant/,
+  );
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { removedAt: null }));
+  await t.run((ctx) => ctx.db.patch(ids.dayId, { closedAt: 2 }));
+  await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
+    /no open day/,
+  );
+
   vi.stubEnv("WIRDAK_ENV", "prod");
   await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
     /only when WIRDAK_ENV is dev/,
