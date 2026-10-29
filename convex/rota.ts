@@ -26,6 +26,7 @@ import { sessionMutation, sessionQuery } from "./lib/session";
 import { getSetting } from "./lib/settings";
 import { cleanDisplayName, cleanKhatmaName, normalizePhone } from "./lib/text";
 import { localDate } from "./lib/wakingTime";
+import { completeIfDone } from "./rotaDays";
 
 const DAY_MS = 86_400_000;
 /** Attempts at drawing an unused invite code; a collision is ~1e-20 likely. */
@@ -520,6 +521,207 @@ export const removeParticipant = sessionMutation({
     for (const slot of slots) await ctx.db.delete(slot._id);
     // Today's reads keep their reader: only the slots go.
     await ctx.db.patch(participant._id, { removedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Today
+
+type TodayView = {
+  day: {
+    number: number;
+    cycle: number;
+    date: string;
+    doneCount: number;
+    completedAt: number | null;
+  } | null;
+  next: { number: number; date: string | null };
+  paused: boolean;
+  archived: boolean;
+  tiles: {
+    readId: Id<"rotaReads">;
+    juz: number;
+    state: "done" | "unread" | "reassigned";
+    holderName: string | null;
+    readerName: string | null;
+    readerId: Id<"rotaParticipants"> | null;
+  }[];
+  participants: {
+    id: Id<"rotaParticipants">;
+    name: string;
+    isMe: boolean;
+    doneToday: boolean;
+  }[];
+};
+
+/** The latest reading day: the one open now, or today's if it has closed already. */
+async function currentDay(
+  ctx: QueryCtx,
+  khatma: Doc<"khatmas">,
+  timeZone: string,
+): Promise<Doc<"rotaDays"> | null> {
+  const last = await ctx.db
+    .query("rotaDays")
+    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma._id))
+    .order("desc")
+    .first();
+  if (!last) return null;
+  const isToday = last.date === localDate(Date.now(), timeZone);
+  return last.closedAt === null || isToday ? last : null;
+}
+
+/** The day's 30 reads, the next day and who has finished, for the organizer's Today screen. */
+export const today = sessionQuery({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<TodayView | null> => {
+    const found = await organizerOf(ctx, args.inviteCode, ctx.person);
+    if (!found || found.khatma.kind !== "rota" || !found.khatma.rota) {
+      return null;
+    }
+    const { person, khatma } = found;
+    const rota = khatma.rota!;
+    const target = await targetDay(ctx, khatma);
+    const day = await currentDay(ctx, khatma, rota.timeZone);
+    const reads = day
+      ? await ctx.db
+          .query("rotaReads")
+          .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
+          .collect()
+      : [];
+    const everyone = await ctx.db
+      .query("rotaParticipants")
+      .withIndex("by_khatma", (q) => q.eq("khatmaId", khatma._id))
+      .collect();
+    const byId = new Map(everyone.map((p) => [p._id, p]));
+    const nameOf = (id: Id<"rotaParticipants"> | null) =>
+      (id && byId.get(id)?.name) || null;
+
+    const tiles = reads.map((r) => ({
+      readId: r._id,
+      juz: r.juz,
+      state:
+        r.doneAt !== null
+          ? ("done" as const)
+          : r.readerId !== r.holderId
+            ? ("reassigned" as const)
+            : ("unread" as const),
+      holderName: nameOf(r.holderId),
+      readerName: nameOf(r.readerId),
+      readerId: r.readerId,
+    }));
+    const participants = everyone
+      .filter((p) => p.removedAt === null)
+      .sort(
+        (a, b) => a.addedAt - b.addedAt || a._creationTime - b._creationTime,
+      )
+      .map((p) => {
+        const mine = reads.filter((r) => r.readerId === p._id);
+        return {
+          id: p._id,
+          name: p.name,
+          isMe: p.personId === person._id,
+          doneToday: mine.length > 0 && mine.every((r) => r.doneAt !== null),
+        };
+      });
+    return {
+      day: day
+        ? {
+            number: day.number,
+            cycle: day.cycle,
+            date: day.date,
+            doneCount: reads.filter((r) => r.doneAt !== null).length,
+            completedAt: day.completedAt,
+          }
+        : null,
+      next: { number: target.number, date: target.date },
+      paused: rota.pausedAt !== null,
+      archived: rota.archivedAt !== null,
+      tiles,
+      participants,
+    };
+  },
+});
+
+/** A read of this khatma and its day, or null when it is not one of this khatma's. */
+async function readOf(
+  ctx: QueryCtx,
+  khatma: Doc<"khatmas">,
+  readId: Id<"rotaReads">,
+): Promise<{ read: Doc<"rotaReads">; day: Doc<"rotaDays"> } | null> {
+  const read = await ctx.db.get(readId);
+  if (!read || read.khatmaId !== khatma._id) return null;
+  const day = await ctx.db.get(read.dayId);
+  return day ? { read, day } : null;
+}
+
+export const reassign = sessionMutation({
+  args: {
+    inviteCode: v.string(),
+    readId: v.id("rotaReads"),
+    participantId: v.id("rotaParticipants"),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_found" | "closed" | "done" }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const found = await readOf(ctx, khatma, args.readId);
+    const participant = await activeParticipant(
+      ctx,
+      khatma._id,
+      args.participantId,
+    );
+    if (!found || !participant) return { error: "not_found" };
+    if (found.day.closedAt !== null) return { error: "closed" };
+    if (found.read.doneAt !== null) return { error: "done" };
+    await ctx.db.patch(found.read._id, {
+      readerId: participant._id,
+      reassignedAt: Date.now(),
+    });
+    return { ok: true };
+  },
+});
+
+export const markDone = sessionMutation({
+  args: { inviteCode: v.string(), readId: v.id("rotaReads") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    { ok: true; completed: boolean } | { error: "not_found" | "closed" }
+  > => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const found = await readOf(ctx, khatma, args.readId);
+    if (!found) return { error: "not_found" };
+    if (found.day.closedAt !== null) return { error: "closed" };
+    if (found.read.doneAt === null) {
+      await ctx.db.patch(found.read._id, {
+        doneAt: Date.now(),
+        doneByOrganizer: true,
+      });
+    }
+    return { ok: true, completed: await completeIfDone(ctx, found.day._id) };
+  },
+});
+
+export const markNotDone = sessionMutation({
+  args: { inviteCode: v.string(), readId: v.id("rotaReads") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_found" | "closed" }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const found = await readOf(ctx, khatma, args.readId);
+    if (!found) return { error: "not_found" };
+    if (found.day.closedAt !== null) return { error: "closed" };
+    await ctx.db.patch(found.read._id, {
+      doneAt: null,
+      doneByOrganizer: false,
+    });
+    if (found.day.completedAt !== null) {
+      await ctx.db.patch(found.day._id, { completedAt: null });
+    }
     return { ok: true };
   },
 });

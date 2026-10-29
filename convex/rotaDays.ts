@@ -11,6 +11,7 @@ import {
   ROTA_SIZE,
   slotFor,
 } from "./lib/rota";
+import { slotRowsByJuz } from "./lib/rotaPlace";
 import { instantAt, localDate, localMinutes } from "./lib/wakingTime";
 
 type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
@@ -90,14 +91,10 @@ async function startDay(
     unreadSentAt: null,
     summarySentAt: null,
   });
-  const slots = await ctx.db
-    .query("rotaSlots")
-    .withIndex("by_khatma_slot", (q) => q.eq("khatmaId", khatma._id))
-    .collect();
-  const holderBySlot = new Map(slots.map((s) => [s.slot, s.participantId]));
+  const byJuz = await slotRowsByJuz(ctx, khatma._id, number);
   for (let juz = 1; juz <= ROTA_SIZE; juz++) {
     const slot = slotFor(juz, number);
-    const holderId = holderBySlot.get(slot) ?? null;
+    const holderId = byJuz.get(juz)?.participantId ?? null;
     await ctx.db.insert("rotaReads", {
       dayId,
       khatmaId: khatma._id,
