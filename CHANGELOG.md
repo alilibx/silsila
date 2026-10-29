@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/alilibx/wirdak/compare/v0.3.0...v0.4.0) (2026-10-29)
+
+
+### Features
+
+* add the admin dashboard, summary, milestones, and operations (plan 3c) ([#33](https://github.com/alilibx/wirdak/issues/33)) ([6e4b4aa](https://github.com/alilibx/wirdak/commit/6e4b4aa8db688c3c8cf4c933a59fadeb520fd55d))
+* **web:** add mobile app navigation with a bottom bar, khatma tabs, and khatma switching ([#34](https://github.com/alilibx/wirdak/issues/34)) ([7ed072e](https://github.com/alilibx/wirdak/commit/7ed072e584f09220f275fa0267f56be52cf09f8a))
+* WhatsApp templates for the PIN, link buttons and opt-in notifications ([#27](https://github.com/alilibx/wirdak/issues/27)) ([a18a518](https://github.com/alilibx/wirdak/commit/a18a518f2af4b3da9aa2d5a64ba51a960ca11add))
+
 ## [0.3.0](https://github.com/alilibx/wirdak/compare/v0.2.2...v0.3.0) (2026-10-28)
 
 
