@@ -593,6 +593,41 @@ test("autoHandoverSweep leaves a rota khatma with its away organizer", async () 
   expect(await notesOf(t, member, "nowOrganizer")).toHaveLength(0);
 });
 
+test("the pool organizer controls refuse a rota khatma", async () => {
+  const { t, org } = await setup();
+  const member = await signedIn(t, "عضو", NOW);
+  const rotaId = await t.run((ctx) =>
+    ctx.db.insert("khatmas", {
+      name: "ختمة التناوب",
+      schedule: "none",
+      grace: { value: 7, unit: "days" },
+      creatorPersonId: org.personId,
+      inviteCode: "rotaorg12345",
+      completedRounds: 0,
+      createdAt: NOW,
+      kind: "rota",
+    }),
+  );
+  await join(t, rotaId, org);
+  await join(t, rotaId, member);
+  const base = { sessionToken: org.token, inviteCode: "rotaorg12345" };
+
+  await expect(
+    t.mutation(api.organizer.update, { ...base, name: "جديد" }),
+  ).rejects.toThrow(/forbidden/);
+  expect((await khatmaOf(t, "rotaorg12345")).name).toBe("ختمة التناوب");
+  await expect(t.action(api.organizer.resetInvite, base)).rejects.toThrow(
+    /forbidden/,
+  );
+  const memberId = (await memberOf(t, rotaId, member))._id;
+  await expect(
+    t.mutation(api.organizer.handOver, { ...base, memberId }),
+  ).rejects.toThrow(/forbidden/);
+  expect((await khatmaOf(t, "rotaorg12345")).creatorPersonId).toBe(
+    org.personId,
+  );
+});
+
 test("touch updates lastSeenAt and timeZone", async () => {
   const { t, org } = await setup();
   const person = () => t.run((ctx) => ctx.db.get(org.personId));
