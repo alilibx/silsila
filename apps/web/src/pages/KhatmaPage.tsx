@@ -204,7 +204,7 @@ export function KhatmaPage() {
         <PushPromptSheet onClose={actions.closeSheet} />
       )}
       {sheet?.kind === "install" && (
-        <InstallStepsSheet onClose={actions.closeSheet} />
+        <InstallStepsSheet fromPrompt onClose={actions.closeSheet} />
       )}
       {sheet?.kind === "whatsapp" && (
         <WhatsAppSheet onClose={actions.closeSheet} />

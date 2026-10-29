@@ -12,6 +12,9 @@ vi.mock("convex/browser", () => ({
   },
 }));
 
+const ph = vi.hoisted(() => ({ capture: vi.fn() }));
+vi.mock("posthog-js", () => ({ default: { capture: ph.capture } }));
+
 const wa = vi.hoisted(() => ({
   me: { whatsappNotes: false } as { whatsappNotes: boolean } | null,
   set: vi.fn(),
@@ -26,11 +29,16 @@ beforeEach(() => {
   setSessionToken("tok");
   wa.me = { whatsappNotes: false };
   wa.set.mockReset();
+  ph.capture.mockReset();
 });
 
-function Host() {
+function Host({ fromPrompt = false }: { fromPrompt?: boolean }) {
   const [open, setOpen] = useState(true);
-  return open ? <InstallStepsSheet onClose={() => setOpen(false)} /> : <p>x</p>;
+  return open ? (
+    <InstallStepsSheet fromPrompt={fromPrompt} onClose={() => setOpen(false)} />
+  ) : (
+    <p>x</p>
+  );
 }
 
 describe("InstallStepsSheet", () => {
@@ -62,5 +70,35 @@ describe("InstallStepsSheet", () => {
     );
     expect(wa.set).toHaveBeenCalledWith({ sessionToken: "tok", on: true });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("records the choice when shown as the first-take prompt", async () => {
+    render(<Host fromPrompt />);
+    await userEvent.click(screen.getByRole("button", { name: "أضفتُه" }));
+    expect(ph.capture).toHaveBeenCalledExactlyOnceWith(
+      "notification_prompt_choice",
+      { prompt: "install", choice: "added" },
+    );
+  });
+
+  it("records WhatsApp once, without a close event after it", async () => {
+    wa.set.mockResolvedValue({ ok: true });
+    render(<Host fromPrompt />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "أرسلها لي على واتساب" }),
+    );
+    expect(ph.capture).toHaveBeenCalledExactlyOnceWith(
+      "notification_prompt_choice",
+      { prompt: "install", choice: "whatsapp" },
+    );
+  });
+
+  it("records nothing when opened from settings", async () => {
+    wa.set.mockResolvedValue({ ok: true });
+    render(<Host />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "أرسلها لي على واتساب" }),
+    );
+    expect(ph.capture).not.toHaveBeenCalled();
   });
 });
