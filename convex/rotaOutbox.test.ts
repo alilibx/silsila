@@ -194,6 +194,45 @@ test("the same day, kind and participant enqueued twice makes one row", async ()
   await t.finishAllScheduledFunctions(vi.runAllTimers);
 });
 
+test("assigned and covered join an unsent row's ajza', and become a new row once it was sent or skipped", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const add = (kind: "assigned" | "covered", juz: number[]) =>
+    t.run((ctx) =>
+      enqueue(ctx, {
+        khatmaId: ids.khatmaId,
+        participantId: ids.participantId,
+        dayId: ids.dayId,
+        kind,
+        juz,
+        number: 1,
+      }),
+    );
+  for (const kind of ["assigned", "covered"] as const) {
+    const first = await add(kind, [8]);
+    expect(await add(kind, [5])).toBe(first);
+    expect(await add(kind, [8, 12])).toBe(first);
+    const merged = (await rows(t)).filter((r) => r.kind === kind);
+    expect(merged.map((r) => r.juz)).toEqual([[5, 8, 12]]);
+
+    await t.run((ctx) => ctx.db.patch(first!, { sentAt: NOW }));
+    const second = await add(kind, [20]);
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
+    expect(
+      (await rows(t)).filter((r) => r.kind === kind).map((r) => r.juz),
+    ).toEqual([[5, 8, 12], [20]]);
+
+    await t.run((ctx) => ctx.db.patch(second!, { skippedAt: NOW }));
+    expect(await add(kind, [21])).not.toBe(second);
+  }
+  // Other kinds keep the strict dedupe.
+  expect(await queue(t, ids, "reminder")).not.toBeNull();
+  await t.run((ctx) => ctx.db.patch(ids.dayId, {}));
+  expect(await queue(t, ids, "reminder")).toBeNull();
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+});
+
 test("rows without a day are never deduplicated", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t);

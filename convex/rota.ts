@@ -759,7 +759,7 @@ export const reassign = sessionMutation({
     if (!found || !participant) return { error: "not_found" };
     if (found.day.closedAt !== null) return { error: "closed" };
     if (found.read.doneAt !== null) return { error: "done" };
-    const holderId = found.read.holderId;
+    const previousId = found.read.readerId;
     await ctx.db.patch(found.read._id, {
       readerId: participant._id,
       reassignedAt: Date.now(),
@@ -775,8 +775,13 @@ export const reassign = sessionMutation({
       participantId: participant._id,
       kind: "assigned",
     });
-    if (holderId !== null && holderId !== participant._id) {
-      await enqueue(ctx, { ...row, participantId: holderId, kind: "covered" });
+    // Whoever had it until now (the holder, or a reader it was reassigned to) is covered.
+    if (previousId !== null && previousId !== participant._id) {
+      await enqueue(ctx, {
+        ...row,
+        participantId: previousId,
+        kind: "covered",
+      });
     }
     return { ok: true };
   },

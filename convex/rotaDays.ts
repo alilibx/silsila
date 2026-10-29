@@ -108,6 +108,11 @@ async function startDay(
     closedAt: null,
     unreadSentAt: null,
     summarySentAt: null,
+    // A day that starts after the reminder time has none that day.
+    reminderSentAt:
+      localMinutes(now, rota.timeZone) >= rota.messages.reminder.at
+        ? now
+        : null,
   });
   const byJuz = await slotRowsByJuz(ctx, khatma._id, number);
   const juzByHolder = new Map<Id<"rotaParticipants">, number[]>();
@@ -286,10 +291,13 @@ async function countSilentDay(
     ) {
       continue;
     }
-    const silentDays =
-      (p.lastReplyAt ?? 0) >= day.startedAt ? 0 : (p.silentDays ?? 0) + 1;
+    const before = p.silentDays ?? 0;
+    const silentDays = (p.lastReplyAt ?? 0) >= day.startedAt ? 0 : before + 1;
+    const silence = silentDays >= stopDays;
     await ctx.db.patch(p._id, { silentDays });
-    if (silentDays === noticeDays) {
+    // The notice goes once, when the count first reaches the threshold, and
+    // not at all when the participant is silenced at the same time.
+    if (!silence && before < noticeDays && silentDays >= noticeDays) {
       await notify(ctx, {
         personId: khatma.creatorPersonId,
         khatmaId: khatma._id,
@@ -298,7 +306,7 @@ async function countSilentDay(
         count: silentDays,
       });
     }
-    if (silentDays >= stopDays) {
+    if (silence) {
       await ctx.db.patch(p._id, { silencedAt: now });
       await notify(ctx, {
         personId: khatma.creatorPersonId,
@@ -354,17 +362,20 @@ async function sendCycleMessages(
 
 /**
  * Closes a day: the one place `closedAt` is set, so the silence count and
- * the cycle messages run once per day. Does nothing for a closed day.
+ * the cycle messages run once per day. Does nothing for a closed day. A day
+ * closing while the khatma is paused doesn't count toward silence.
  */
 async function closeDay(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
+  rota: RotaConfig,
   day: Doc<"rotaDays">,
   now: number,
 ): Promise<Doc<"rotaDays">> {
   if (day.closedAt !== null) return day;
   await ctx.db.patch(day._id, { closedAt: now });
-  await countSilentDay(ctx, khatma, day, now);
+  // Nobody is asked to reply while the khatma is paused.
+  if (rota.pausedAt === null) await countSilentDay(ctx, khatma, day, now);
   if (day.number === ROTA_SIZE) await sendCycleMessages(ctx, day);
   return { ...day, closedAt: now };
 }
@@ -386,11 +397,11 @@ export const tick = internalMutation({
 
     let last = await lastRotaDay(ctx, khatma._id);
     if (last && last.closedAt === null && now >= last.closesAt) {
-      last = await closeDay(ctx, khatma, last, now);
+      last = await closeDay(ctx, khatma, rota, last, now);
     }
 
     if (shouldStart(rota, last, today, now)) {
-      if (last) await closeDay(ctx, khatma, last, now);
+      if (last) await closeDay(ctx, khatma, rota, last, now);
       last = await startDay(ctx, khatma, rota, last, today, now);
     }
 

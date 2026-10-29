@@ -36,6 +36,7 @@ type Reader = {
   /** Their join message; null for someone who never joined. Default 0 (long ago). */
   joinedAt?: number | null;
   stoppedAt?: number | null;
+  silencedAt?: number | null;
 };
 
 /** A daily rota khatma, first date 2027-01-16, with a joined participant per entry of `readers`. */
@@ -94,6 +95,7 @@ async function setup(
         removedAt: null,
         joinedAt: r.joinedAt === undefined ? 0 : r.joinedAt,
         stoppedAt: r.stoppedAt ?? null,
+        silencedAt: r.silencedAt ?? null,
       });
       await ctx.db.insert("rotaSlots", {
         khatmaId,
@@ -204,9 +206,9 @@ test("one reader holding two slots gets all their ajza' in one message", async (
   await tickAt(t, s, "2027-01-16T08:00");
   const rows = await outbox(t, "juz");
   expect(rows).toHaveLength(2);
-  expect(rows.find((r) => r.participantId === s.participants[0])?.juz).toEqual(
-    [2, 7],
-  );
+  expect(rows.find((r) => r.participantId === s.participants[0])?.juz).toEqual([
+    2, 7,
+  ]);
 });
 
 test("the reminder goes once, only to readers with unread ajza'", async () => {
@@ -425,4 +427,113 @@ test("celebrateIfComplete leaves out the participant who gets the dua in a reply
     [s.participants[1], 1],
   ]);
   expect((await firstDay(t, s)).celebratedAt).toBeGreaterThan(0);
+});
+
+test("a stopped or silenced participant gets no juz' message", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [
+    { slot: 2, stoppedAt: 1 },
+    { slot: 3, silencedAt: 1 },
+    { slot: 4 },
+  ]);
+  await tickAt(t, s, "2027-01-16T08:00");
+  expect((await outbox(t, "juz")).map((r) => r.participantId)).toEqual([
+    s.participants[2],
+  ]);
+});
+
+test("a day that starts after the reminder time sends no reminder that day", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 2 }]);
+  await tickAt(t, s, "2027-01-16T17:00");
+  await tickAt(t, s, "2027-01-16T18:00");
+  expect(await outbox(t, "juz")).toHaveLength(1);
+  expect(await outbox(t, "reminder")).toEqual([]);
+  expect((await firstDay(t, s)).reminderSentAt).toBe(dubai("2027-01-16T17:00"));
+});
+
+test("no reminder for an open day that isn't dated today", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 2 }]);
+  await tickAt(t, s, "2027-01-16T08:00");
+  // The day stays open past midnight and the next date starts nothing.
+  const day = await firstDay(t, s);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(day._id, { closesAt: dubai("2027-01-18T08:00") });
+    const k = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...k!.rota!, pauseDates: ["2027-01-17"] },
+    });
+  });
+  await tickAt(t, s, "2027-01-17T17:00");
+  expect((await firstDay(t, s)).closedAt).toBeNull();
+  expect(await outbox(t, "reminder")).toEqual([]);
+});
+
+test("a day that closes while the khatma is paused doesn't count toward silence", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 2 }]);
+  const [id] = s.participants;
+  await tickAt(t, s, "2027-01-16T08:00");
+  await t.run(async (ctx) => {
+    const k = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, { rota: { ...k!.rota!, pausedAt: 1 } });
+  });
+  await tickAt(t, s, "2027-01-17T08:00");
+  expect((await firstDay(t, s)).closedAt).not.toBeNull();
+  expect((await participant(t, id!)).silentDays ?? 0).toBe(0);
+});
+
+function setSetting(t: T, key: string, value: number) {
+  return t.run((ctx) =>
+    ctx.db.insert("settings", { key, value, updatedAt: 0 }),
+  );
+}
+
+async function closeDays(t: T, s: Setup, from: number, to: number) {
+  for (let d = from; d <= to; d++) {
+    await tickAt(t, s, `2027-01-${String(d).padStart(2, "0")}T08:00`);
+  }
+}
+
+test("the notice goes once when the count first reaches a lowered threshold, not again", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 2 }]);
+  const [id] = s.participants;
+  await setSetting(t, "rotaSilenceNoticeDays", 2);
+  await t.run((ctx) => ctx.db.patch(id!, { silentDays: 4 }));
+  // Already past the threshold: closing another silent day tells no one.
+  await closeDays(t, s, 16, 17);
+  expect((await participant(t, id!)).silentDays).toBe(5);
+  expect(await organizerNotes(t, s, "rotaSilent")).toHaveLength(0);
+
+  // A reply resets the count; reaching the threshold again gives one notice.
+  await t.run((ctx) => ctx.db.patch(id!, { silentDays: 0, lastReplyAt: 0 }));
+  await closeDays(t, s, 18, 19);
+  expect((await participant(t, id!)).silentDays).toBe(2);
+  expect(await organizerNotes(t, s, "rotaSilent")).toHaveLength(1);
+  await closeDays(t, s, 20, 20);
+  expect(await organizerNotes(t, s, "rotaSilent")).toHaveLength(1);
+});
+
+test("when the notice threshold is not below the stop threshold only the silencing note goes", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 2 }]);
+  const [id] = s.participants;
+  await setSetting(t, "rotaSilenceNoticeDays", 5);
+  await setSetting(t, "rotaSilenceStopDays", 3);
+  await closeDays(t, s, 16, 19);
+  expect((await participant(t, id!)).silencedAt).not.toBeNull();
+  expect(await organizerNotes(t, s, "rotaSilenced")).toHaveLength(1);
+  expect(await organizerNotes(t, s, "rotaSilent")).toHaveLength(0);
+});
+
+test("when the notice and stop thresholds are equal only the silencing note goes", async () => {
+  const t2 = convexTest(schema, modules);
+  const s2 = await setup(t2, [{ slot: 2 }]);
+  await setSetting(t2, "rotaSilenceNoticeDays", 3);
+  await setSetting(t2, "rotaSilenceStopDays", 3);
+  await closeDays(t2, s2, 16, 19);
+  expect(await organizerNotes(t2, s2, "rotaSilenced")).toHaveLength(1);
+  expect(await organizerNotes(t2, s2, "rotaSilent")).toHaveLength(0);
 });

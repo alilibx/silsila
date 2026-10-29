@@ -451,3 +451,68 @@ test("the organizer finishing the day queues complete once for every joined part
   });
   expect(await queued(t, "complete")).toHaveLength(2);
 });
+
+test("two reassignments to one reader before delivery make one message naming both ajza'", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const holder = await add(t, s, 8);
+  const reader = await add(t, s, 9);
+  await join(t, holder, reader);
+  await startDay(t, s);
+  const eight = await tile(t, s, 8);
+  const ten = await tile(t, s, 10);
+  await act(t, s, "reassign", { readId: ten.readId, participantId: holder });
+  await act(t, s, "reassign", { readId: eight.readId, participantId: reader });
+  const nine = await tile(t, s, 9);
+  await act(t, s, "reassign", { readId: nine.readId, participantId: holder });
+  expect(await queued(t, "assigned")).toEqual([
+    { participantId: holder, juz: [9, 10] },
+    { participantId: reader, juz: [8] },
+  ]);
+});
+
+test("a reassignment after the first message went out makes a new message", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const holder = await add(t, s, 8);
+  const reader = await add(t, s, 9);
+  await join(t, holder, reader);
+  await startDay(t, s);
+  await act(t, s, "reassign", {
+    readId: (await tile(t, s, 8)).readId,
+    participantId: reader,
+  });
+  await t.run(async (ctx) => {
+    const rows = await ctx.db.query("rotaOutbox").collect();
+    for (const r of rows) {
+      if (r.kind === "assigned" || r.kind === "covered") {
+        await ctx.db.patch(r._id, { sentAt: NOW });
+      }
+    }
+  });
+  await act(t, s, "reassign", {
+    readId: (await tile(t, s, 10)).readId,
+    participantId: reader,
+  });
+  expect(await queued(t, "assigned")).toEqual([
+    { participantId: reader, juz: [8] },
+    { participantId: reader, juz: [10] },
+  ]);
+});
+
+test("a juz' moved on from a reader who isn't the holder covers that reader too", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const a = await add(t, s, 8);
+  const b = await add(t, s, 9);
+  const c = await add(t, s, 10);
+  await join(t, a, b, c);
+  await startDay(t, s);
+  const eight = await tile(t, s, 8);
+  await act(t, s, "reassign", { readId: eight.readId, participantId: b });
+  await act(t, s, "reassign", { readId: eight.readId, participantId: c });
+  expect(await queued(t, "covered")).toEqual([
+    { participantId: a, juz: [8] },
+    { participantId: b, juz: [8] },
+  ]);
+});

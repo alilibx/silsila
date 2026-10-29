@@ -57,11 +57,16 @@ function reachable(p: Participant | null): p is Participant {
   );
 }
 
+/** Kinds that name the ajza' of a reassignment: several on one day make one message. */
+const MERGED_KINDS: ReadonlySet<Kind> = new Set(["assigned", "covered"]);
+
 /**
  * Queues one message to one participant and schedules its delivery for when
  * quiet hours end. Nothing is queued for someone who hasn't joined, has
  * stopped or was silenced, or for a message already queued for the same
- * day, kind and participant (rows without a day are never duplicates).
+ * day, kind and participant (rows without a day are never duplicates). The
+ * exception is `assigned` and `covered`: ajza' added while the message waits
+ * join it, and once it was sent or skipped they get a new one.
  */
 export async function enqueue(
   ctx: MutationCtx,
@@ -88,8 +93,23 @@ export async function enqueue(
           .eq("kind", row.kind)
           .eq("participantId", row.participantId),
       )
-      .first();
-    if (existing) return null;
+      .collect();
+    if (MERGED_KINDS.has(row.kind)) {
+      // More ajza' for a message not yet sent join it; once it went out, the
+      // new ones are a message of their own.
+      const unsent = existing.find(
+        (r) => r.sentAt === null && r.skippedAt === null,
+      );
+      if (unsent) {
+        const juz = [...new Set([...unsent.juz, ...row.juz])].sort(
+          (a, b) => a - b,
+        );
+        await ctx.db.patch(unsent._id, { juz });
+        return unsent._id;
+      }
+    } else if (existing.length > 0) {
+      return null;
+    }
   }
   const now = Date.now();
   const outboxId = await ctx.db.insert("rotaOutbox", {
