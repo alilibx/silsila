@@ -6,12 +6,15 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
+import { lastRotaDay, targetDay } from "./lib/rotaPlace";
 import { encodePayload } from "./lib/rotaPayload";
 import {
   ROTA_BUTTONS,
   assignedText,
   assignedTemplate,
+  clockText,
   completeTemplate,
   completeText,
   coveredTemplate,
@@ -23,9 +26,11 @@ import {
   juzText,
   reminderTemplate,
   reminderText,
+  weekdayText,
+  welcomeText,
 } from "./lib/rotaTemplates";
 import { quietHours } from "./lib/settings";
-import { nextAwake } from "./lib/wakingTime";
+import { localDate, nextAwake } from "./lib/wakingTime";
 import { khatmaTitle, type TemplateMessage } from "./lib/whatsappTemplates";
 import {
   sendWhatsAppButtons,
@@ -129,7 +134,10 @@ export async function enqueue(
 }
 
 /** The payloads of a day's «أتممت» and «ليس بعد» buttons. */
-function donePayloads(row: Doc<"rotaOutbox">, staging: boolean) {
+function donePayloads(
+  row: { dayId: string | null; participantId: Id<"rotaParticipants"> },
+  staging: boolean,
+) {
   const ids = { dayId: row.dayId as string, participantId: row.participantId };
   return {
     done: encodePayload({ action: "done", ...ids }, staging),
@@ -143,6 +151,63 @@ export function titled(
   text: string,
 ): string {
   return `*${khatmaTitle(khatma)}*\n${text}`;
+}
+
+/**
+ * The welcome for a member who has just joined: today's juz' with the buttons
+ * when a day dated today is open and has unread reads for them, else when their
+ * next reading day comes. Free-form: it needs the phone's 24-hour window.
+ */
+export async function welcomeMessage(
+  ctx: QueryCtx,
+  khatma: Doc<"khatmas">,
+  participant: Participant,
+  now: number,
+): Promise<FreeForm> {
+  const rota = khatma.rota;
+  if (!rota) throw new Error("not a rota khatma");
+  const title = khatmaTitle(khatma);
+  const last = await lastRotaDay(ctx, khatma._id);
+  if (
+    last &&
+    last.closedAt === null &&
+    last.date === localDate(now, rota.timeZone)
+  ) {
+    const juz = (
+      await ctx.db
+        .query("rotaReads")
+        .withIndex("by_reader_day", (q) =>
+          q.eq("readerId", participant._id).eq("dayId", last._id),
+        )
+        .collect()
+    )
+      .filter((r) => r.doneAt === null)
+      .map((r) => r.juz)
+      .sort((a, b) => a - b);
+    if (juz.length > 0) {
+      const text = `${welcomeText(participant.name, title, null)}\n${juzText(last.number, juz)}`;
+      const payloads = donePayloads(
+        { dayId: last._id, participantId: participant._id },
+        onStaging(),
+      );
+      return {
+        text: titled(khatma, text),
+        buttons: [
+          { id: payloads.done, title: ROTA_BUTTONS.done },
+          { id: payloads.notYet, title: ROTA_BUTTONS.notYet },
+        ],
+      };
+    }
+  }
+  const target = await targetDay(ctx, khatma);
+  const next =
+    target.date === null
+      ? null
+      : {
+          weekday: weekdayText(target.date),
+          time: clockText(rota.messages.dayAt),
+        };
+  return { text: titled(khatma, welcomeText(participant.name, title, next)) };
 }
 
 /** What a row says, as its template or, inside the 24-hour window, as free-form. */
@@ -207,6 +272,9 @@ function compose(
       return windowOpen
         ? { text: titled(khatma, cycleText) }
         : cycleTemplate(khatma);
+    case "welcome":
+      // Needs the database; `plan` builds it (there is no template for it).
+      return null;
   }
 }
 
@@ -265,6 +333,14 @@ export const plan = internalQuery({
       .unique();
     const windowOpen =
       contact !== null && contact.lastInboundAt >= now - WINDOW_MS;
+    if (row.kind === "welcome") {
+      // No template: outside the window the next juz' message follows anyway.
+      if (!windowOpen) return null;
+      return {
+        phone: participant.phone,
+        message: await welcomeMessage(ctx, khatma, participant, now),
+      };
+    }
     const message = compose(
       row,
       { name: khatma.name, createdAt: khatma.createdAt },

@@ -4,7 +4,12 @@ import { internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { DEFAULT_GRACE } from "./lib/grace";
 import { encodePayload } from "./lib/rotaPayload";
-import { completeText, duaText } from "./lib/rotaTemplates";
+import {
+  ROTA_BUTTONS,
+  completeText,
+  duaText,
+  juzText,
+} from "./lib/rotaTemplates";
 import { enqueue } from "./rotaOutbox";
 import schema from "./schema";
 import { describeMessage } from "./whatsapp";
@@ -151,13 +156,19 @@ const queue = (
   t: T,
   ids: Ids,
   kind:
-    "juz" | "reminder" | "assigned" | "covered" | "complete" | "cycle" = "juz",
+    | "juz"
+    | "reminder"
+    | "assigned"
+    | "covered"
+    | "complete"
+    | "cycle"
+    | "welcome" = "juz",
 ) =>
   t.run((ctx) =>
     enqueue(ctx, {
       khatmaId: ids.khatmaId,
       participantId: ids.participantId,
-      dayId: ids.dayId,
+      dayId: kind === "welcome" ? null : ids.dayId,
       kind,
       juz: [2, 3],
       number: 1,
@@ -513,6 +524,70 @@ test("a retried deliver sends once", async () => {
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent).toHaveLength(1);
   expect((await rows(t))[0]?.skippedAt).toBeNull();
+});
+
+test("a welcome inside the window goes free-form with today's juz' and the buttons", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  expect(await queue(t, ids, "welcome")).not.toBeNull();
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toHaveLength(1);
+  const text = sent[0]?.text ?? "";
+  expect(sent[0]?.to).toBe(PHONE.slice(1));
+  expect(text).toContain("*ختمة العائلة*");
+  expect(text).toContain("أهلاً سارة");
+  expect(text).toContain(juzText(1, [2, 3]));
+  expect(text).toContain(`[${ROTA_BUTTONS.done}]`);
+  expect(text).toContain(`[${ROTA_BUTTONS.notYet}]`);
+  expect((await rows(t))[0]?.sentAt).not.toBeNull();
+});
+
+test("a welcome with no juz' to read today says when the next day comes", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true, readDone: true });
+  await queue(t, ids, "welcome");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.text).toContain("أهلاً سارة");
+  expect(sent[0]?.text).toContain("تصلك رسالة جزئك يوم");
+  expect(sent[0]?.text).not.toContain(`[${ROTA_BUTTONS.done}]`);
+});
+
+test("a welcome outside the window is skipped: there is no template, the next juz' message follows", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  await queue(t, ids, "welcome");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
+  const [row] = await rows(t);
+  expect(row?.sentAt).toBeNull();
+  expect(row?.skippedAt).not.toBeNull();
+});
+
+test("a welcome waits for quiet hours to end", async () => {
+  vi.setSystemTime(NIGHT);
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true, readDone: true });
+  // They wrote just now (the setup's window opened at noon), so it is still open in the morning.
+  await t.run(async (ctx) => {
+    const contact = await ctx.db.query("waContacts").first();
+    await ctx.db.patch(contact!._id, { lastInboundAt: NIGHT });
+  });
+  await queue(t, ids, "welcome");
+  const outboxId = (await rows(t))[0]?._id as Id<"rotaOutbox">;
+  await t.action(internal.rotaOutbox.deliver, { outboxId });
+  expect(sent).toEqual([]);
+  vi.setSystemTime(MORNING);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toHaveLength(1);
+});
+
+test("welcomes are never merged or deduped", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  await queue(t, ids, "welcome");
+  await queue(t, ids, "welcome");
+  expect(await rows(t)).toHaveLength(2);
 });
 
 test("sendSample sends every rota template, only on dev or staging", async () => {

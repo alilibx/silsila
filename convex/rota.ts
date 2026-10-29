@@ -40,6 +40,7 @@ import {
   maskPhone,
   normalizePhone,
 } from "./lib/text";
+import { NEW_MEMBER_NAME } from "./lib/rotaTemplates";
 import { khatmaTitle } from "./lib/whatsappTemplates";
 import { instantAt, localDate, safeTimeZone } from "./lib/wakingTime";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
@@ -766,9 +767,7 @@ export const acceptJoinRequest = sessionMutation({
       ctx,
       khatma,
       {
-        name:
-          cleanDisplayName(request.profileName ?? "") ??
-          maskPhone(request.phone),
+        name: cleanDisplayName(request.profileName ?? "") ?? NEW_MEMBER_NAME,
         phone: request.phone,
         personId: person?._id ?? null,
       },
@@ -780,6 +779,15 @@ export const acceptJoinRequest = sessionMutation({
       return { error: "juz_taken" };
     }
     await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
+    // The member was told the organizer would let them know.
+    await enqueue(ctx, {
+      khatmaId: khatma._id,
+      participantId: placed.participantId,
+      dayId: null,
+      kind: "welcome",
+      juz: [],
+      number: null,
+    });
     return { ok: true, participantId: placed.participantId };
   },
 });
@@ -847,6 +855,25 @@ async function currentDay(
   return last.closedAt === null || isToday ? last : null;
 }
 
+/**
+ * What the reader answered to an unread juz': «ليس بعد», or nothing. Silence is
+ * only worth showing for someone who can be messaged.
+ */
+function answerOf(
+  read: Doc<"rotaReads">,
+  reader: Doc<"rotaParticipants"> | null | undefined,
+): "notYet" | "none" | null {
+  if (read.doneAt !== null) return null;
+  if (read.notYetAt != null) return "notYet";
+  return reader &&
+    reader.removedAt === null &&
+    reader.joinedAt != null &&
+    reader.stoppedAt == null &&
+    reader.silencedAt == null
+    ? "none"
+    : null;
+}
+
 /** The day's 30 reads, the next day and who has finished, for the organizer's Today screen. */
 export const today = sessionQuery({
   args: { inviteCode: v.string() },
@@ -884,12 +911,7 @@ export const today = sessionQuery({
       holderName: nameOf(r.holderId),
       readerName: nameOf(r.readerId),
       readerId: r.readerId,
-      answer:
-        r.doneAt !== null
-          ? null
-          : r.notYetAt != null
-            ? ("notYet" as const)
-            : ("none" as const),
+      answer: answerOf(r, r.readerId && byId.get(r.readerId)),
     }));
     const participants = everyone
       .filter((p) => p.removedAt === null)
@@ -961,6 +983,8 @@ export const reassign = sessionMutation({
     await ctx.db.patch(found.read._id, {
       readerId: participant._id,
       reassignedAt: Date.now(),
+      // The new reader hasn't answered.
+      notYetAt: null,
     });
     const row = {
       khatmaId: khatma._id,

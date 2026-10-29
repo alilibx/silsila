@@ -265,7 +265,8 @@ export default defineSchema({
     outcome: v.union(v.literal("accepted"), v.literal("declined"), v.null()),
   })
     .index("by_khatma_open", ["khatmaId", "resolvedAt"])
-    .index("by_khatma_phone", ["khatmaId", "phone"]),
+    .index("by_khatma_phone", ["khatmaId", "phone"])
+    .index("by_phone", ["phone"]),
 
   /** The last message each phone sent us: its 24-hour WhatsApp window. */
   waContacts: defineTable({
@@ -285,6 +286,7 @@ export default defineSchema({
       v.literal("covered"),
       v.literal("complete"),
       v.literal("cycle"),
+      v.literal("welcome"),
     ),
     juz: v.array(v.number()),
     number: nullableNumber,

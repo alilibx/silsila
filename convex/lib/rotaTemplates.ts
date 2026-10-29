@@ -174,6 +174,9 @@ export function welcomeText(
   return `${joined} تصلك رسالة جزئك يوم ${next.weekday} الساعة ${next.time}.`;
 }
 
+/** The name of a member accepted from a join request that came without a profile name. */
+export const NEW_MEMBER_NAME = "مشارك جديد";
+
 /** The juz' message as free-form text; the done and not-yet buttons go with it. */
 export function juzText(number: number, juz: number[]): string {
   return `الختمة ${toArabicDigits(number)} اليوم. قراءتك: ${juzPhrase(juz)}.`;

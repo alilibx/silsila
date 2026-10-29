@@ -517,11 +517,20 @@ test("a juz' moved on from a reader who isn't the holder covers that reader too"
   ]);
 });
 
+async function joinAll(t: T) {
+  await t.run(async (ctx) => {
+    for (const p of await ctx.db.query("rotaParticipants").collect()) {
+      await ctx.db.patch(p._id, { joinedAt: NOW });
+    }
+  });
+}
+
 test("an unread tile says whether the reader answered «ليس بعد»; a done one has no answer", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
   await add(t, s, 4);
   await add(t, s, 5);
+  await joinAll(t);
   await startDay(t, s);
   const four = await tile(t, s, 4);
   const five = await tile(t, s, 5);
@@ -534,4 +543,45 @@ test("an unread tile says whether the reader answered «ليس بعد»; a done 
   // Done outranks an earlier «ليس بعد».
   await act(t, s, "markDone", { readId: four.readId });
   expect((await tile(t, s, 4)).answer).toBeNull();
+});
+
+test("«لم يردّ» is shown only for a reader who joined and can be messaged", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const notJoined = await add(t, s, 4);
+  const stopped = await add(t, s, 5);
+  const silenced = await add(t, s, 6);
+  await add(t, s, 7);
+  await joinAll(t);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(notJoined, { joinedAt: null });
+    await ctx.db.patch(stopped, { stoppedAt: NOW });
+    await ctx.db.patch(silenced, { silencedAt: NOW });
+  });
+  await startDay(t, s);
+  expect((await tile(t, s, 4)).answer).toBeNull();
+  expect((await tile(t, s, 5)).answer).toBeNull();
+  expect((await tile(t, s, 6)).answer).toBeNull();
+  expect((await tile(t, s, 7)).answer).toBe("none");
+  // «ليس بعد» is an answer whoever gave it.
+  const four = await tile(t, s, 4);
+  await t.run((ctx) => ctx.db.patch(four.readId, { notYetAt: NOW }));
+  expect((await tile(t, s, 4)).answer).toBe("notYet");
+});
+
+test("reassigning clears the old «ليس بعد»: the new reader has not answered", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  await add(t, s, 8);
+  const reader = await add(t, s, 9);
+  await joinAll(t);
+  await startDay(t, s);
+  const eight = await tile(t, s, 8);
+  await t.run((ctx) => ctx.db.patch(eight.readId, { notYetAt: NOW }));
+  expect((await tile(t, s, 8)).answer).toBe("notYet");
+  await act(t, s, "reassign", {
+    readId: eight.readId,
+    participantId: reader,
+  });
+  expect((await tile(t, s, 8)).answer).toBe("none");
 });

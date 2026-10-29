@@ -649,7 +649,7 @@ test("accepting a request places the person on that juz' as joined and closes th
   });
 });
 
-test("an accepted person with no profile name is named by the masked number, and is linked to their Wirdak account", async () => {
+test("an accepted person with no profile name is «مشارك جديد», and is linked to their Wirdak account", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
   const member = await t.run((ctx) =>
@@ -665,9 +665,37 @@ test("an accepted person with no profile name is named by the masked number, and
   const res = await accept(t, s, id, 3);
   if (!("participantId" in res)) throw new Error(JSON.stringify(res));
   expect(await participantRow(t, res.participantId)).toMatchObject({
-    name: "+971 50 ••• 3344",
+    name: "مشارك جديد",
     personId: member,
   });
+});
+
+test("accepting queues one welcome for the new member, with no day", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  const res = await accept(t, s, id, 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  const outbox = await t.run((ctx) => ctx.db.query("rotaOutbox").collect());
+  expect(outbox).toHaveLength(1);
+  expect(outbox[0]).toMatchObject({
+    participantId: res.participantId,
+    kind: "welcome",
+    dayId: null,
+    juz: [],
+    sentAt: null,
+    skippedAt: null,
+  });
+});
+
+test("a refused accept queues no welcome", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  await accept(t, s, id, 1);
+  expect(await t.run((ctx) => ctx.db.query("rotaOutbox").collect())).toEqual(
+    [],
+  );
 });
 
 test("accepting refuses a held juz', keeping the request open", async () => {

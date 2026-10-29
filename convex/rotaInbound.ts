@@ -7,28 +7,24 @@ import {
 } from "./_generated/server";
 import { notify } from "./notes";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
-import { onStaging, titled } from "./rotaOutbox";
+import { onStaging, titled, welcomeMessage } from "./rotaOutbox";
 import { MAX_BUTTON_TITLE, MAX_REPLY_BUTTONS } from "./whatsapp";
 import { findJoinCode } from "./lib/rotaJoin";
 import { decodePayload, encodePayload } from "./lib/rotaPayload";
-import { lastRotaDay, targetDay } from "./lib/rotaPlace";
+import { lastRotaDay } from "./lib/rotaPlace";
 import { classifyReply } from "./lib/rotaReplies";
 import {
-  ROTA_BUTTONS,
   alreadyText,
   clockText,
   closedText,
   duaText,
   endedText,
   helpText,
-  juzText,
   manyKhatmasText,
   notOnListText,
   notYetText,
   stopText,
   thanksText,
-  weekdayText,
-  welcomeText,
   whichKhatmaText,
 } from "./lib/rotaTemplates";
 import { maskPhone, toArabicDigits } from "./lib/text";
@@ -196,45 +192,11 @@ async function answerTap(
 async function welcome(
   ctx: MutationCtx,
   khatma: Khatma,
-  rota: RotaConfig,
   participant: Participant,
   now: number,
 ): Promise<InboundReply> {
-  const title = khatmaTitle(khatma);
-  const last = await lastRotaDay(ctx, khatma._id);
-  if (
-    last &&
-    last.closedAt === null &&
-    last.date === localDate(now, rota.timeZone)
-  ) {
-    const juz = (await readsOf(ctx, participant, last))
-      .filter((r) => r.doneAt === null)
-      .map((r) => r.juz)
-      .sort((a, b) => a - b);
-    if (juz.length > 0) {
-      const ids = { dayId: last._id, participantId: participant._id };
-      const text = `${welcomeText(participant.name, title, null)}\n${juzText(last.number, juz)}`;
-      return reply(titled(khatma, text), [
-        {
-          id: encodePayload({ action: "done", ...ids }, onStaging()),
-          title: ROTA_BUTTONS.done,
-        },
-        {
-          id: encodePayload({ action: "notYet", ...ids }, onStaging()),
-          title: ROTA_BUTTONS.notYet,
-        },
-      ]);
-    }
-  }
-  const target = await targetDay(ctx, khatma);
-  const next =
-    target.date === null
-      ? null
-      : {
-          weekday: weekdayText(target.date),
-          time: clockText(rota.messages.dayAt),
-        };
-  return about(khatma, welcomeText(participant.name, title, next));
+  const message = await welcomeMessage(ctx, khatma, participant, now);
+  return reply(message.text, message.buttons);
 }
 
 /**
@@ -306,7 +268,7 @@ async function join(
     stoppedAt: null,
     personId: joined.personId,
   });
-  return [await welcome(ctx, khatma, rota, joined, args.now)];
+  return [await welcome(ctx, khatma, joined, args.now)];
 }
 
 /** «إيقاف»: stops every khatma's messages for the phone and tells each organizer. */
@@ -328,6 +290,24 @@ async function stop(
     });
   }
   return [reply(stopText)];
+}
+
+/** Declines the phone's open join requests; whether it had any. */
+async function declineRequests(
+  ctx: MutationCtx,
+  phone: string,
+  now: number,
+): Promise<boolean> {
+  const open = (
+    await ctx.db
+      .query("rotaJoinRequests")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .collect()
+  ).filter((r) => r.resolvedAt === null);
+  for (const r of open) {
+    await ctx.db.patch(r._id, { resolvedAt: now, outcome: "declined" });
+  }
+  return open.length > 0;
 }
 
 /**
@@ -434,7 +414,13 @@ export const handle = internalMutation({
     }
     const code = findJoinCode(args.text);
     if (code !== null) return (await join(ctx, args, code)) ?? NONE;
-    if (active.length === 0) return NONE;
+    if (active.length === 0) {
+      // «إيقاف» from a number that only asked to join withdraws its requests.
+      if (classifyReply(args.text) !== "stop") return NONE;
+      return (await declineRequests(ctx, args.phone, args.now))
+        ? [reply(stopText)]
+        : NONE;
+    }
     const joined = active.filter(hasJoined);
     const word = classifyReply(args.text);
     switch (word) {

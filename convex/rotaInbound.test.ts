@@ -551,6 +551,34 @@ test("«إيقاف» stops every khatma for the phone and tells each organizer",
   expect(sent.map((m) => m.body)).toEqual([stopText]);
 });
 
+test("«إيقاف» from a phone that only asked to join declines its requests", async () => {
+  const t = convexTest(schema, modules);
+  await setup(t, [{ slot: 1 }]);
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  sent.length = 0;
+  await send(t, STRANGER, "إيقاف");
+  const requests = await t.run((ctx) =>
+    ctx.db.query("rotaJoinRequests").collect(),
+  );
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    resolvedAt: Date.now(),
+    outcome: "declined",
+  });
+  expect(sent.map((m) => m.body)).toEqual([stopText]);
+  // Nothing is open any more: a second «إيقاف» is not a rota message.
+  sent.length = 0;
+  await send(t, STRANGER, "إيقاف");
+  expect(sent.map((m) => m.body)).not.toContain(stopText);
+});
+
+test("«إيقاف» from a stranger with no request is not a rota message", async () => {
+  const t = convexTest(schema, modules);
+  await setup(t, [{ slot: 1 }]);
+  await send(t, STRANGER, "إيقاف");
+  expect(sent.map((m) => m.body)).not.toContain(stopText);
+});
+
 test("typed «تم» with two open khatmas replies with two buttons and changes nothing", async () => {
   const t = convexTest(schema, modules);
   const phone = "+971500000100";
