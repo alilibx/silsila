@@ -204,7 +204,9 @@ export default defineSchema({
     silentDays: v.optional(v.number()),
   })
     .index("by_khatma", ["khatmaId"])
-    .index("by_khatma_phone", ["khatmaId", "phone"]),
+    .index("by_khatma_phone", ["khatmaId", "phone"])
+    // Every khatma a phone reads in, for its WhatsApp replies.
+    .index("by_phone", ["phone"]),
 
   /** Which participant owns each of the 30 slots. */
   rotaSlots: defineTable({

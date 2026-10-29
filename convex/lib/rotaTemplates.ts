@@ -132,6 +132,33 @@ export function coveredText(juz: number[]): string {
 export const cycleText =
   "تحديث على قراءتك: أكملت ثلاثين جزءاً في ثلاثين ختمة، أي القرآن كاملاً.";
 
+const WEEKDAYS = [
+  "الأحد",
+  "الاثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+  "السبت",
+];
+
+/** The weekday of a `YYYY-MM-DD` date: «الأحد». */
+export function weekdayText(date: string): string {
+  return WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()] ?? "";
+}
+
+/** Minutes after local midnight as a 12-hour time with its part of the day: «٤ عصراً», «٨:٣٠ صباحاً». */
+export function clockText(minutes: number): string {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  const part =
+    h < 12 ? "صباحاً" : h < 15 ? "ظهراً" : h < 18 ? "عصراً" : "مساءً";
+  const hour = toArabicDigits(h % 12 === 0 ? 12 : h % 12);
+  const time =
+    m === 0 ? hour : `${hour}:${toArabicDigits(String(m).padStart(2, "0"))}`;
+  return `${time} ${part}`;
+}
+
 /**
  * The reply to the member's join message. `next` holds the weekday and the
  * time of their next juz' message, already formatted, or null with no day

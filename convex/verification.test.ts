@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
+import { helpText } from "./lib/rotaTemplates";
 import schema from "./schema";
 import { describeMessage } from "./whatsapp";
 
@@ -174,7 +175,9 @@ test("a button tap never matches a pending sign-in code, whatever its title says
     payload: "r1|p|done|d1|p1",
   });
   expect((await status(t, v)).status).toBe("pending");
-  expect(sent).toEqual([]);
+  // only the rota's answer to a tap it can't place, never a sign-in reply
+  expect(sent.map((s) => s.body)).toEqual([helpText]);
+  sent = [];
 
   // the same text typed is a sign-in message and matches
   await send(t, v.message);

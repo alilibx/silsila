@@ -2,6 +2,9 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import { hmacSha256Hex } from "./lib/crypto";
+import { DEFAULT_GRACE } from "./lib/grace";
+import { joinText } from "./lib/rotaJoin";
+import { helpText, notOnListText } from "./lib/rotaTemplates";
 import { cleanParam } from "./lib/whatsappTemplates";
 import schema from "./schema";
 import {
@@ -872,6 +875,21 @@ test("webhook verify handshake echoes the challenge only for the right token", a
   expect(unset.status).toBe(403);
 });
 
+test("simulateIncoming passes a button tap and profile name through", async () => {
+  const t = convexTest(schema, modules);
+  await t.action(internal.dev.simulateIncoming, {
+    from: "971501234567",
+    text: "أتممت",
+    payload: "r1|p|done|d1|p1",
+    profileName: "سعيد",
+  });
+  // a tap: it reaches the rota (which can't place it), never the sign-in path
+  expect(sent.map((s) => s.body)).toEqual([helpText]);
+  expect(
+    await t.run((ctx) => ctx.db.query("waContacts").collect()),
+  ).toHaveLength(1);
+});
+
 test("simulateIncoming refuses to run outside dev", async () => {
   const t = convexTest(schema, modules);
   vi.stubEnv("WIRDAK_ENV", "prod");
@@ -988,6 +1006,8 @@ test("relay endpoint is closed on a deployment Meta calls", async () => {
 
 test("relay endpoint never matches a button tap to a sign-in code", async () => {
   asStaging();
+  // staging's own site, so a tap marked for staging is this deployment's
+  vi.stubEnv("SITE_URL", "https://stg.wirdak.app");
   const t = convexTest(schema, modules);
   await t.run((ctx) =>
     ctx.db.insert("verifications", {
@@ -1007,7 +1027,8 @@ test("relay endpoint never matches a button tap to a sign-in code", async () => 
   );
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ handled: true });
-  expect(sent).toEqual([]);
+  // the rota's answer to a tap it can't place, never a sign-in reply
+  expect(sent.map((s) => s.body)).toEqual([helpText]);
   const rows = await t.run((ctx) => ctx.db.query("verifications").collect());
   expect(rows.map((r) => r.status)).toEqual(["pending"]);
 
@@ -1017,7 +1038,64 @@ test("relay endpoint never matches a button tap to a sign-in code", async () => 
     JSON.stringify({ ...relayed, waMessageId: "wamid.r2" }),
   );
   expect(await typed.json()).toEqual({ handled: true });
-  expect(sent).toHaveLength(1);
+  expect(sent).toHaveLength(2);
+  expect(describeMessage(payloads[1])).toMatch(/^تمّ التحقق/);
+});
+
+test("relay endpoint takes a join for a staging khatma, with the profile name", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const khatmaId = await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "المنظم",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
+    });
+    return await ctx.db.insert("khatmas", {
+      name: "ختمة",
+      schedule: "none",
+      grace: DEFAULT_GRACE.none,
+      creatorPersonId: personId,
+      inviteCode: "invite",
+      joinCode: "JNC234",
+      completedRounds: 0,
+      createdAt: 0,
+      kind: "rota",
+      rota: {
+        days: { kind: "daily" },
+        firstDate: "2027-01-16",
+        endDate: null,
+        timeZone: "Asia/Dubai",
+        messages: {
+          dayAt: 480,
+          reminder: { at: 960, on: true },
+          unread: { at: 1140, on: false },
+          summary: { at: 1260, on: false },
+        },
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+      },
+    });
+  });
+  const res = await relayPost(
+    t,
+    JSON.stringify({
+      ...relayed,
+      text: joinText("ختمة", "JNC234"),
+      profileName: "خالد",
+    }),
+  );
+  expect(await res.json()).toEqual({ handled: true });
+  const requests = await t.run((ctx) =>
+    ctx.db.query("rotaJoinRequests").collect(),
+  );
+  expect(requests).toMatchObject([
+    { khatmaId, phone: "+971501234567", profileName: "خالد" },
+  ]);
+  expect(sent.map((s) => s.body)).toEqual([`*ختمة*\n${notOnListText}`]);
 });
 
 test("relay endpoint rejects malformed messages", async () => {

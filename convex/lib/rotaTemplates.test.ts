@@ -3,6 +3,7 @@ import { DUAS } from "./duas";
 import {
   alreadyText,
   assignedTemplate,
+  clockText,
   closedText,
   completeTemplate,
   coveredTemplate,
@@ -17,6 +18,7 @@ import {
   ROTA_BUTTONS,
   stopText,
   thanksText,
+  weekdayText,
   welcomeText,
   whichKhatmaText,
 } from "./rotaTemplates";
@@ -142,4 +144,19 @@ test("the dua text holds both duas verbatim, with references", () => {
     expect(text).toContain(dua.ref);
   }
   expect(text.indexOf(DUAS[0].text)).toBeLessThan(text.indexOf(DUAS[1].text));
+});
+
+test("clockText reads a time of day in 12 hours with its part of the day", () => {
+  expect(clockText(480)).toBe("٨ صباحاً");
+  expect(clockText(510)).toBe("٨:٣٠ صباحاً");
+  expect(clockText(0)).toBe("١٢ صباحاً");
+  expect(clockText(720)).toBe("١٢ ظهراً");
+  expect(clockText(960)).toBe("٤ عصراً");
+  expect(clockText(1245)).toBe("٨:٤٥ مساءً");
+});
+
+test("weekdayText names the weekday of a date", () => {
+  expect(weekdayText("2027-01-16")).toBe("السبت");
+  expect(weekdayText("2027-01-17")).toBe("الأحد");
+  expect(weekdayText("2027-01-22")).toBe("الجمعة");
 });

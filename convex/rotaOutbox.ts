@@ -46,6 +46,11 @@ type FreeForm = { text: string; buttons?: { id: string; title: string }[] };
 const WINDOW_MS = 24 * 3_600_000;
 const STAGING_SITE = "https://stg.wirdak.app";
 
+/** Whether this deployment is staging, whose button payloads are marked for it. */
+export function onStaging(): boolean {
+  return siteUrl() === STAGING_SITE;
+}
+
 /** Whether a participant may be sent messages Wirdak starts: on the list, joined, not stopped or silenced. */
 function reachable(p: Participant | null): p is Participant {
   return (
@@ -133,7 +138,7 @@ function donePayloads(row: Doc<"rotaOutbox">, staging: boolean) {
 }
 
 /** A free-form message under the khatma's title in bold, as a template has it in its header. */
-function titled(
+export function titled(
   khatma: { name: string | null; createdAt: number },
   text: string,
 ): string {
@@ -264,7 +269,7 @@ export const plan = internalQuery({
       row,
       { name: khatma.name, createdAt: khatma.createdAt },
       windowOpen,
-      siteUrl() === STAGING_SITE,
+      onStaging(),
     );
     return message === null ? null : { phone: participant.phone, message };
   },
@@ -347,7 +352,7 @@ export const sendSample = internalAction({
     if (deployment !== "dev" && deployment !== "staging") {
       throw new Error("sendSample runs only when WIRDAK_ENV is dev or staging");
     }
-    const staging = siteUrl() === STAGING_SITE;
+    const staging = onStaging();
     const khatma = { name: "ختمة العائلة", createdAt: Date.now() };
     const ids = { dayId: "sample", participantId: "sample" };
     const payloads = {

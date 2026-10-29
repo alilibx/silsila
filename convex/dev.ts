@@ -11,15 +11,20 @@ import { isDev } from "./whatsapp";
  * `bun run convex run dev:simulateIncoming '{"from":"971501234567","text":"…"}'`.
  */
 export const simulateIncoming = internalAction({
-  args: { from: v.string(), text: v.string() },
+  args: {
+    from: v.string(),
+    text: v.string(),
+    /** A button tap's payload, as `rotaPayload.encodePayload` makes it. */
+    payload: v.optional(v.string()),
+    profileName: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<void> => {
     if (!isDev()) {
       throw new Error("simulateIncoming runs only when WIRDAK_ENV is dev");
     }
     await ctx.runAction(internal.whatsapp.handleIncoming, {
       waMessageId: `dev.${randomToken(12)}`,
-      from: args.from,
-      text: args.text,
+      ...args,
     });
   },
 });

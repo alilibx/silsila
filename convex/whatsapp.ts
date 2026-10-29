@@ -6,6 +6,9 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
+import { findJoinCode } from "./lib/rotaJoin";
+import { decodePayload } from "./lib/rotaPayload";
+import { classifyReply } from "./lib/rotaReplies";
 import { cleanKhatmaName } from "./lib/text";
 import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
 
@@ -614,8 +617,10 @@ export const sendText = internalAction({
 // Relay (production → staging)
 //
 // Staging shares production's number, so Meta delivers every message to
-// production. A message production has no pending code for is relayed to
-// staging, which answers whether one of its own codes took it. Staging then
+// production. A message production can't place is relayed to staging: a
+// sign-in code it has no pending code for, a join code no khatma here has, a
+// tap on a button staging sent, or a rota reply from a phone that is no
+// member here. Staging answers whether it took it, and then
 // sends its own reply (with its own `SITE_URL`); production replies only if
 // staging didn't take it, couldn't be reached, or took too long. Staging sends
 // before it answers, so its reply is never left waiting in a queue (a PIN
@@ -637,8 +642,9 @@ export async function relaySignature(
 }
 
 /**
- * Relays a message to `WHATSAPP_RELAY_URL` and returns `true` only if the
- * other deployment took it (and so sends the reply). Never throws: any
+ * Relays a message, with its button payload and profile name, to
+ * `WHATSAPP_RELAY_URL` and returns `true` only if the other deployment took
+ * it (and so sends the reply). Never throws: any
  * failure returns `false`, so production still answers the person.
  */
 export async function relayIncoming(
@@ -713,9 +719,42 @@ export const recordInbound = internalMutation({
 });
 
 /**
- * Dedupes and matches one message and sends the reply for a match. Returns
- * `"taken"` when nothing more should be sent (a match, a duplicate, a bad
- * sender, or a rate-limited phone), else whether the text could hold a code.
+ * The rota's answer to a message no sign-in code took, sent at once since it
+ * replies to the member's own message. Returns whether anything was sent.
+ */
+async function answerRota(
+  ctx: ActionCtx,
+  phone: string,
+  message: IncomingMessage,
+): Promise<boolean> {
+  const result = await ctx.runMutation(internal.rotaInbound.handle, {
+    phone,
+    text: message.text,
+    ...(message.payload !== undefined && { payload: message.payload }),
+    ...(message.profileName !== undefined && {
+      profileName: message.profileName,
+    }),
+    now: Date.now(),
+  });
+  if (!Array.isArray(result)) return false;
+  for (const reply of result) {
+    if (reply.buttons) {
+      await sendWhatsAppButtons(phone, reply.text, reply.buttons);
+    } else {
+      await sendWhatsAppText(phone, reply.text);
+    }
+  }
+  return true;
+}
+
+/**
+ * Dedupes and matches one message and sends the reply for a match: a sign-in
+ * code first, then the rota (a button tap, a join message, a member's typed
+ * reply). Returns `"taken"` when nothing more should be sent (a match, a
+ * duplicate, a bad sender, or a rate-limited phone), `"unknown_code"` when
+ * another deployment may place it (a sign-in code, a join code or a button
+ * tap this one doesn't have, or a rota reply from a phone that is no member
+ * here), else `"no_code"`.
  */
 export async function takeIncoming(
   ctx: ActionCtx,
@@ -726,11 +765,14 @@ export async function takeIncoming(
     waMessageId: message.waMessageId,
   });
   if (!fresh) return "taken";
-  // A button tap is never a sign-in message, however its title reads. Nothing
-  // answers it here; the rota reply routing takes it from this point.
-  if (message.payload !== undefined) return "taken";
 
   const phone = `+${message.from}`;
+  // A button tap is never a sign-in message, however its title reads.
+  if (message.payload !== undefined) {
+    if (await answerRota(ctx, phone, message)) return "taken";
+    return decodePayload(message.payload) !== null ? "unknown_code" : "taken";
+  }
+
   // Generated here (never in a mutation); used only if the number already
   // has an account.
   const pin = randomPin();
@@ -743,7 +785,12 @@ export async function takeIncoming(
     case "rate_limited":
       return "taken";
     case "no_match":
-      return result.codeShaped ? "unknown_code" : "no_code";
+      if (await answerRota(ctx, phone, message)) return "taken";
+      return result.codeShaped ||
+        findJoinCode(message.text) !== null ||
+        classifyReply(message.text) !== null
+        ? "unknown_code"
+        : "no_code";
     case "matched":
       await sendVerified(phone, result.returnPath);
       return "taken";
@@ -766,8 +813,10 @@ export const handleIncoming = internalAction({
   handler: async (ctx, args): Promise<void> => {
     const outcome = await takeIncoming(ctx, args);
     if (outcome === "taken") return;
-    // A code we don't have may have been started on staging.
+    // A code, a tap or a rota reply we can't place may be staging's.
     if (outcome === "unknown_code" && (await relayIncoming(args))) return;
+    // A tap never gets the sign-in reply.
+    if (args.payload !== undefined) return;
     await sendWhatsAppText(`+${args.from}`, NO_MATCH_REPLY);
   },
 });

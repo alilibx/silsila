@@ -465,11 +465,14 @@ http.route({
 });
 
 // ---------------------------------------------------------------------------
-// POST /whatsapp/relay: production relaying a message it has no code for
-// (`relayIncoming` in whatsapp.ts). Open only on a deployment whose messages
+// POST /whatsapp/relay: production relaying a message it can't place, with
+// its button payload and profile name (`relayIncoming` in whatsapp.ts). Open only on a deployment whose messages
 // come from the relay (staging), never on one Meta calls (production).
 
-/** A relayed message is at most 500 characters (each at most 6 bytes as JSON) and its IDs. */
+/**
+ * A relayed message is at most 500 characters (each at most 6 bytes as JSON),
+ * its IDs, a 256-character payload and a 60-character profile name.
+ */
 const MAX_RELAY_BODY = 8192;
 
 http.route({
@@ -501,8 +504,9 @@ http.route({
     }
     const message = parseRelayed(payload);
     if (message === null) return json(400, { error: "bad_request" }, {});
-    // Sent inline, not scheduled: a scheduled reply would store a PIN in the
-    // clear in `_scheduled_functions`.
+    // The same routing as production's (sign-in, then rota), sent inline, not
+    // scheduled: a scheduled reply would store a PIN in the clear in
+    // `_scheduled_functions`.
     const outcome = await takeIncoming(ctx, message);
     return json(200, { handled: outcome === "taken" }, {});
   }),

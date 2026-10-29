@@ -63,6 +63,7 @@ import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
 import type * as rota from "../rota.js";
 import type * as rotaDays from "../rotaDays.js";
+import type * as rotaInbound from "../rotaInbound.js";
 import type * as rotaOutbox from "../rotaOutbox.js";
 import type * as rounds from "../rounds.js";
 import type * as sessions from "../sessions.js";
@@ -133,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   pushNode: typeof pushNode;
   rota: typeof rota;
   rotaDays: typeof rotaDays;
+  rotaInbound: typeof rotaInbound;
   rotaOutbox: typeof rotaOutbox;
   rounds: typeof rounds;
   sessions: typeof sessions;
