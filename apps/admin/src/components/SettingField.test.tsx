@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
@@ -43,11 +43,62 @@ async function edit(value: string) {
 }
 
 describe("SettingField", () => {
-  it("shows the label, the value, the default and the range", () => {
+  it("shows the label, what it does, and the value", () => {
     render(<SettingField setting={maxMembers} />);
     expect(screen.getByText(t.settings.labels.maxMembers)).toBeInTheDocument();
+    expect(
+      screen.getByText(t.settings.help.maxMembers.what),
+    ).toBeInTheDocument();
     expect(screen.getByText("٦٠")).toBeInTheDocument();
-    expect(screen.getByText(t.settings.range("٢", "٥٠٠"))).toBeInTheDocument();
+    expect(screen.queryByText(t.settings.custom)).not.toBeInTheDocument();
+  });
+
+  it("marks a changed setting", () => {
+    render(
+      <SettingField setting={{ ...maxMembers, value: 40, isDefault: false }} />,
+    );
+    expect(screen.getByText(t.settings.custom)).toBeInTheDocument();
+  });
+
+  it("explains the default and the range in the sheet", async () => {
+    render(<SettingField setting={maxMembers} />);
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: `${t.settings.edit} ${t.settings.labels.maxMembers}`,
+      }),
+    );
+    const sheet = screen.getByRole("dialog");
+    expect(
+      within(sheet).getByText(t.settings.help.maxMembers.why),
+    ).toBeInTheDocument();
+    expect(
+      within(sheet).getByText(`${t.settings.defaultValue}: ٦٠`),
+    ).toBeInTheDocument();
+    expect(
+      within(sheet).getByText(t.settings.range("٢", "٥٠٠")),
+    ).toBeInTheDocument();
+  });
+
+  it("flips a switch in place", async () => {
+    render(
+      <SettingField
+        setting={{
+          key: "maintenanceMode",
+          value: false,
+          defaultValue: false,
+          isDefault: true,
+          spec: { kind: "bool", group: "switches" },
+        }}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("switch", { name: t.settings.labels.maintenanceMode }),
+    );
+    expect(m.set).toHaveBeenCalledWith({
+      adminToken: "tok",
+      key: "maintenanceMode",
+      value: true,
+    });
   });
 
   it("sends a number, not text", async () => {

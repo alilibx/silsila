@@ -7,7 +7,7 @@ import { Link } from "react-router";
 import { AdminPushCard } from "../components/AdminPushCard";
 import { StatTile } from "../components/StatTile";
 import { TrendChart } from "../components/TrendChart";
-import { SettingField } from "../components/SettingField";
+import { SettingList } from "../components/SettingField";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { formatCount, formatDecimal } from "../lib/formatNumber";
@@ -188,20 +188,9 @@ export function HomePage() {
       <Dashboard adminToken={adminToken} />
       <AdminPushCard />
       <h2 className="text-lg font-semibold">{t.home.switches}</h2>
-      {(rows ?? [])
-        .filter((row) => QUICK.includes(row.key))
-        .map((row) => (
-          <div key={row.key}>
-            <SettingField setting={row} />
-            <p className="mt-1 text-sm text-ink-soft">
-              {row.key === "maintenanceMode"
-                ? t.home.maintenanceHint
-                : row.key === "announcement"
-                  ? t.home.announcementHint
-                  : null}
-            </p>
-          </div>
-        ))}
+      <SettingList
+        rows={(rows ?? []).filter((row) => QUICK.includes(row.key))}
+      />
     </div>
   );
 }
