@@ -40,7 +40,12 @@ describe("privacy policy: help requests", () => {
   it("explains help requests in Arabic, with their own retention", () => {
     const ar = section(html, "طلبات المساعدة");
     expect(ar).not.toBe("");
-    for (const words of ["صورة الشاشة", "تسجيل صوتي", "٣٠ يوماً", "١٨٠ يوماً"]) {
+    for (const words of [
+      "صورة الشاشة",
+      "تسجيل صوتي",
+      "٣٠ يوماً",
+      "١٨٠ يوماً",
+    ]) {
       expect(ar).toContain(words);
     }
   });
@@ -49,6 +54,38 @@ describe("privacy policy: help requests", () => {
     const en = section(html, "Help requests");
     expect(en).not.toBe("");
     for (const words of ["screenshot", "voice note", "30 days", "180 days"]) {
+      expect(en).toContain(words);
+    }
+  });
+});
+
+describe("privacy policy: rotating khatma messages", () => {
+  const html = readFileSync(join(WEB, "public", "privacy.html"), "utf8");
+
+  it("explains in Arabic that members are messaged only after they join, and how to stop", () => {
+    const ar = section(html, "واتساب").replace(/\s+/g, " ");
+    for (const words of [
+      "رقم واتساب",
+      "رسالة الانضمام",
+      "جزأه اليومي",
+      "رسالة الختم",
+      "إيقاف",
+      "Meta",
+    ]) {
+      expect(ar).toContain(words);
+    }
+  });
+
+  it("explains it in English too", () => {
+    const en = section(html, "WhatsApp").replace(/\s+/g, " ");
+    for (const words of [
+      "rotating khatma",
+      "join message",
+      "daily juz'",
+      "completion message",
+      "إيقاف",
+      "Meta receives",
+    ]) {
       expect(en).toContain(words);
     }
   });
