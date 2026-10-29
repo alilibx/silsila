@@ -36,7 +36,8 @@ import { sessionMutation, sessionQuery } from "./lib/session";
 import { getSetting, quietHours } from "./lib/settings";
 import { cleanDisplayName, cleanKhatmaName, normalizePhone } from "./lib/text";
 import { instantAt, localDate, safeTimeZone } from "./lib/wakingTime";
-import { completeIfDone } from "./rotaDays";
+import { celebrateIfComplete, completeIfDone } from "./rotaDays";
+import { enqueue } from "./rotaOutbox";
 
 const DAY_MS = 86_400_000;
 /** Attempts at drawing an unused invite code; a collision is ~1e-20 likely. */
@@ -758,10 +759,25 @@ export const reassign = sessionMutation({
     if (!found || !participant) return { error: "not_found" };
     if (found.day.closedAt !== null) return { error: "closed" };
     if (found.read.doneAt !== null) return { error: "done" };
+    const holderId = found.read.holderId;
     await ctx.db.patch(found.read._id, {
       readerId: participant._id,
       reassignedAt: Date.now(),
     });
+    const row = {
+      khatmaId: khatma._id,
+      dayId: found.day._id,
+      juz: [found.read.juz],
+      number: found.day.number,
+    };
+    await enqueue(ctx, {
+      ...row,
+      participantId: participant._id,
+      kind: "assigned",
+    });
+    if (holderId !== null && holderId !== participant._id) {
+      await enqueue(ctx, { ...row, participantId: holderId, kind: "covered" });
+    }
     return { ok: true };
   },
 });
@@ -784,7 +800,9 @@ export const markDone = sessionMutation({
         doneByOrganizer: true,
       });
     }
-    return { ok: true, completed: await completeIfDone(ctx, found.day._id) };
+    const completed = await completeIfDone(ctx, found.day._id);
+    if (completed) await celebrateIfComplete(ctx, found.day._id);
+    return { ok: true, completed };
   },
 });
 

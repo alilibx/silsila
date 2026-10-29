@@ -371,3 +371,83 @@ test("today says whether setup is done", async () => {
     day: { number: 1 },
   });
 });
+
+/** Marks participants as having sent their join message, so messages can reach them. */
+async function join(t: T, ...ids: Id<"rotaParticipants">[]) {
+  for (const id of ids) {
+    await t.run((ctx) => ctx.db.patch(id, { joinedAt: NOW - 3_600_000 }));
+  }
+}
+
+function queued(t: T, kind: string) {
+  return t.run(async (ctx) => {
+    const rows = await ctx.db.query("rotaOutbox").collect();
+    return rows
+      .filter((r) => r.kind === kind)
+      .map((r) => ({ participantId: r.participantId, juz: r.juz }));
+  });
+}
+
+test("reassigning queues assigned for the new reader and covered for the holder", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const holder = await add(t, s, 8);
+  const reader = await add(t, s, 9);
+  await join(t, holder, reader);
+  await startDay(t, s);
+  const eight = await tile(t, s, 8);
+  await act(t, s, "reassign", { readId: eight.readId, participantId: reader });
+  expect(await queued(t, "assigned")).toEqual([
+    { participantId: reader, juz: [8] },
+  ]);
+  expect(await queued(t, "covered")).toEqual([
+    { participantId: holder, juz: [8] },
+  ]);
+});
+
+test("giving a juz' back to its holder queues assigned but no covered", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const holder = await add(t, s, 8);
+  await join(t, holder);
+  await startDay(t, s);
+  const eight = await tile(t, s, 8);
+  await act(t, s, "reassign", { readId: eight.readId, participantId: holder });
+  expect(await queued(t, "assigned")).toEqual([
+    { participantId: holder, juz: [8] },
+  ]);
+  expect(await queued(t, "covered")).toEqual([]);
+});
+
+test("the organizer finishing the day queues complete once for every joined participant", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const a = await add(t, s, 8);
+  const b = await add(t, s, 9);
+  const notJoined = await add(t, s, 10);
+  await join(t, a, b);
+  await startDay(t, s);
+  const view = await today(t, s);
+  const all = view!.tiles;
+  for (const x of all.slice(0, 29)) {
+    await act(t, s, "markDone", { readId: x.readId });
+  }
+  expect(await queued(t, "complete")).toEqual([]);
+
+  const last = all[29]!;
+  expect(await act(t, s, "markDone", { readId: last.readId })).toEqual({
+    ok: true,
+    completed: true,
+  });
+  const rows = await queued(t, "complete");
+  expect(rows.map((r) => r.participantId).sort()).toEqual([a, b].sort());
+  expect(rows.some((r) => r.participantId === notJoined)).toBe(false);
+
+  // Undoing and redoing the last juz' doesn't celebrate again.
+  await act(t, s, "markNotDone", { readId: last.readId });
+  expect(await act(t, s, "markDone", { readId: last.readId })).toEqual({
+    ok: true,
+    completed: true,
+  });
+  expect(await queued(t, "complete")).toHaveLength(2);
+});

@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { clearNotes, notify } from "./notes";
+import { enqueue } from "./rotaOutbox";
 import {
   addDays,
   cycleOf,
@@ -12,6 +13,7 @@ import {
   slotFor,
 } from "./lib/rota";
 import { lastRotaDay, slotRowsByJuz } from "./lib/rotaPlace";
+import { getSetting } from "./lib/settings";
 import { instantAt, localDate, localMinutes } from "./lib/wakingTime";
 
 type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
@@ -32,6 +34,36 @@ export async function completeIfDone(
   }
   await ctx.db.patch(dayId, { completedAt: Date.now() });
   return true;
+}
+
+/**
+ * Queues the completion message to every joined participant (except one who
+ * gets it in a reply), once per day: `celebratedAt` stays set even if the
+ * day is un-done and done again.
+ */
+export async function celebrateIfComplete(
+  ctx: MutationCtx,
+  dayId: Id<"rotaDays">,
+  exceptParticipantId?: Id<"rotaParticipants">,
+): Promise<void> {
+  const day = await ctx.db.get(dayId);
+  if (!day || day.completedAt === null || day.celebratedAt != null) return;
+  await ctx.db.patch(dayId, { celebratedAt: Date.now() });
+  const participants = await ctx.db
+    .query("rotaParticipants")
+    .withIndex("by_khatma", (q) => q.eq("khatmaId", day.khatmaId))
+    .collect();
+  for (const p of participants) {
+    if (p._id === exceptParticipantId) continue;
+    await enqueue(ctx, {
+      khatmaId: day.khatmaId,
+      participantId: p._id,
+      dayId,
+      kind: "complete",
+      juz: [],
+      number: day.number,
+    });
+  }
 }
 
 /**
@@ -78,6 +110,7 @@ async function startDay(
     summarySentAt: null,
   });
   const byJuz = await slotRowsByJuz(ctx, khatma._id, number);
+  const juzByHolder = new Map<Id<"rotaParticipants">, number[]>();
   for (let juz = 1; juz <= ROTA_SIZE; juz++) {
     const slot = slotFor(juz, number);
     const holderId = byJuz.get(juz)?.participantId ?? null;
@@ -91,6 +124,20 @@ async function startDay(
       doneAt: null,
       doneByOrganizer: false,
       reassignedAt: null,
+    });
+    if (holderId !== null) {
+      juzByHolder.set(holderId, [...(juzByHolder.get(holderId) ?? []), juz]);
+    }
+  }
+  // One message per reader, with all their ajza' of the day.
+  for (const [participantId, juz] of juzByHolder) {
+    await enqueue(ctx, {
+      khatmaId: khatma._id,
+      participantId,
+      dayId,
+      kind: "juz",
+      juz,
+      number,
     });
   }
   const day = await ctx.db.get(dayId);
@@ -165,6 +212,163 @@ async function sendOrganizerNotes(
   }
 }
 
+/** The reminder for each reader with unread ajza', once on the day dated today. */
+async function sendReminders(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  rota: RotaConfig,
+  day: Doc<"rotaDays">,
+  now: number,
+): Promise<void> {
+  const { reminder } = rota.messages;
+  if (
+    !reminder.on ||
+    localMinutes(now, rota.timeZone) < reminder.at ||
+    day.reminderSentAt != null
+  ) {
+    return;
+  }
+  const reads = await ctx.db
+    .query("rotaReads")
+    .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
+    .collect();
+  const unreadByReader = new Map<Id<"rotaParticipants">, number[]>();
+  for (const r of reads) {
+    if (r.doneAt !== null || r.readerId === null) continue;
+    unreadByReader.set(r.readerId, [
+      ...(unreadByReader.get(r.readerId) ?? []),
+      r.juz,
+    ]);
+  }
+  for (const [participantId, juz] of unreadByReader) {
+    await enqueue(ctx, {
+      khatmaId: khatma._id,
+      participantId,
+      dayId: day._id,
+      kind: "reminder",
+      juz,
+      number: day.number,
+    });
+  }
+  await ctx.db.patch(day._id, { reminderSentAt: now });
+}
+
+/**
+ * Counts the day against each joined participant who had a read to do and
+ * didn't reply since it started (a reply resets the count), tells the
+ * organizer at the notice threshold and stops the participant's messages at
+ * the stop threshold.
+ */
+async function countSilentDay(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  day: Doc<"rotaDays">,
+  now: number,
+): Promise<void> {
+  const noticeDays = await getSetting(ctx, "rotaSilenceNoticeDays");
+  const stopDays = await getSetting(ctx, "rotaSilenceStopDays");
+  const reads = await ctx.db
+    .query("rotaReads")
+    .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
+    .collect();
+  const readerIds = new Set(
+    reads.flatMap((r) => (r.readerId === null ? [] : [r.readerId])),
+  );
+  for (const participantId of readerIds) {
+    const p = await ctx.db.get(participantId);
+    if (
+      !p ||
+      p.removedAt != null ||
+      p.joinedAt == null ||
+      p.joinedAt >= day.startedAt ||
+      p.stoppedAt != null ||
+      p.silencedAt != null
+    ) {
+      continue;
+    }
+    const silentDays =
+      (p.lastReplyAt ?? 0) >= day.startedAt ? 0 : (p.silentDays ?? 0) + 1;
+    await ctx.db.patch(p._id, { silentDays });
+    if (silentDays === noticeDays) {
+      await notify(ctx, {
+        personId: khatma.creatorPersonId,
+        khatmaId: khatma._id,
+        kind: "rotaSilent",
+        name: p.name,
+        count: silentDays,
+      });
+    }
+    if (silentDays >= stopDays) {
+      await ctx.db.patch(p._id, { silencedAt: now });
+      await notify(ctx, {
+        personId: khatma.creatorPersonId,
+        khatmaId: khatma._id,
+        kind: "rotaSilenced",
+        name: p.name,
+      });
+    }
+  }
+}
+
+/** After the 30th day of a cycle, a thank-you for everyone who held a slot all cycle. */
+async function sendCycleMessages(
+  ctx: MutationCtx,
+  day: Doc<"rotaDays">,
+): Promise<void> {
+  const first = await ctx.db
+    .query("rotaDays")
+    .withIndex("by_khatma_n", (q) =>
+      q.eq("khatmaId", day.khatmaId).eq("n", (day.cycle - 1) * ROTA_SIZE + 1),
+    )
+    .first();
+  if (!first) return;
+  const holdsOn = async (d: Doc<"rotaDays">) => {
+    const reads = await ctx.db
+      .query("rotaReads")
+      .withIndex("by_day_juz", (q) => q.eq("dayId", d._id))
+      .collect();
+    return new Set(reads.flatMap((r) => (r.holderId ? [r.holderId] : [])));
+  };
+  const heldFirst = await holdsOn(first);
+  const heldLast = await holdsOn(day);
+  for (const participantId of heldLast) {
+    const p = await ctx.db.get(participantId);
+    if (
+      !p ||
+      !heldFirst.has(participantId) ||
+      p.joinedAt == null ||
+      p.joinedAt > first.startedAt
+    ) {
+      continue;
+    }
+    await enqueue(ctx, {
+      khatmaId: day.khatmaId,
+      participantId,
+      dayId: day._id,
+      kind: "cycle",
+      juz: [],
+      number: day.number,
+    });
+  }
+}
+
+/**
+ * Closes a day: the one place `closedAt` is set, so the silence count and
+ * the cycle messages run once per day. Does nothing for a closed day.
+ */
+async function closeDay(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  day: Doc<"rotaDays">,
+  now: number,
+): Promise<Doc<"rotaDays">> {
+  if (day.closedAt !== null) return day;
+  await ctx.db.patch(day._id, { closedAt: now });
+  await countSilentDay(ctx, khatma, day, now);
+  if (day.number === ROTA_SIZE) await sendCycleMessages(ctx, day);
+  return { ...day, closedAt: now };
+}
+
 /**
  * Moves one rota khatma forward: closes the open day when it is due, starts
  * today's day, sends the organizer's notes and archives a finished khatma.
@@ -182,14 +386,11 @@ export const tick = internalMutation({
 
     let last = await lastRotaDay(ctx, khatma._id);
     if (last && last.closedAt === null && now >= last.closesAt) {
-      await ctx.db.patch(last._id, { closedAt: now });
-      last = { ...last, closedAt: now };
+      last = await closeDay(ctx, khatma, last, now);
     }
 
     if (shouldStart(rota, last, today, now)) {
-      if (last && last.closedAt === null) {
-        await ctx.db.patch(last._id, { closedAt: now });
-      }
+      if (last) await closeDay(ctx, khatma, last, now);
       last = await startDay(ctx, khatma, rota, last, today, now);
     }
 
@@ -201,6 +402,7 @@ export const tick = internalMutation({
       rota.pausedAt === null
     ) {
       await sendOrganizerNotes(ctx, khatma, rota, last, now);
+      await sendReminders(ctx, khatma, rota, last, now);
     }
 
     const open = last !== null && last.closedAt === null;

@@ -62,8 +62,8 @@ const labels: Record<SettingKey, string> = {
   rotaSummaryOn: "ملخص اليوم مفعّل",
   rotaMaxActivePerOrganizer: "أقصى عدد ختمات بالتناوب نشطة لكل منظّم",
   rotaMaxSlotsPerPerson: "أقصى عدد أجزاء لكل قارئ في الختمة بالتناوب",
-  rotaSilenceNoticeDays: "أيام الصمت قبل تنبيه المنظّم",
-  rotaSilenceStopDays: "أيام الصمت قبل إيقاف الختمة",
+  rotaSilenceNoticeDays: "أيام صمت المشارك قبل تنبيه المنظّم",
+  rotaSilenceStopDays: "أيام صمت المشارك قبل إيقاف رسائله",
 };
 
 const groups: Record<SettingGroup, string> = {
