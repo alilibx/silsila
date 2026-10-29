@@ -55,6 +55,26 @@ export const forceGraceEnd = internalMutation({
 });
 
 /**
+ * Dev-only: lets a verified person create rotating khatmas, as an admin would
+ * (without the audit entry), so a test needn't sign in to the admin app:
+ * `bun run convex run dev:allowRota '{"phone":"971501234567"}'`.
+ */
+export const allowRota = internalMutation({
+  args: { phone: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    if (!isDev()) {
+      throw new Error("allowRota runs only when WIRDAK_ENV is dev");
+    }
+    const person = await ctx.db
+      .query("people")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .unique();
+    if (!person) throw new Error("no such person");
+    await ctx.db.patch(person._id, { rotaAllowed: true });
+  },
+});
+
+/**
  * Dev-only: stores a numeric setting, or with `value: null` removes it so the
  * default applies again, and returns the stored value it replaced (null when
  * there was none). The e2e run uses it to lift the per-IP verification limit,
