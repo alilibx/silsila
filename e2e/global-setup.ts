@@ -13,19 +13,35 @@ const BACKEND_ENV: Record<string, string> = {
 
 /**
  * Every test verifies from the same address, so the per-IP limit on starting a verification
- * (30 per 10 minutes) would stop a full run part-way. The run lifts it, and global-teardown.ts
- * removes the override again.
+ * (30 per 10 minutes) would stop a full run part-way. The run lifts it and puts back whatever
+ * was stored before. A run killed part-way leaves it lifted; the next full run restores it.
  */
-export const IP_LIMIT_SETTING = "verifyStartPerIpPer10Min";
+const IP_LIMIT_SETTING = "verifyStartPerIpPer10Min";
+const IP_LIMIT_FOR_RUN = 10_000;
+
+/** Stores `value` for the per-IP limit (null: the default) and returns what was stored before. */
+async function setIpLimit(value: number | null): Promise<number | null> {
+  const { stdout } = await convex(
+    "run",
+    "dev:setSetting",
+    JSON.stringify({ key: IP_LIMIT_SETTING, value }),
+  );
+  // The CLI prints the return value as JSON on its last line.
+  const last = stdout.trim().split("\n").at(-1) || "null";
+  return JSON.parse(last) as number | null;
+}
 
 /** Any of these would make the backend talk to the real WhatsApp API. */
 const REAL_WHATSAPP = ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"];
 
-export const convex = (...args: string[]) =>
+const convex = (...args: string[]) =>
   run("bun", ["run", "convex", ...args], { cwd: root });
 
-/** Runs after the webServers are up (the backend has pushed its functions). */
-export default async function globalSetup(): Promise<void> {
+/**
+ * Runs after the webServers are up (the backend has pushed its functions). The function it
+ * returns is the global teardown, which runs before they stop.
+ */
+export default async function globalSetup(): Promise<() => Promise<void>> {
   const { stdout } = await convex("env", "list", "--names-only");
   const present = REAL_WHATSAPP.filter((name) =>
     stdout.split("\n").some((line) => line.trim().startsWith(name)),
@@ -39,9 +55,10 @@ export default async function globalSetup(): Promise<void> {
   for (const [name, value] of Object.entries(BACKEND_ENV)) {
     await convex("env", "set", name, value);
   }
-  await convex(
-    "run",
-    "dev:setSetting",
-    JSON.stringify({ key: IP_LIMIT_SETTING, value: 10_000 }),
-  );
+  const before = await setIpLimit(IP_LIMIT_FOR_RUN);
+  // A killed run left its own value behind: the default is what it replaced.
+  const restore = before === IP_LIMIT_FOR_RUN ? null : before;
+  return async () => {
+    await setIpLimit(restore);
+  };
 }

@@ -36,14 +36,14 @@ test("dev:setSetting stores a number, replaces it, and removes it with null", as
       value,
     });
 
-  await set(1000);
+  expect(await set(1000)).toBeNull();
   expect(await ipLimit(t)).toBe(1000);
-  await set(2000);
+  expect(await set(2000)).toBe(1000);
   expect(await ipLimit(t)).toBe(2000);
   expect(await t.run((ctx) => ctx.db.query("settings").collect())).toHaveLength(
     1,
   );
-  await set(null);
+  expect(await set(null)).toBe(2000);
   expect(await ipLimit(t)).toBe(30);
   expect(await t.run((ctx) => ctx.db.query("settings").collect())).toEqual([]);
 });

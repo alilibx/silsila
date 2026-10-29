@@ -29,15 +29,19 @@ const SLOW_MOBILE: Throttle = {
   cpuSlowdown: 4,
 };
 
+/** Specs that only mean something on a throttled project. */
+const SLOW_ONLY = "**/load.spec.ts";
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
   globalSetup: "./e2e/global-setup.ts",
-  globalTeardown: "./e2e/global-teardown.ts",
   fullyParallel: true,
   // Every test uses its own fresh numbers and khatmas, so tests can share the one backend.
   workers: process.env.CI ? 2 : 3,
+  // A retry keeps the trace of the first failure; a test that only passes on retry still fails CI.
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   forbidOnly: !!process.env.CI,
   timeout: 120_000,
   expect: { timeout: 10_000 },
@@ -52,15 +56,39 @@ export default defineConfig({
   },
   projects: [
     // Phones. Every iPhone browser is WebKit; Android phones run Chromium.
-    { name: "iphone-se", use: { ...devices["iPhone SE (3rd gen)"] } },
-    { name: "iphone-pro-max", use: { ...devices["iPhone 15 Pro Max"] } },
-    { name: "android-small", use: { ...devices["Moto G4"] } },
-    { name: "pixel-7", use: { ...devices["Pixel 7"] } },
+    {
+      name: "iphone-se",
+      use: { ...devices["iPhone SE (3rd gen)"] },
+      testIgnore: SLOW_ONLY,
+    },
+    {
+      name: "iphone-pro-max",
+      use: { ...devices["iPhone 15 Pro Max"] },
+      testIgnore: SLOW_ONLY,
+    },
+    {
+      name: "android-small",
+      use: { ...devices["Moto G4"] },
+      testIgnore: SLOW_ONLY,
+    },
+    { name: "pixel-7", use: { ...devices["Pixel 7"] }, testIgnore: SLOW_ONLY },
     // Tablet and desktop, one per engine.
-    { name: "ipad", use: { ...devices["iPad Mini"] } },
-    { name: "desktop-chrome", use: { ...devices["Desktop Chrome"] } },
-    { name: "desktop-firefox", use: { ...devices["Desktop Firefox"] } },
-    { name: "desktop-safari", use: { ...devices["Desktop Safari"] } },
+    { name: "ipad", use: { ...devices["iPad Mini"] }, testIgnore: SLOW_ONLY },
+    {
+      name: "desktop-chrome",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: SLOW_ONLY,
+    },
+    {
+      name: "desktop-firefox",
+      use: { ...devices["Desktop Firefox"] },
+      testIgnore: SLOW_ONLY,
+    },
+    {
+      name: "desktop-safari",
+      use: { ...devices["Desktop Safari"] },
+      testIgnore: SLOW_ONLY,
+    },
     // A cheap Android phone on a slow network. Throttling needs Chromium's DevTools protocol.
     {
       name: "slow-android",

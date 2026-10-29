@@ -56,13 +56,14 @@ export const forceGraceEnd = internalMutation({
 
 /**
  * Dev-only: stores a numeric setting, or with `value: null` removes it so the
- * default applies again. The e2e run uses it to lift the per-IP verification
- * limit, since every test verifies from the same address:
+ * default applies again, and returns the stored value it replaced (null when
+ * there was none). The e2e run uses it to lift the per-IP verification limit,
+ * since every test verifies from the same address, and to put it back after:
  * `bun run convex run dev:setSetting '{"key":"verifyStartPerIpPer10Min","value":1000}'`.
  */
 export const setSetting = internalMutation({
   args: { key: v.string(), value: v.union(v.number(), v.null()) },
-  handler: async (ctx, args): Promise<void> => {
+  handler: async (ctx, args): Promise<number | null> => {
     if (!isDev()) {
       throw new Error("setSetting runs only when WIRDAK_ENV is dev");
     }
@@ -90,5 +91,6 @@ export const setSetting = internalMutation({
         updatedAt: Date.now(),
       });
     }
+    return row ? (row.value as number) : null;
   },
 });

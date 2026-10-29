@@ -103,14 +103,19 @@ export async function dismissPushPrompt(page: Page): Promise<void> {
   );
   const offer = sheets.reduce((either, sheet) => either.or(sheet));
   await expect(offer).toBeVisible();
-  const index = await Promise.all(sheets.map((sheet) => sheet.isVisible()));
-  const shown = NOTIFY_OFFERS[index.indexOf(true)];
-  await offer.getByRole("button", { name: shown?.notNow }).click();
+  const visible = await Promise.all(sheets.map((sheet) => sheet.isVisible()));
+  const shown = NOTIFY_OFFERS[visible.indexOf(true)];
+  if (!shown) {
+    throw new Error(
+      `no notification offer stayed open: ${NOTIFY_OFFERS.map((o) => o.title).join(" / ")}`,
+    );
+  }
+  await offer.getByRole("button", { name: shown.notNow, exact: true }).click();
   await expect(offer).toBeHidden();
 }
 
 /** The current project's throttle, if it has one. */
-export function projectThrottle(): Throttle | undefined {
+function projectThrottle(): Throttle | undefined {
   return test.info().project.metadata.throttle as Throttle | undefined;
 }
 
@@ -123,8 +128,9 @@ async function throttle(page: Page): Promise<void> {
   await cdp.send("Network.emulateNetworkConditions", {
     offline: false,
     latency: slow.latencyMs,
-    downloadThroughput: (slow.downloadKbps * 1024) / 8,
-    uploadThroughput: (slow.uploadKbps * 1024) / 8,
+    // Bytes per second; a kilobit is 1000 bits, as in DevTools' own presets.
+    downloadThroughput: (slow.downloadKbps * 1000) / 8,
+    uploadThroughput: (slow.uploadKbps * 1000) / 8,
   });
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: slow.cpuSlowdown });
 }
