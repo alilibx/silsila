@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { isValidGrace, type Grace } from "@convex/lib/grace";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import posthog from "posthog-js";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
@@ -28,9 +28,37 @@ function resumedCreate() {
   return intent?.kind === "create" ? intent : null;
 }
 
+const typeCardClass =
+  "block min-h-14 w-full cursor-pointer rounded-ui border-2 border-line bg-card px-4 py-3 text-start focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-green";
+
+/** The question of which kind: the pool khatma's form, or the rota khatma's two screens. */
+function TypeCards({ onPool }: { onPool: () => void }) {
+  return (
+    <section className="mt-4">
+      <h2 className="text-xl font-semibold">{t.rota.typeQuestion}</h2>
+      <div className="mt-2 grid gap-2.5">
+        <button type="button" onClick={onPool} className={typeCardClass}>
+          <span className="block font-medium">{t.rota.poolTitle}</span>
+          <span className="block text-base text-ink-soft">
+            {t.rota.poolBody}
+          </span>
+        </button>
+        <Link to="/new/rota" className={typeCardClass}>
+          <span className="block font-medium">{t.rota.rotaTitle}</span>
+          <span className="block text-base text-ink-soft">
+            {t.rota.rotaBody}
+          </span>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export function CreatePage() {
   const navigate = useNavigate();
-  const signedIn = useSessionToken() !== undefined;
+  const sessionToken = useSessionToken();
+  const signedIn = sessionToken !== undefined;
+  const me = useQuery(api.people.me, { sessionToken });
   const createKhatma = useAction(api.khatmas.create);
   const [resumed] = useState(resumedCreate);
   const [name, setName] = useState(resumed?.name ?? "");
@@ -39,6 +67,8 @@ export function CreatePage() {
   );
   // `null` while the grace follows the schedule's default; only an edit is sent.
   const [grace, setGrace] = useState<Grace | null>(resumed?.grace ?? null);
+  // Only people an admin switched rota khatmas on for are asked which kind; a resumed create is a pool one.
+  const [poolChosen, setPoolChosen] = useState(resumed !== null);
   const [verifying, setVerifying] = useState(resumed !== null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +123,11 @@ export function CreatePage() {
     else setVerifying(true);
   }
 
+  // Signed in, wait for the answer rather than flash a form that may turn into the cards.
+  const waiting = signedIn && me === undefined;
+  const showCards = !waiting && me?.rotaAllowed === true && !poolChosen;
+  const showForm = !waiting && !showCards;
+
   return (
     <main className="mx-auto max-w-xl p-5">
       {/* Signed in, the bottom bar has the way home. */}
@@ -110,72 +145,77 @@ export function CreatePage() {
         {t.pages.create}
       </h1>
 
-      <form onSubmit={onSubmit} noValidate className="mt-4">
-        <label htmlFor="khatma-name" className="block font-medium">
-          {t.create.nameLabel}{" "}
-          <span className="font-normal text-ink-soft">{t.create.optional}</span>
-        </label>
-        <input
-          id="khatma-name"
-          type="text"
-          maxLength={60}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={t.create.namePlaceholder(formatDate(Date.now()))}
-          className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
-        />
+      {showCards && <TypeCards onPool={() => setPoolChosen(true)} />}
+      {showForm && (
+        <form onSubmit={onSubmit} noValidate className="mt-4">
+          <label htmlFor="khatma-name" className="block font-medium">
+            {t.create.nameLabel}{" "}
+            <span className="font-normal text-ink-soft">
+              {t.create.optional}
+            </span>
+          </label>
+          <input
+            id="khatma-name"
+            type="text"
+            maxLength={60}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={t.create.namePlaceholder(formatDate(Date.now()))}
+            className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+          />
 
-        <fieldset className="mt-5">
-          <legend className="font-medium">{t.create.scheduleLegend}</legend>
-          <div className="mt-2 grid gap-2.5">
-            {SCHEDULES.map((value) => {
-              const subtitle: string | undefined = t.create.subtitles[value];
-              return (
-                <label
-                  key={value}
-                  className="flex min-h-14 cursor-pointer items-center gap-3 rounded-ui border-2 border-line bg-card px-4 py-3 has-[:checked]:border-green has-[:checked]:bg-[#E7F5EC] has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-green"
-                >
-                  <input
-                    type="radio"
-                    name="schedule"
-                    value={value}
-                    checked={schedule === value}
-                    onChange={() => setSchedule(value)}
-                    className="size-5 shrink-0 accent-green"
-                  />
-                  <span>
-                    <span className="font-medium">{t.schedules[value]}</span>
-                    {subtitle && (
-                      <span className="block text-base text-ink-soft">
-                        {subtitle}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              );
-            })}
+          <fieldset className="mt-5">
+            <legend className="font-medium">{t.create.scheduleLegend}</legend>
+            <div className="mt-2 grid gap-2.5">
+              {SCHEDULES.map((value) => {
+                const subtitle: string | undefined = t.create.subtitles[value];
+                return (
+                  <label
+                    key={value}
+                    className="flex min-h-14 cursor-pointer items-center gap-3 rounded-ui border-2 border-line bg-card px-4 py-3 has-[:checked]:border-green has-[:checked]:bg-[#E7F5EC] has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-green"
+                  >
+                    <input
+                      type="radio"
+                      name="schedule"
+                      value={value}
+                      checked={schedule === value}
+                      onChange={() => setSchedule(value)}
+                      className="size-5 shrink-0 accent-green"
+                    />
+                    <span>
+                      <span className="font-medium">{t.schedules[value]}</span>
+                      {subtitle && (
+                        <span className="block text-base text-ink-soft">
+                          {subtitle}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <GraceField
+            value={grace}
+            schedule={schedule}
+            onChange={(next) => {
+              setGrace(next);
+              setError(null);
+            }}
+          />
+
+          {error && (
+            <p role="alert" className="mt-4 font-medium text-[#8A2B1E]">
+              {error}
+            </p>
+          )}
+          <div className="mt-6">
+            <Button type="submit" disabled={creating}>
+              {creating ? t.create.submitting : t.create.submit}
+            </Button>
           </div>
-        </fieldset>
-        <GraceField
-          value={grace}
-          schedule={schedule}
-          onChange={(next) => {
-            setGrace(next);
-            setError(null);
-          }}
-        />
-
-        {error && (
-          <p role="alert" className="mt-4 font-medium text-[#8A2B1E]">
-            {error}
-          </p>
-        )}
-        <div className="mt-6">
-          <Button type="submit" disabled={creating}>
-            {creating ? t.create.submitting : t.create.submit}
-          </Button>
-        </div>
-      </form>
+        </form>
+      )}
 
       {verifying && (
         <VerifySheet

@@ -81,6 +81,16 @@ export const touch = sessionMutation({
   },
 });
 
+/** What the web needs to know about the signed-in person: `null` when signed out. */
+export const me = sessionQuery({
+  args: {},
+  handler: async (ctx): Promise<{ rotaAllowed: boolean } | null> => {
+    const person = ctx.person;
+    if (!person) return null;
+    return { rotaAllowed: person.rotaAllowed === true };
+  },
+});
+
 export type MyStats = {
   paceDays: number | null;
   juzRead: number;

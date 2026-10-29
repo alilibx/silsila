@@ -228,3 +228,20 @@ test("touch writes only what changed: nothing at all when the person was seen wi
   expect(patch).toHaveBeenLastCalledWith("p1", { lastSeenAt: NOW + HOUR });
   expect(patch).toHaveBeenCalledTimes(2);
 });
+
+test("me: says whether the caller may create a rota khatma; missing means no; signed out is null", async () => {
+  const c = await setup();
+  const { t, token, personId } = c;
+  expect(await t.query(api.people.me, { sessionToken: token })).toEqual({
+    rotaAllowed: false,
+  });
+  await t.run((ctx) => ctx.db.patch(personId, { rotaAllowed: true }));
+  expect(await t.query(api.people.me, { sessionToken: token })).toEqual({
+    rotaAllowed: true,
+  });
+  await t.run((ctx) => ctx.db.patch(personId, { rotaAllowed: false }));
+  expect(await t.query(api.people.me, { sessionToken: token })).toEqual({
+    rotaAllowed: false,
+  });
+  expect(await t.query(api.people.me, {})).toBeNull();
+});

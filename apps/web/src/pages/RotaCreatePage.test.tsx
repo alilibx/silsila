@@ -1,0 +1,482 @@
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ConvexError } from "convex/values";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RotaPeopleSetup } from "../features/rota/RotaPeopleSetup";
+import { t } from "../i18n/ar";
+import { RotaCreatePage } from "./RotaCreatePage";
+
+type Person = { id: string; name: string; isMe: boolean; juz: number[] };
+
+const m = vi.hoisted(() => ({
+  create: vi.fn(),
+  addParticipant: vi.fn(),
+  giveJuz: vi.fn(),
+  me: undefined as unknown,
+  people: undefined as unknown,
+  listeners: new Set<() => void>(),
+}));
+
+vi.mock("../lib/session", () => ({
+  useSessionToken: () => "tok",
+  getSessionToken: () => "tok",
+  clearSessionToken: () => {},
+}));
+vi.mock("convex/react", async () => {
+  const { getFunctionName } = await import("convex/server");
+  const { useSyncExternalStore } = await import("react");
+  return {
+    // Reactive like Convex: a change to the roster re-renders whoever reads it.
+    useQuery: (ref: never) => {
+      const people = useSyncExternalStore(
+        (listener) => {
+          m.listeners.add(listener);
+          return () => m.listeners.delete(listener);
+        },
+        () => m.people,
+      );
+      return getFunctionName(ref) === "people:me" ? m.me : people;
+    },
+    useAction: () => m.create,
+    useMutation: (ref: never) =>
+      getFunctionName(ref) === "rota:addParticipant"
+        ? m.addParticipant
+        : m.giveJuz,
+  };
+});
+
+/** The view `api.rota.people` returns for these participants (their juz' already placed). */
+function peopleView(participants: Person[]) {
+  const holder = new Map<number, Person>();
+  for (const p of participants) for (const juz of p.juz) holder.set(juz, p);
+  return {
+    target: { number: 1, date: "2026-10-30", isFirst: true },
+    rows: Array.from({ length: 30 }, (_, i) => {
+      const person = holder.get(i + 1);
+      return {
+        juz: i + 1,
+        participant: person
+          ? {
+              id: person.id,
+              name: person.name,
+              isMe: person.isMe,
+              slots: person.juz.length,
+            }
+          : null,
+      };
+    }),
+    participants,
+    freeJuz: Array.from({ length: 30 }, (_, i) => i + 1).filter(
+      (juz) => !holder.has(juz),
+    ),
+    maxSlots: 3,
+  };
+}
+
+let roster: Person[] = [];
+function setRoster(next: Person[]) {
+  roster = next;
+  m.people = peopleView(next);
+  for (const listener of m.listeners) listener();
+}
+
+function Landing() {
+  const location = useLocation();
+  return <p>landed {location.pathname}</p>;
+}
+
+function renderCreate() {
+  return render(
+    <MemoryRouter initialEntries={["/new/rota"]}>
+      <Routes>
+        <Route path="/new/rota" element={<RotaCreatePage />} />
+        <Route path="/new" element={<Landing />} />
+        <Route path="/j/:inviteCode/setup" element={<Landing />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function renderSetup() {
+  return render(
+    <MemoryRouter initialEntries={["/j/CODE/setup"]}>
+      <Routes>
+        <Route path="/j/:inviteCode/setup" element={<RotaPeopleSetup />} />
+        <Route path="/j/:inviteCode" element={<Landing />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// 2026-10-29 is a Thursday, so tomorrow is Friday the 30th in every time zone.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-29T08:00:00Z"));
+  m.create.mockReset();
+  m.create.mockResolvedValue({ inviteCode: "NEWCODE" });
+  m.addParticipant.mockReset();
+  m.giveJuz.mockReset();
+  m.me = { rotaAllowed: true };
+  setRoster([{ id: "p1", name: "علي", isMe: true, juz: [1] }]);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("RotaCreatePage (step 1)", () => {
+  it("shows step 1 of 2 with the name and the days, every day chosen", () => {
+    renderCreate();
+    expect(screen.getByText("١ من ٢")).toBeInTheDocument();
+    expect(screen.getByLabelText(t.rota.nameQuestion)).toHaveValue("");
+    expect(screen.getByRole("radio", { name: "كل يوم" })).toBeChecked();
+    expect(screen.getByText("غداً، الجمعة ٣٠ أكتوبر")).toBeInTheDocument();
+    expect(screen.getByText("تستمر دائماً")).toBeInTheDocument();
+  });
+
+  it("sends the defaults: every day, from tomorrow, no end, then goes to the people screen", async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await user.type(
+      screen.getByLabelText(t.rota.nameQuestion),
+      "  ختمة العائلة ",
+    );
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(m.create).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      name: "ختمة العائلة",
+      days: { kind: "daily" },
+      firstDate: "2026-10-30",
+      endDate: null,
+    });
+    expect(
+      await screen.findByText("landed /j/NEWCODE/setup"),
+    ).toBeInTheDocument();
+  });
+
+  it("sends Friday every week after choosing every week", async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await user.type(screen.getByLabelText(t.rota.nameQuestion), "ختمة الجمعة");
+    await user.click(screen.getByRole("radio", { name: "كل أسبوع" }));
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(m.create).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      name: "ختمة الجمعة",
+      days: { kind: "weekly", weekdays: [5], everyWeeks: 1 },
+      firstDate: "2026-10-30",
+      endDate: null,
+    });
+  });
+
+  it("starts on the first reading day: tomorrow is skipped when it is not one", async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await user.type(screen.getByLabelText(t.rota.nameQuestion), "ختمة");
+    await user.click(screen.getByRole("radio", { name: "كل أسبوع" }));
+    await user.click(screen.getByRole("button", { name: "الأحد" }));
+    await user.click(screen.getByRole("button", { name: "الجمعة" }));
+    // Sunday 1 November is the first reading day after Thursday.
+    expect(screen.getByText("الأحد ١ نوفمبر")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(m.create).toHaveBeenCalledWith(
+      expect.objectContaining({ firstDate: "2026-11-01" }),
+    );
+  });
+
+  it("lets the organizer change the start and the end with a date field each", async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await user.type(screen.getByLabelText(t.rota.nameQuestion), "ختمة");
+    await user.click(
+      screen.getByRole("button", {
+        name: `${t.rota.startLabel}: ${t.rota.change}`,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(t.rota.startDateInput), {
+      target: { value: "2026-11-05" },
+    });
+    await user.click(
+      screen.getByRole("button", {
+        name: `${t.rota.endLabel}: ${t.rota.change}`,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(t.rota.endDateInput), {
+      target: { value: "2027-03-01" },
+    });
+    expect(screen.getByText("الخميس ٥ نوفمبر")).toBeInTheDocument();
+    expect(screen.getByText("الاثنين ١ مارس")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(m.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        firstDate: "2026-11-05",
+        endDate: "2027-03-01",
+      }),
+    );
+  });
+
+  it("shows the message of an error code and stays on the page", async () => {
+    m.create.mockRejectedValue(new ConvexError({ code: "invalid_name" }));
+    const user = userEvent.setup();
+    renderCreate();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "اكتب اسماً للختمة",
+    );
+    expect(screen.getByRole("button", { name: "التالي" })).toBeEnabled();
+  });
+
+  it.each([
+    ["rota_cap", t.rota.errors.rota_cap],
+    ["rota_not_allowed", t.rota.errors.rota_not_allowed],
+    ["rate_limited", t.rota.errors.rate_limited],
+    ["something_new", t.errors.generic],
+  ])("maps %s to its message", async (code, message) => {
+    m.create.mockRejectedValue(new ConvexError({ code }));
+    const user = userEvent.setup();
+    renderCreate();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(message ?? "");
+  });
+
+  it("shows the network message when the call itself fails", async () => {
+    m.create.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    renderCreate();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("تعذّر الاتصال");
+  });
+
+  it("creates only once while the call is in flight", async () => {
+    let resolve: (v: { inviteCode: string }) => void = () => {};
+    m.create.mockReturnValue(new Promise((r) => (resolve = r)));
+    const user = userEvent.setup();
+    renderCreate();
+    await user.click(screen.getByRole("button", { name: "التالي" }));
+    const busy = screen.getByRole("button", { name: t.rota.creating });
+    expect(busy).toBeDisabled();
+    await user.click(busy);
+    expect(m.create).toHaveBeenCalledTimes(1);
+    await act(async () => resolve({ inviteCode: "X" }));
+    expect(await screen.findByText("landed /j/X/setup")).toBeInTheDocument();
+  });
+
+  it("sends someone who may not create one back to the type page", () => {
+    m.me = { rotaAllowed: false };
+    renderCreate();
+    expect(screen.getByText("landed /new")).toBeInTheDocument();
+  });
+
+  it("waits for the answer before deciding", () => {
+    m.me = undefined;
+    renderCreate();
+    expect(screen.queryByText("landed /new")).toBeNull();
+    expect(screen.queryByLabelText(t.rota.nameQuestion)).toBeNull();
+  });
+});
+
+describe("RotaPeopleSetup (step 2)", () => {
+  it("shows step 2 of 2, the fields and the organizer first as «أنا»", () => {
+    renderSetup();
+    expect(screen.getByText("٢ من ٢")).toBeInTheDocument();
+    const phone = screen.getByLabelText(t.rota.personPhone);
+    expect(phone).toHaveAttribute("inputmode", "tel");
+    expect(screen.getByText(/مع رمز الدولة، مثل/)).toBeInTheDocument();
+    const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("١");
+    expect(items[0]).toHaveTextContent("أنا");
+  });
+
+  it("adds two people in order and lists them as 2 and 3", async () => {
+    m.addParticipant.mockImplementation(
+      (args: { name: string; phone: string }) => {
+        const juz = roster.length + 1;
+        const id = `p${juz}`;
+        setRoster([
+          ...roster,
+          { id, name: args.name, isMe: false, juz: [juz] },
+        ]);
+        return Promise.resolve({ ok: true, participantId: id, juz });
+      },
+    );
+    const user = userEvent.setup();
+    renderSetup();
+    for (const [name, phone] of [
+      ["أم أحمد", "+971500000001"],
+      ["خالد", "+971500000002"],
+    ] as const) {
+      await user.type(screen.getByLabelText(t.rota.personName), name);
+      await user.type(screen.getByLabelText(t.rota.personPhone), phone);
+      await user.click(screen.getByRole("button", { name: "أضف" }));
+      // The fields empty after each add.
+      expect(await screen.findByLabelText(t.rota.personName)).toHaveValue("");
+      expect(screen.getByLabelText(t.rota.personPhone)).toHaveValue("");
+    }
+    expect(m.addParticipant).toHaveBeenNthCalledWith(1, {
+      sessionToken: "tok",
+      inviteCode: "CODE",
+      name: "أم أحمد",
+      phone: "+971500000001",
+    });
+    const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual([
+      expect.stringMatching(/^١.*أنا/),
+      expect.stringMatching(/^٢.*أم أحمد/),
+      expect.stringMatching(/^٣.*خالد/),
+    ]);
+  });
+
+  it.each([
+    ["bad_phone", t.rota.addErrors.bad_phone],
+    ["already_added", t.rota.addErrors.already_added],
+    ["bad_name", t.rota.addErrors.bad_name],
+  ])(
+    "keeps the fields and shows the message for %s",
+    async (error, message) => {
+      m.addParticipant.mockResolvedValue({ error });
+      const user = userEvent.setup();
+      renderSetup();
+      await user.type(screen.getByLabelText(t.rota.personName), "سارة");
+      await user.type(screen.getByLabelText(t.rota.personPhone), "123");
+      await user.click(screen.getByRole("button", { name: "أضف" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(message ?? "");
+      expect(screen.getByLabelText(t.rota.personName)).toHaveValue("سارة");
+      expect(screen.getByLabelText(t.rota.personPhone)).toHaveValue("123");
+    },
+  );
+
+  it("with the organizer and one more, 28 ajza' are still without a reader", () => {
+    setRoster([
+      { id: "p1", name: "علي", isMe: true, juz: [1] },
+      { id: "p2", name: "خالد", isMe: false, juz: [2] },
+    ]);
+    renderSetup();
+    expect(
+      screen.getByRole("button", { name: /بقي ٢٨ جزءاً بلا قارئ/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("names the leftover ajza' while they are few", () => {
+    setRoster(
+      Array.from({ length: 28 }, (_, i) => ({
+        id: `p${i + 1}`,
+        name: `شخص ${i + 1}`,
+        isMe: i === 0,
+        juz: [i + 1],
+      })),
+    );
+    renderSetup();
+    expect(
+      screen.getByRole("button", { name: /بقي جزءان بلا قارئ \(٢٩ و٣٠\)/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("has no banner when everyone is placed", () => {
+    setRoster([
+      {
+        id: "p1",
+        name: "علي",
+        isMe: true,
+        juz: Array.from({ length: 30 }, (_, i) => i + 1),
+      },
+    ]);
+    renderSetup();
+    expect(screen.queryByText(/بلا قارئ/)).toBeNull();
+  });
+
+  it("the banner opens a sheet to give the next leftover juz' to someone", async () => {
+    m.giveJuz.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderSetup();
+    await user.click(screen.getByRole("button", { name: /بلا قارئ/ }));
+    const sheet = screen.getByRole("dialog", {
+      name: "من يقرأ الجزء ٢ أيضاً؟",
+    });
+    await user.click(within(sheet).getByRole("button", { name: /أنا/ }));
+    expect(m.giveJuz).toHaveBeenCalledWith({
+      sessionToken: "tok",
+      inviteCode: "CODE",
+      participantId: "p1",
+      juz: 2,
+    });
+  });
+
+  it("the sheet moves on to the next leftover juz' and closes when none is left", async () => {
+    m.giveJuz.mockImplementation(
+      (args: { participantId: string; juz: number }) => {
+        setRoster(
+          roster.map((p) =>
+            p.id === args.participantId
+              ? { ...p, juz: [...p.juz, args.juz] }
+              : p,
+          ),
+        );
+        return Promise.resolve({ ok: true });
+      },
+    );
+    setRoster([
+      {
+        id: "p1",
+        name: "علي",
+        isMe: true,
+        juz: Array.from({ length: 28 }, (_, i) => i + 1),
+      },
+      { id: "p2", name: "خالد", isMe: false, juz: [] },
+    ]);
+    const user = userEvent.setup();
+    renderSetup();
+    await user.click(screen.getByRole("button", { name: /بلا قارئ/ }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /خالد/ }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "من يقرأ الجزء ٣٠ أيضاً؟" }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /خالد/ }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("the sheet does not offer someone who already reads the most", async () => {
+    setRoster([
+      { id: "p1", name: "علي", isMe: true, juz: [1, 2, 3] },
+      { id: "p2", name: "خالد", isMe: false, juz: [4] },
+    ]);
+    const user = userEvent.setup();
+    renderSetup();
+    await user.click(screen.getByRole("button", { name: /بلا قارئ/ }));
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByRole("button", { name: /أنا/ })).toBeDisabled();
+    expect(within(sheet).getByRole("button", { name: /خالد/ })).toBeEnabled();
+  });
+
+  it("shows why a give failed and keeps the sheet open", async () => {
+    m.giveJuz.mockResolvedValue({ error: "too_many" });
+    const user = userEvent.setup();
+    renderSetup();
+    await user.click(screen.getByRole("button", { name: /بلا قارئ/ }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /أنا/ }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.giveErrors.too_many ?? "",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("«تمّ» goes to the khatma page", () => {
+    renderSetup();
+    expect(screen.getByRole("link", { name: "تمّ" })).toHaveAttribute(
+      "href",
+      "/j/CODE",
+    );
+  });
+
+  it("sends a non-organizer to the khatma page", () => {
+    m.people = null;
+    renderSetup();
+    expect(screen.getByText("landed /j/CODE")).toBeInTheDocument();
+  });
+});

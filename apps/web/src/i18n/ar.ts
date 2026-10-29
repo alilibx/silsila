@@ -441,6 +441,97 @@ export const ar = {
       generic: commonErrors.generic,
     },
   },
+  rota: {
+    typeQuestion: "أي ختمة تريد؟",
+    poolTitle: "ختمة بالحجز",
+    poolBody: "كل شخص يختار جزءاً متاحاً، ونختم عندما تكتمل الأجزاء الثلاثون.",
+    rotaTitle: "ختمة بالتناوب",
+    rotaBody: "لكل شخص جزء ثابت يتقدّم مع كل ختمة، ويصله على واتساب مع زرّين.",
+    step: (n: number, of: number) =>
+      `${toArabicDigits(n)} من ${toArabicDigits(of)}`,
+    nameQuestion: "ما اسم الختمة؟",
+    namePlaceholder: "مثلاً: ختمة العائلة",
+    whenQuestion: "متى تقرؤون؟",
+    daily: "كل يوم",
+    weekly: "كل أسبوع",
+    monthly: "كل شهر",
+    onDays: "في يوم:",
+    ofMonth: "في أيام الشهر:",
+    everyWeek: "كل أسبوع",
+    everyTwoWeeks: "كل أسبوعين",
+    /** Saturday first, the week the way readers count it. */
+    weekdays: {
+      0: "الأحد",
+      1: "الاثنين",
+      2: "الثلاثاء",
+      3: "الأربعاء",
+      4: "الخميس",
+      5: "الجمعة",
+      6: "السبت",
+    } as Record<number, string>,
+    am: "ص",
+    pm: "م",
+    startLabel: "نبدأ",
+    endLabel: "ننتهي",
+    tomorrow: (date: string) => `غداً، ${date}`,
+    noEnd: "تستمر دائماً",
+    change: "تغيير",
+    startDateInput: "تاريخ البداية",
+    endDateInput: "تاريخ النهاية",
+    next: "التالي",
+    creating: "جارٍ الإنشاء",
+    errors: {
+      not_signed_in: "سجّل دخولك أولاً ثم حاول مرة أخرى.",
+      rota_not_allowed: "الختمة بالتناوب غير متاحة لحسابك بعد.",
+      rota_cap:
+        "وصلتَ إلى الحد الأقصى من الختمات بالتناوب. أرشِف إحداها ثم حاول مرة أخرى.",
+      invalid_name: "اكتب اسماً للختمة",
+      invalid_days: "اختر يوماً واحداً على الأقل.",
+      invalid_dates: "تاريخ البداية أو النهاية غير صحيح. عدّله وحاول مرة أخرى.",
+      rate_limited: "أنشأتَ ختمات كثيرة اليوم. جرّب غداً بإذن الله.",
+      maintenance: commonErrors.maintenance,
+    } as Record<string, string>,
+    setupTitle: "من سيقرأ معك؟",
+    personName: "الاسم",
+    personPhone: "الرقم",
+    phoneHint: "مع رمز الدولة، مثل \u200E+971",
+    add: "أضف",
+    adding: "جارٍ الإضافة",
+    me: "أنا",
+    peopleList: "المشاركون",
+    addErrors: {
+      bad_name: "اكتب اسم الشخص.",
+      bad_phone: "الرقم غير صحيح. اكتبه مع رمز الدولة، مثل \u200E+971",
+      no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
+      juz_taken: "هذا الجزء له قارئ. حاول مرة أخرى.",
+      already_added: "هذا الرقم مضاف في الختمة.",
+    } as Record<string, string>,
+    juzOf: (juz: number[]) =>
+      juz.length === 1
+        ? `الجزء ${toArabicDigits(juz[0] ?? 0)}`
+        : `الأجزاء ${juz.map((j) => toArabicDigits(j)).join(" و")}`,
+    /** The banner when ajza' have no reader; the numbers are named only while they are few. */
+    leftover: (juz: number[]) => {
+      const n = juz.length;
+      const named =
+        juz.length <= 4
+          ? ` (${juz.map((j) => toArabicDigits(j)).join(" و")})`
+          : "";
+      if (n === 1) return `بقي جزء بلا قارئ${named}`;
+      if (n === 2) return `بقي جزءان بلا قارئ${named}`;
+      if (n <= 10) return `بقيت ${toArabicDigits(n)} أجزاء بلا قارئ${named}`;
+      return `بقي ${toArabicDigits(n)} جزءاً بلا قارئ`;
+    },
+    leftoverHint: "أعطِها لمن يحب أن يقرأ أكثر، أو أضف أشخاصاً.",
+    giveTitle: (juz: number) => `من يقرأ الجزء ${toArabicDigits(juz)} أيضاً؟`,
+    giveHint: "يقرأ أكثر من جزء كل يوم، ويتقدّمان معاً.",
+    giveErrors: {
+      juz_taken: "هذا الجزء له قارئ الآن.",
+      too_many: "لا يمكنه أن يقرأ أكثر من هذا.",
+      not_found: "لم نجد هذا الشخص.",
+    } as Record<string, string>,
+    done: "تمّ",
+  },
   share: {
     inviteButton: "ادعُ أحبابك",
     remindButton: "ذكّر المجموعة",
