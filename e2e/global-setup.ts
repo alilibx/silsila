@@ -11,10 +11,17 @@ const BACKEND_ENV: Record<string, string> = {
   WHATSAPP_PUBLIC_NUMBER: "971500000000",
 };
 
+/**
+ * Every test verifies from the same address, so the per-IP limit on starting a verification
+ * (30 per 10 minutes) would stop a full run part-way. The run lifts it, and global-teardown.ts
+ * removes the override again.
+ */
+export const IP_LIMIT_SETTING = "verifyStartPerIpPer10Min";
+
 /** Any of these would make the backend talk to the real WhatsApp API. */
 const REAL_WHATSAPP = ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"];
 
-const convex = (...args: string[]) =>
+export const convex = (...args: string[]) =>
   run("bun", ["run", "convex", ...args], { cwd: root });
 
 /** Runs after the webServers are up (the backend has pushed its functions). */
@@ -32,4 +39,9 @@ export default async function globalSetup(): Promise<void> {
   for (const [name, value] of Object.entries(BACKEND_ENV)) {
     await convex("env", "set", name, value);
   }
+  await convex(
+    "run",
+    "dev:setSetting",
+    JSON.stringify({ key: IP_LIMIT_SETTING, value: 10_000 }),
+  );
 }

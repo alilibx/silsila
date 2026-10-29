@@ -245,5 +245,4 @@ Client IP addresses exist only inside the `verifyStart:ip:<address>` rate-limit 
 ## Follow-ups
 
 - **Content-Security-Policy.** `vercel.json` has no CSP on purpose: it must allow the Convex origins (`https://*.convex.cloud` for the client, including `wss:`) and the Google Fonts origins, and a wrong CSP breaks the site silently. Add one deliberately, in report-only mode first.
-- **End-to-end test in CI.** `bun run e2e` runs only on a developer machine. CI would need the Playwright Chromium install and the Convex local backend binary download.
 - **Self-host the fonts (M9).** `apps/web/index.html` loads Readex Pro, Aref Ruqaa and Amiri Quran from Google Fonts, which tells Google about every visit and fails offline. Serve them from `apps/web/public` (with their licences) and drop the Google origins from the future CSP.

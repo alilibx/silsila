@@ -1,10 +1,12 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, type Browser, type Page } from "@playwright/test";
 import { t } from "../apps/web/src/i18n/ar";
 import {
   blockExternal,
   dismissPushPrompt,
   forceGraceEnd,
+  newPerson,
   randomPhone,
+  test,
   verifyInSheet,
 } from "./support";
 
@@ -37,9 +39,7 @@ async function startKhatma(page: Page): Promise<string> {
 
 /** B, in a clean browser context, follows the invite, verifies, and takes `juz`. */
 async function joinAndTake(browser: Browser, inviteUrl: string, juz: string) {
-  const context = await browser.newContext();
-  await blockExternal(context);
-  const b = await context.newPage();
+  const { context, page: b } = await newPerson(browser);
   await b.goto(inviteUrl);
   await juzTile(b, juz).click();
   await verifyInSheet(

@@ -1,7 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { expect, type BrowserContext, type Page } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import { t } from "../apps/web/src/i18n/ar";
+import type { Throttle } from "./throttle";
 
 const run = promisify(execFile);
 
@@ -76,10 +83,84 @@ export async function verifyInSheet(
   await sheet.getByRole("button", { name: t.verify.yes }).click();
 }
 
-/** After a person's first juz' in a browser the app offers push once; "not now" closes it. */
+/** What the app offers once after a person's first juz' in a browser, and its "not now". */
+const NOTIFY_OFFERS = [
+  // Push, where the browser can do it now.
+  { title: t.push.title, notNow: t.push.notNow },
+  // An iPhone or iPad tab: push works only once the site is on the home screen.
+  { title: t.install.title, notNow: t.install.notNow },
+  // No push at all: notifications on WhatsApp instead.
+  { title: t.whatsappNotes.sheetTitle, notNow: t.whatsappNotes.notNow },
+];
+
+/**
+ * After a person's first juz' in a browser the app offers notifications once: push, the iPhone
+ * install steps, or WhatsApp, depending on the browser. "Not now" closes whichever it is.
+ */
 export async function dismissPushPrompt(page: Page): Promise<void> {
-  const prompt = page.getByRole("dialog", { name: t.push.title });
-  await expect(prompt).toBeVisible();
-  await prompt.getByRole("button", { name: t.push.notNow }).click();
-  await expect(prompt).toBeHidden();
+  const sheets = NOTIFY_OFFERS.map(({ title }) =>
+    page.getByRole("dialog", { name: title }),
+  );
+  const offer = sheets.reduce((either, sheet) => either.or(sheet));
+  await expect(offer).toBeVisible();
+  const index = await Promise.all(sheets.map((sheet) => sheet.isVisible()));
+  const shown = NOTIFY_OFFERS[index.indexOf(true)];
+  await offer.getByRole("button", { name: shown?.notNow }).click();
+  await expect(offer).toBeHidden();
+}
+
+/** The current project's throttle, if it has one. */
+export function projectThrottle(): Throttle | undefined {
+  return test.info().project.metadata.throttle as Throttle | undefined;
+}
+
+/** Slows `page` to the project's throttle through the DevTools protocol, before it loads anything. */
+async function throttle(page: Page): Promise<void> {
+  const slow = projectThrottle();
+  if (!slow) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: slow.latencyMs,
+    downloadThroughput: (slow.downloadKbps * 1024) / 8,
+    uploadThroughput: (slow.uploadKbps * 1024) / 8,
+  });
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: slow.cpuSlowdown });
+}
+
+/** Fails the test on any uncaught error in `page`, whichever browser it shows up in. */
+function failOnPageError(page: Page): void {
+  page.on("pageerror", (error) => {
+    expect
+      .soft(error, `uncaught error in the page: ${error.message}`)
+      .toBeUndefined();
+  });
+}
+
+/**
+ * Playwright's `test`, with the default `page` throttled for the project and watched for
+ * uncaught errors. Every spec imports `test` from here.
+ */
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    await throttle(page);
+    failOnPageError(page);
+    await use(page);
+  },
+});
+
+/**
+ * Another person on another phone: a clean context with the project's device, external sites
+ * blocked, the project's throttle, and uncaught errors failing the test. Close the context after.
+ */
+export async function newPerson(
+  browser: Browser,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext();
+  await blockExternal(context);
+  const page = await context.newPage();
+  await throttle(page);
+  failOnPageError(page);
+  return { context, page };
 }
