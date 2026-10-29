@@ -18,6 +18,8 @@ He wants the form gone. Members should only need WhatsApp: a message with their 
 
 This adds a second khatma type, the **rotating khatma** (ختمة بالتناوب). The pool khatma stays exactly as it is.
 
+The people using it are often very old, organizers included. Ali: "this should be simple to setup so please be simple". Section 2.1 turns that into rules every screen and message follows, and Ali (as admin) can set a khatma up for someone or help run it (section 10.1).
+
 ## 2. Goals, non-goals, anti-goals
 
 **Goals**
@@ -32,6 +34,19 @@ This adds a second khatma type, the **rotating khatma** (ختمة بالتناو
 8. Each organizer keeps a saved list of participants that outlives any khatma.
 9. An organizer can archive a khatma, start a new one from an archived one, and delete an archived one.
 10. Only organizers an admin has turned it on for can create a rotating khatma (section 10).
+11. An admin can set up a rotating khatma on an organizer's behalf, and can do anything its organizer can do (section 10.1).
+
+### 2.1 Simple enough for an 80-year-old
+
+These rules decide every screen and message. When a feature can't follow them, it moves out of the way (into settings or "more"), not onto the main path.
+
+- **One question per screen** when setting up, with big fields and big buttons. Setup is two screens: name and days, then people.
+- **Everything has a default.** "Every day", "starts tomorrow", "no end", and the admin's message times are already chosen. An organizer who only types a name and adds people gets a working khatma.
+- **Add people in order.** At setup, the organizer types a name and a number and taps «أضف». The first person reads juz' 1 on khatma 1, the next juz' 2, and so on. The organizer is first in the list by default and can remove themselves **[builder's call]**. Placing someone on a particular juz' happens later, by tapping them (3.3).
+- **No numbers to work out.** Nobody ever converts between a slot, khatma 1, and today. The app always says it in words: «يقرأ الجزء ٧ في الختمة ١٢، ثم ٨ في الختمة ١٣».
+- **Members do nothing but tap.** One message a day, two buttons, and typed replies like «تم» work too. No website, no app, no code to copy.
+- **Plain Arabic**, short sentences, no jargon («تناوب» is fine, «slot» never appears).
+- **Hidden until needed:** other reading days, an end date, message times, pausing, the saved list, archive. Each sits in settings or behind one «أيام أخرى» link.
 
 **Non-goals**
 
@@ -185,11 +200,16 @@ The next juz' message brings everyone their next juz'.
 
 ## 6. The organizer's website
 
-The rotating khatma's page has the app's existing tabs, adapted. These mockups were reviewed: `.superpowers/brainstorm/*/content/organizer-flow-v2.html` (local only).
+The rotating khatma's page has the app's existing tabs, adapted. These mockups were reviewed (local only, under `.superpowers/brainstorm/*/content/`): `organizer-flow-v2.html` for the participants list, settings and today, and `simple-setup-v3.html` for create and admin setup, which replaces v2's create screen.
 
 ### 6.1 Create
 
-Create asks for the type (pool or rotating), the name, the reading days, the date of khatma 1, and the end (no end, or a date). A preview lists the next three khatmas with their dates and when khatma 30 falls. Message times don't appear here, because they use the defaults (Ali). The next step is the participants page.
+Create is two screens (mockup: `simple-setup-v3.html`).
+
+1. **Name and days.** «ما اسم الختمة؟» and «متى تقرؤون؟» with two big choices, «كل يوم» (chosen) and «كل جمعة». A «أيام أخرى أو تاريخ نهاية» link opens the rest: chosen weekdays, every two weeks, days of the month, and an end date. One line says «نبدأ غداً، <date>» with «تغيير» to pick the date of khatma 1. Message times don't appear here, because they use the defaults (Ali).
+2. **People.** A name field, a number field, and «أضف», filling ajza' in order (2.1). A saved list link («من ختمات سابقة») fills from earlier khatmas. If ajza' are left over, one line says so in words («بقي جزءان بلا قارئ (٢٩ و٣٠)») and offers to give them to someone. The big button at the bottom sends the join link to the group.
+
+The type (pool or rotating) is chosen before these screens, as two big cards, and only by people an admin has turned rotating khatmas on for (section 10).
 
 ### 6.2 Today
 
@@ -258,6 +278,16 @@ The existing organizer controls (reset the invite link, hand over, remove a memb
 - The khatma view shows the type, and for a rotating khatma its reading days, current number and cycle, pause state, and today's progress.
 - Stats count reading days completed. Whether they join `roundsCompleted` or get their own counter is left to the builder.
 
+### 10.1 Setting up and helping on someone's behalf
+
+Ali wants to set khatmas up for organizers who can't, and to help run them.
+
+- **Set up on behalf.** In the admin panel, «أنشئ ختمة بالتناوب نيابةً عن منظّم» asks for the organizer's name and WhatsApp number, then shows the same two setup screens (6.1). The admin gets the join link to pass on.
+- **The organizer takes over by joining.** Until the organizer's join message arrives from that number, the khatma has no active organizer and only admins manage it. When it arrives, they become the organizer, and the khatma shows as theirs if they ever sign in on the website **[builder's call]**. Organizer messages (6.3) go to the admin who set it up until then.
+- **Help with any rotating khatma.** An admin can open any rotating khatma in the admin panel and do everything its organizer can: participants, reassigning, marking done, pause, settings, archive. An admin doesn't need the organizer's sign-in.
+- **This is an exception to plan 3 spec 8**, where an admin sees a khatma's counts but never who reads what. For rotating khatmas, admins see names, numbers and the day's progress, because helping needs them. The privacy page says so. Every admin change goes in the audit log, like every admin action today.
+- An admin-created khatma counts against the organizer's cap, and the per-person switch doesn't apply to it, since the admin decided **[builder's call]**.
+
 ## 11. Constraints
 
 - The pool khatma's behavior doesn't change, apart from archive and delete.
@@ -272,7 +302,8 @@ The existing organizer controls (reset the invite link, hand over, remove a memb
 3. Create a daily rotating khatma whose khatma 1 is today, with Ali's number on one slot and the rest empty.
 4. Join through the link from Ali's phone. Check that the welcome carries today's juz' (3.4), then «ليس بعد», the reminder, «أتممت», and a typed «تم» the next day after the juz' message.
 5. Mark the other 29 ajza' done as the organizer and check the dua message.
-6. Pause tomorrow, check that no message arrives and the number doesn't move, then check the next reading day.
+6. From the admin panel, set up a second khatma on behalf of an organizer with Ali's number, and check that joining makes Ali its organizer.
+7. Pause tomorrow, check that no message arrives and the number doesn't move, then check the next reading day.
 
 ## 13. Left to the builder
 
