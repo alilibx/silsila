@@ -46,7 +46,7 @@ These rules decide every screen and message. When a feature can't follow them, i
 - **No numbers to work out.** Nobody ever converts between a slot, khatma 1, and today. The app always says it in words: «يقرأ الجزء ٧ في الختمة ١٢، ثم ٨ في الختمة ١٣».
 - **Members do nothing but tap.** One message a day, two buttons, and typed replies like «تم» work too. No website, no app, no code to copy.
 - **Plain Arabic**, short sentences, no jargon («تناوب» is fine, «slot» never appears).
-- **Hidden until needed:** other reading days, an end date, message times, pausing, the saved list, archive. Each sits in settings or behind one «أيام أخرى» link.
+- **Hidden until needed:** message times, pausing, the saved list, archive. Each sits in settings. Reading days and the end date stay on the first setup screen, as plain choices with defaults (6.1).
 
 **Non-goals**
 
@@ -204,10 +204,15 @@ The rotating khatma's page has the app's existing tabs, adapted. These mockups w
 
 ### 6.1 Create
 
-Create is two screens (mockup: `simple-setup-v3.html`).
+Create is two screens (mockup: `simple-setup-v4.html` for the first, `simple-setup-v3.html` for the second).
 
-1. **Name and days.** «ما اسم الختمة؟» and «متى تقرؤون؟» with two big choices, «كل يوم» (chosen) and «كل جمعة». A «أيام أخرى أو تاريخ نهاية» link opens the rest: chosen weekdays, every two weeks, days of the month, and an end date. One line says «نبدأ غداً، <date>» with «تغيير» to pick the date of khatma 1. Message times don't appear here, because they use the defaults (Ali).
-2. **People.** A name field, a number field, and «أضف», filling ajza' in order (2.1). A saved list link («من ختمات سابقة») fills from earlier khatmas. If ajza' are left over, one line says so in words («بقي جزءان بلا قارئ (٢٩ و٣٠)») and offers to give them to someone. The big button at the bottom sends the join link to the group.
+1. **Name and days.**
+   - «ما اسم الختمة؟»
+   - «متى تقرؤون؟» with three big choices: «كل يوم» (chosen), «كل أسبوع», «كل شهر». Picking «كل أسبوع» opens weekday chips inside the choice, with Friday chosen and more days allowed, plus «كل أسبوع» / «كل أسبوعين». Picking «كل شهر» opens the days of the month the same way.
+   - Two lines, each with «تغيير»: «نبدأ: غداً، <date>» (the date of khatma 1) and «ننتهي: تستمر دائماً» (no end, or a date).
+   - Message times don't appear here, because they use the defaults (Ali).
+   - Ali found v3's single «أيام أخرى أو تاريخ نهاية» link unclear, which is why days and the end are separate here.
+2. **People.** A name field, a number field, and «أضف», filling ajza' in order (2.1). Two shortcuts sit above the fields when they apply: «أضف أعضاء <current khatma>» for an organizer who already runs a pool khatma (10.2), and «من ختمات سابقة» for the saved list. If ajza' are left over, one line says so in words («بقي جزءان بلا قارئ (٢٩ و٣٠)») and offers to give them to someone. The big button at the bottom sends the join link to the group.
 
 The type (pool or rotating) is chosen before these screens, as two big cards, and only by people an admin has turned rotating khatmas on for (section 10).
 
@@ -259,6 +264,7 @@ The existing organizer controls (reset the invite link, hand over, remove a memb
 
 - Each organizer has a saved list of people, each with a name and a WhatsApp number. Adding someone to a rotating khatma saves them to the organizer's list. Picking from the list fills the sheet in 3.3.
 - The list belongs to the organizer (the person), not to any khatma. Archiving or deleting a khatma never changes it. A person leaves it only when the organizer removes them.
+- People added from the organizer's pool khatma (10.2) are saved by name, linked to their Wirdak account, and their number stays hidden from the organizer.
 - Only the organizer sees their list's numbers. Admins can see them in the admin panel's person view, as they see members' numbers today **[builder's call]**.
 - The privacy page (Arabic and English) says that organizers enter participants' names and numbers, and what WhatsApp messages those people get after they join. Ali approves the wording before merge.
 
@@ -287,6 +293,13 @@ Ali wants to set khatmas up for organizers who can't, and to help run them.
 - **Help with any rotating khatma.** An admin can open any rotating khatma in the admin panel and do everything its organizer can: participants, reassigning, marking done, pause, settings, archive. An admin doesn't need the organizer's sign-in.
 - **This is an exception to plan 3 spec 8**, where an admin sees a khatma's counts but never who reads what. For rotating khatmas, admins see names, numbers and the day's progress, because helping needs them. The privacy page says so. Every admin change goes in the audit log, like every admin action today.
 - An admin-created khatma counts against the organizer's cap, and the per-person switch doesn't apply to it, since the admin decided **[builder's call]**.
+
+### 10.2 Organizers who already use Wirdak
+
+- **Turning it on.** The admin panel gets an «المنظّمون» list: everyone who organizes a khatma today, with their khatmas, member counts, and the rotating switch on each row. The same switch is on every person's page, and search finds anyone not on the list (mockup: `simple-setup-v4.html`).
+- **Telling them.** Turning it on sends the person a note: «جديد لك: يمكنك الآن إنشاء ختمة بالتناوب…». It goes as an in-app note and push only, never WhatsApp, because Meta reads "you can now…" as marketing however it's worded (the `behind` lesson) **[builder's call]**. If you want to tell them yourself, do it from the admin panel's person page. Create then shows the rotating type.
+- **Bringing their members.** On the people screen, «أضف أعضاء <khatma>» adds the active members of a pool khatma they organize, in join order, by name. The organizer still doesn't see those members' numbers, as today (plan 2 spec 6.1). Wirdak already has them. Each member still taps the new join link once (4.2) **[builder's call]**.
+- Their pool khatma carries on unchanged. Turning a pool khatma into a rotating one in place isn't offered **[builder's call: the two keep different history, and starting fresh is one tap]**.
 
 ## 11. Constraints
 
