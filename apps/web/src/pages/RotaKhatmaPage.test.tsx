@@ -152,6 +152,7 @@ function peopleView(
   for (const p of holders) for (const juz of p.juz) byJuz.set(juz, p);
   return {
     title: "ختمة العائلة",
+    daysKind: "monthly",
     joinLink: JOIN_LINK,
     requests: [],
     ...extra,
@@ -965,7 +966,7 @@ describe("People", () => {
       const url = new URL(resend.getAttribute("href") ?? "");
       expect(url.origin + url.pathname).toBe("https://wa.me/971505550001");
       expect(url.searchParams.get("text")).toBe(
-        t.rota.shareMessage("ختمة العائلة", JOIN_LINK),
+        t.rota.shareMessage("ختمة العائلة", JOIN_LINK, "monthly"),
       );
     });
 
@@ -996,13 +997,13 @@ describe("People", () => {
       expect(screen.queryByRole("link", { name: t.rota.notJoined })).toBeNull();
     });
 
-    it("has the share button at the bottom, opening the group message", () => {
+    it("has the share button at the bottom, opening the group message that says how often it is read", () => {
       renderAt("/j/CODE?tab=people");
       const share = screen.getByRole("link", { name: t.rota.shareJoin });
       expect(share).toHaveAttribute(
         "href",
         `https://wa.me/?text=${encodeURIComponent(
-          `السلام عليكم، بدأنا ختمة العائلة، ختمة يومية بالتناوب. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${JOIN_LINK}`,
+          `السلام عليكم، بدأنا ختمة العائلة، ختمة شهرية بالتناوب. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${JOIN_LINK}`,
         )}`,
       );
       expect(rows()[29]?.compareDocumentPosition(share)).toBe(

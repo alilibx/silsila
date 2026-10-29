@@ -349,6 +349,7 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
                   person={holder}
                   isMe={holder.isMe}
                   title={view.title}
+                  daysKind={view.daysKind}
                   joinLink={view.joinLink}
                 />
               )}
@@ -358,7 +359,11 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
       </ol>
 
       <div className="mt-5">
-        <ShareJoinLink title={view.title} joinLink={view.joinLink} />
+        <ShareJoinLink
+          title={view.title}
+          daysKind={view.daysKind}
+          joinLink={view.joinLink}
+        />
       </div>
 
       {open?.kind === "add" && (

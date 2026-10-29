@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { ReadingDaysKind } from "@convex/lib/rota";
 import { useMutation } from "convex/react";
 import { useEffect, useRef } from "react";
 import { buttonClass } from "../../components/Button";
@@ -23,17 +24,20 @@ const chip =
  */
 export function ShareJoinLink({
   title,
+  daysKind,
   joinLink,
   variant = "whatsapp",
 }: {
   title: string;
+  /** How often the khatma is read, which the message says. */
+  daysKind: ReadingDaysKind;
   joinLink: string | null;
   variant?: "whatsapp" | "ghost";
 }) {
   if (joinLink === null) return null;
   return (
     <a
-      href={waShareLink(t.rota.shareMessage(title, joinLink))}
+      href={waShareLink(t.rota.shareMessage(title, joinLink, daysKind))}
       target="_blank"
       rel="noopener"
       className={buttonClass(variant, "no-underline")}
@@ -51,11 +55,13 @@ export function JoinChip({
   person,
   isMe,
   title,
+  daysKind,
   joinLink,
 }: {
   person: JoinState;
   isMe: boolean;
   title: string;
+  daysKind: ReadingDaysKind;
   joinLink: string | null;
 }) {
   if (person.stopped) {
@@ -90,7 +96,7 @@ export function JoinChip({
     ? joinLink
     : waLink(
         person.phone.replace(/\D/g, ""),
-        t.rota.shareMessage(title, joinLink),
+        t.rota.shareMessage(title, joinLink, daysKind),
       );
   return (
     <a

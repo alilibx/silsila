@@ -73,6 +73,7 @@ function peopleView(people: Person[]) {
   for (const p of participants) for (const juz of p.juz) holder.set(juz, p);
   return {
     title: "ختمة العائلة",
+    daysKind: "weekly",
     joinLink: m.joinLink,
     requests: [],
     target: { number: 1, date: "2026-10-30", isFirst: true },
@@ -373,7 +374,7 @@ describe("RotaPeopleSetup (step 2)", () => {
     const share = screen.getByRole("link", { name: t.rota.shareJoin });
     expect(share).toHaveAttribute(
       "href",
-      `https://wa.me/?text=${encodeURIComponent(t.rota.shareMessage("ختمة العائلة", m.joinLink))}`,
+      `https://wa.me/?text=${encodeURIComponent(t.rota.shareMessage("ختمة العائلة", m.joinLink, "weekly"))}`,
     );
     expect(
       share.compareDocumentPosition(

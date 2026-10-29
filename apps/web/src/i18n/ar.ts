@@ -1,6 +1,7 @@
 import { toArabicDigits } from "@convex/lib/digits";
 import { DUAS } from "@convex/lib/duas";
 import { noteText } from "@convex/lib/noteText";
+import type { ReadingDaysKind } from "@convex/lib/rota";
 import type { Schedule } from "@convex/lib/schedule";
 
 /** Copy every feature shares for failures it cannot explain more precisely. */
@@ -25,6 +26,14 @@ function counted(
     ? `${digits} ${forms.few}`
     : `${digits} ${forms.many}`;
 }
+
+/** A rota khatma as the share message names it, by how often it is read. */
+const rotaKindText: Record<ReadingDaysKind, string> = {
+  daily: "ختمة يومية بالتناوب",
+  weekly: "ختمة أسبوعية بالتناوب",
+  biweekly: "ختمة كل أسبوعين بالتناوب",
+  monthly: "ختمة شهرية بالتناوب",
+};
 
 /** Every UI string lives here. Components never contain Arabic literals. */
 export const ar = {
@@ -552,8 +561,8 @@ export const ar = {
     joinOnWhatsApp: "انضمّ عبر واتساب",
     // Joining
     shareJoin: "أرسل رابط الانضمام إلى مجموعتكم",
-    shareMessage: (title: string, link: string) =>
-      `السلام عليكم، بدأنا ${title}، ختمة يومية بالتناوب. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${link}`,
+    shareMessage: (title: string, link: string, days: ReadingDaysKind) =>
+      `السلام عليكم، بدأنا ${title}، ${rotaKindText[days]}. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${link}`,
     joined: "انضمّ",
     notJoined: "لم ينضمّ · أعد الإرسال",
     notJoinedShort: "لم ينضمّ",

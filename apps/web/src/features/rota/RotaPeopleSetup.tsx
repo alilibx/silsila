@@ -126,6 +126,7 @@ export function RotaPeopleSetup() {
                 person={person}
                 isMe={person.isMe}
                 title={view.title}
+                daysKind={view.daysKind}
                 joinLink={view.joinLink}
               />
             </span>
@@ -149,7 +150,11 @@ export function RotaPeopleSetup() {
       )}
 
       <div className="mt-6 grid gap-3">
-        <ShareJoinLink title={view.title} joinLink={view.joinLink} />
+        <ShareJoinLink
+          title={view.title}
+          daysKind={view.daysKind}
+          joinLink={view.joinLink}
+        />
         {/* The khatma's days start only once setup is done. */}
         <Button
           disabled={finishing.busy}
