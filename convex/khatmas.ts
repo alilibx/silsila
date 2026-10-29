@@ -14,6 +14,7 @@ import { JUZ, JUZ_COUNT } from "./lib/juz";
 import { paceDays, personPace } from "./lib/pace";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
+import { lastRotaDay } from "./lib/rotaPlace";
 import { scheduleValidator, type Schedule } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
 import { resolveSession, sessionMutation, sessionQuery } from "./lib/session";
@@ -438,11 +439,7 @@ async function openRotaDayDone(
   ctx: QueryCtx,
   khatmaId: Id<"khatmas">,
 ): Promise<number> {
-  const day = await ctx.db
-    .query("rotaDays")
-    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatmaId))
-    .order("desc")
-    .first();
+  const day = await lastRotaDay(ctx, khatmaId);
   if (!day || day.closedAt !== null) return 0;
   const reads = await ctx.db
     .query("rotaReads")

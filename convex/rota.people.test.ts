@@ -193,10 +193,13 @@ test("freeJuz empties a slot", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
   await add(t, s);
-  const free = (juz: number) =>
+  const view0 = await people(t, s);
+  const holder = view0!.rows[1]!.participant!.id;
+  const free = (juz: number, participantId = holder) =>
     t.mutation(api.rota.freeJuz, {
       sessionToken: s.token,
       inviteCode: s.inviteCode,
+      participantId,
       juz,
     });
   expect(await free(2)).toEqual({ ok: true });
@@ -204,6 +207,25 @@ test("freeJuz empties a slot", async () => {
   const view = await people(t, s);
   expect(view?.rows[1]?.participant).toBeNull();
   expect(view?.freeJuz).toContain(2);
+});
+
+test("freeJuz frees nobody else's slot: the juz' must still be held by that person", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  await add(t, s);
+  const other = participantId(await add(t, s, { juz: 7 }));
+  const free = (juz: number, participantId: typeof other) =>
+    t.mutation(api.rota.freeJuz, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+      participantId,
+      juz,
+    });
+  // juz' 7 is the other person's, not the organizer's
+  const organizer = (await people(t, s))!.rows[0]!.participant!.id;
+  expect(await free(7, organizer)).toEqual({ error: "not_found" });
+  expect((await people(t, s))?.rows[6]?.participant?.id).toBe(other);
+  expect(await free(7, other)).toEqual({ ok: true });
 });
 
 test("removeParticipant frees their ajza' and refuses the organizer", async () => {
@@ -279,7 +301,9 @@ test("someone else sees no people and cannot change them", async () => {
     ),
   ).toBe("forbidden");
   expect(
-    await forbidden(t.mutation(api.rota.freeJuz, { ...args, juz: 2 })),
+    await forbidden(
+      t.mutation(api.rota.freeJuz, { ...args, participantId: a, juz: 2 }),
+    ),
   ).toBe("forbidden");
   expect(
     await forbidden(

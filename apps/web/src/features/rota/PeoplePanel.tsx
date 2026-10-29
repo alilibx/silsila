@@ -55,7 +55,11 @@ function PersonSheet({
   /** Frees each of the person's ajza' in turn, stopping at the first refusal. */
   const freeAll = async () => {
     for (const held of person.juz) {
-      const result = await freeJuz({ ...args, juz: held });
+      const result = await freeJuz({
+        ...args,
+        participantId: person.id,
+        juz: held,
+      });
       if ("error" in result) return result;
     }
     return { ok: true as const };

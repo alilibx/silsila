@@ -5,7 +5,6 @@ import { writeAudit } from "./lib/audit";
 import { messageTimesError } from "./lib/rota";
 import {
   getSetting,
-  quietHours,
   SETTING_DEFAULTS,
   type SettingKey,
   type SettingValue,
@@ -61,22 +60,37 @@ const ROTA_TIME_KEYS = [
   "rotaSummaryOn",
 ] as const;
 
+const QUIET_KEYS = ["quietStartHour", "quietEndHour"] as const;
+
 /**
  * Whether the default rota message times would still hold together after
  * `key` becomes `value`: each is checked alone by its spec, but together they
- * must be in order and in the live waking hours, as a khatma's own are.
+ * must be in order and in the waking hours, as a khatma's own are. Moving a
+ * quiet hour changes the waking hours, so it is checked too.
  */
 async function rotaTimesFit(
   ctx: MutationCtx,
   key: SettingKey,
   value: unknown,
 ): Promise<boolean> {
-  if (!(ROTA_TIME_KEYS as readonly string[]).includes(key)) return true;
+  if (
+    !(ROTA_TIME_KEYS as readonly string[]).includes(key) &&
+    !(QUIET_KEYS as readonly string[]).includes(key)
+  ) {
+    return true;
+  }
   const get = async <K extends (typeof ROTA_TIME_KEYS)[number]>(
     k: K,
   ): Promise<SettingValue<K>> =>
     k === key ? (value as SettingValue<K>) : await getSetting(ctx, k);
-  const quiet = await quietHours(ctx);
+  const quietStart =
+    key === "quietStartHour"
+      ? (value as number)
+      : await getSetting(ctx, "quietStartHour");
+  const quietEnd =
+    key === "quietEndHour"
+      ? (value as number)
+      : await getSetting(ctx, "quietEndHour");
   const error = messageTimesError(
     {
       dayAt: await get("rotaDayAt"),
@@ -90,8 +104,8 @@ async function rotaTimesFit(
         on: await get("rotaSummaryOn"),
       },
     },
-    quiet.startHour,
-    quiet.endHour,
+    quietStart,
+    quietEnd,
   );
   return error === null;
 }

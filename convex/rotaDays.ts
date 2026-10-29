@@ -11,7 +11,7 @@ import {
   ROTA_SIZE,
   slotFor,
 } from "./lib/rota";
-import { slotRowsByJuz } from "./lib/rotaPlace";
+import { lastRotaDay, slotRowsByJuz } from "./lib/rotaPlace";
 import { instantAt, localDate, localMinutes } from "./lib/wakingTime";
 
 type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
@@ -34,45 +34,24 @@ export async function completeIfDone(
   return true;
 }
 
-/** The latest reading day of the khatma, which is the only one that can be open. */
-function lastDay(
-  ctx: MutationCtx,
-  khatmaId: Id<"khatmas">,
-): Promise<Doc<"rotaDays"> | null> {
-  return ctx.db
-    .query("rotaDays")
-    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatmaId))
-    .order("desc")
-    .first();
-}
-
 /**
  * Whether a day should start now: setup is done, and today is a reading date
  * after the last started day (days only go forward, even if the time zone
- * moved west). A khatma from before setup was tracked counts as set up.
+ * moved west), so no started day can have today's date. A khatma from before setup was tracked counts as set up.
  */
-async function shouldStart(
-  ctx: MutationCtx,
-  khatma: Doc<"khatmas">,
+function shouldStart(
   rota: RotaConfig,
   last: Doc<"rotaDays"> | null,
   today: string,
   now: number,
-): Promise<boolean> {
+): boolean {
   if (rota.setupDoneAt === null) return false;
   if (rota.pausedAt !== null) return false;
   if (last && today <= last.date) return false;
   if (rota.endDate !== null && today > rota.endDate) return false;
   if (!isReadingDate(rota.days, rota.firstDate, today)) return false;
   if (rota.pauseDates.includes(today)) return false;
-  if (localMinutes(now, rota.timeZone) < rota.messages.dayAt) return false;
-  const started = await ctx.db
-    .query("rotaDays")
-    .withIndex("by_khatma_date", (q) =>
-      q.eq("khatmaId", khatma._id).eq("date", today),
-    )
-    .first();
-  return started === null;
+  return localMinutes(now, rota.timeZone) >= rota.messages.dayAt;
 }
 
 async function startDay(
@@ -201,13 +180,13 @@ export const tick = internalMutation({
     const now = Date.now();
     const today = localDate(now, rota.timeZone);
 
-    let last = await lastDay(ctx, khatma._id);
+    let last = await lastRotaDay(ctx, khatma._id);
     if (last && last.closedAt === null && now >= last.closesAt) {
       await ctx.db.patch(last._id, { closedAt: now });
       last = { ...last, closedAt: now };
     }
 
-    if (await shouldStart(ctx, khatma, rota, last, today, now)) {
+    if (shouldStart(rota, last, today, now)) {
       if (last && last.closedAt === null) {
         await ctx.db.patch(last._id, { closedAt: now });
       }

@@ -71,26 +71,19 @@ export async function targetDay(
     last,
     localDate(Date.now(), rota.timeZone),
   );
-  // A date is started exactly when a row has it, which is what `tick` checks too.
-  for (const date of nextReadingDates(
+  // `from` is after the last started day, so no started day has the first
+  // reading date that remains (pause dates left out).
+  const [date] = nextReadingDates(
     rota.days,
     rota.firstDate,
     from,
-    2,
+    1,
     new Set(rota.pauseDates),
-  )) {
-    if (rota.endDate !== null && date > rota.endDate) break;
-    const started = await ctx.db
-      .query("rotaDays")
-      .withIndex("by_khatma_date", (q) =>
-        q.eq("khatmaId", khatma._id).eq("date", date),
-      )
-      .first();
-    if (!started) {
-      return { n, number: khatmaNumber(n), date, started: false };
-    }
+  );
+  if (date === undefined || (rota.endDate !== null && date > rota.endDate)) {
+    return { n, number: khatmaNumber(n), date: null, started: false };
   }
-  return { n, number: khatmaNumber(n), date: null, started: false };
+  return { n, number: khatmaNumber(n), date, started: false };
 }
 
 /** Who holds each juz' of khatma `number`: the slot row for that juz', if any. */

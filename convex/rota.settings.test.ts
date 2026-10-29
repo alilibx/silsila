@@ -346,6 +346,82 @@ test("an end date can't be set before today or before the last started day", asy
   expect((await settings(t, s))?.endDate).toBeNull();
 });
 
+test("changing days or the time zone can't strand the end date", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, { days: { kind: "daily" } });
+  await tickAt(t, s, "2027-01-15T08:00");
+  await tickAt(t, s, "2027-01-16T08:00");
+  await tickAt(t, s, "2027-01-17T08:00");
+  vi.setSystemTime(dubai("2027-01-17T12:00"));
+
+  // the end date is the 20th (a Wednesday)
+  expect(await update(t, s, { endDate: "2027-01-20" })).toEqual({ ok: true });
+  // Fridays only: none falls between now and the end date
+  expect(await update(t, s, { days: FRIDAYS })).toEqual({
+    error: "invalid_dates",
+  });
+  // Tuesdays and Wednesdays still reach it
+  expect(
+    await update(t, s, {
+      days: { kind: "weekly", weekdays: [2, 3], everyWeeks: 1 },
+    }),
+  ).toEqual({ ok: true });
+  // the same goes for an end date sent together with the days
+  expect(await update(t, s, { days: FRIDAYS, endDate: "2027-01-21" })).toEqual({
+    error: "invalid_dates",
+  });
+  expect(await update(t, s, { days: FRIDAYS, endDate: "2027-01-22" })).toEqual({
+    ok: true,
+  });
+
+  // an end date that is the last started day is fine as it is
+  await update(t, s, { days: { kind: "daily" }, endDate: "2027-01-17" });
+  expect(await update(t, s, { days: FRIDAYS })).toEqual({ ok: true });
+});
+
+test("a time zone that leaves the end date behind the last day is refused", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, { days: { kind: "daily" }, endDate: "2027-01-16" });
+  await tickAt(t, s, "2027-01-15T08:00");
+  await tickAt(t, s, "2027-01-16T08:00");
+  // 20:00 in Dubai on the 16th is already the 17th in Auckland
+  vi.setSystemTime(dubai("2027-01-16T20:00"));
+  expect(await update(t, s, { timeZone: "Pacific/Auckland" })).toEqual({
+    error: "invalid_dates",
+  });
+  expect(await update(t, s, { timeZone: "Asia/Muscat" })).toEqual({ ok: true });
+});
+
+test("moving the day start moves the close of the open day with it", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, { days: { kind: "daily" } });
+  await tickAt(t, s, "2027-01-15T08:00");
+  const closesAt = async () => (await days(t, s))[0]!.closesAt;
+  expect(await closesAt()).toBe(dubai("2027-01-16T08:00"));
+
+  vi.setSystemTime(dubai("2027-01-15T12:00"));
+  expect(await update(t, s, { messages: { ...MESSAGES, dayAt: 600 } })).toEqual(
+    { ok: true },
+  );
+  expect(await closesAt()).toBe(dubai("2027-01-16T10:00"));
+
+  // the old 08:30 tick doesn't close it
+  await tickAt(t, s, "2027-01-16T08:30");
+  expect((await days(t, s))[0]!.closedAt).toBeNull();
+  await tickAt(t, s, "2027-01-16T10:00");
+  expect((await days(t, s)).map((d) => [d.date, d.closedAt !== null])).toEqual([
+    ["2027-01-15", true],
+    ["2027-01-16", false],
+  ]);
+
+  // a time zone change moves it too, and a closed day stays as it was
+  vi.setSystemTime(dubai("2027-01-16T12:00"));
+  expect(await update(t, s, { timeZone: "Asia/Riyadh" })).toEqual({ ok: true });
+  const all = await days(t, s);
+  expect(all[0]!.closesAt).toBe(dubai("2027-01-16T10:00"));
+  expect(all[1]!.closesAt).toBe(Date.parse("2027-01-17T10:00:00+03:00"));
+});
+
 test("an archived khatma is read-only for its organizer", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t, { days: { kind: "daily" } });
@@ -395,7 +471,10 @@ test("an archived khatma is read-only for its organizer", async () => {
           toJuz: 6,
         }),
     ],
-    ["freeJuz", () => t.mutation(api.rota.freeJuz, { ...base, juz: 2 })],
+    [
+      "freeJuz",
+      () => t.mutation(api.rota.freeJuz, { ...base, participantId, juz: 2 }),
+    ],
     [
       "removeParticipant",
       () => t.mutation(api.rota.removeParticipant, { ...base, participantId }),

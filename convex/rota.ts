@@ -34,7 +34,7 @@ import type { SessionContext } from "./lib/session";
 import { sessionMutation, sessionQuery } from "./lib/session";
 import { getSetting, quietHours } from "./lib/settings";
 import { cleanDisplayName, cleanKhatmaName, normalizePhone } from "./lib/text";
-import { localDate, safeTimeZone } from "./lib/wakingTime";
+import { instantAt, localDate, safeTimeZone } from "./lib/wakingTime";
 import { completeIfDone } from "./rotaDays";
 
 const DAY_MS = 86_400_000;
@@ -520,7 +520,11 @@ export const moveJuz = sessionMutation({
 });
 
 export const freeJuz = sessionMutation({
-  args: { inviteCode: v.string(), juz: v.number() },
+  args: {
+    inviteCode: v.string(),
+    participantId: v.id("rotaParticipants"),
+    juz: v.number(),
+  },
   handler: async (
     ctx,
     args,
@@ -531,7 +535,10 @@ export const freeJuz = sessionMutation({
     const row = (await slotRowsByJuz(ctx, khatma._id, target.number)).get(
       args.juz,
     );
-    if (!row) return { error: "not_found" };
+    // The screen may be a day behind: only free the slot the organizer saw.
+    if (!row || row.participantId !== args.participantId) {
+      return { error: "not_found" };
+    }
     await ctx.db.delete(row._id);
     return { ok: true };
   },
@@ -605,11 +612,7 @@ async function currentDay(
   khatma: Doc<"khatmas">,
   timeZone: string,
 ): Promise<Doc<"rotaDays"> | null> {
-  const last = await ctx.db
-    .query("rotaDays")
-    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma._id))
-    .order("desc")
-    .first();
+  const last = await lastRotaDay(ctx, khatma._id);
   if (!last) return null;
   const isToday = last.date === localDate(Date.now(), timeZone);
   return last.closedAt === null || isToday ? last : null;
@@ -896,11 +899,27 @@ export const update = sessionMutation({
     ) {
       return { error: "invalid_dates" };
     }
-    // A new end date behind today or the last started day would archive the khatma for good.
-    if (args.endDate !== undefined && args.endDate !== null) {
+    // An end date behind today or the last started day would archive the
+    // khatma for good, and so would one that no reading date reaches. Days and
+    // the time zone move both, so they are checked together with the end date.
+    if (
+      endDate !== null &&
+      (args.days !== undefined ||
+        args.timeZone !== undefined ||
+        args.endDate !== undefined)
+    ) {
       const last = await lastRotaDay(ctx, khatma._id);
-      if (args.endDate < today || (last && args.endDate < last.date)) {
+      if (endDate < today || (last && endDate < last.date)) {
         return { error: "invalid_dates" };
+      }
+      // From the first open date, a reading date must remain on or before the
+      // end date. (None is left only when the end date is the last started day.)
+      const from = earliestOpenDate({ ...rota, firstDate }, last, today);
+      if (from <= endDate) {
+        const [next] = nextReadingDates(days, firstDate, from, 1, new Set());
+        if (next === undefined || next > endDate) {
+          return { error: "invalid_dates" };
+        }
       }
     }
     const passed = await firstDatePassed(ctx, khatma, rota, today);
@@ -933,6 +952,20 @@ export const update = sessionMutation({
         messages: args.messages ?? rota.messages,
       },
     });
+
+    // The open day closes at the next day's start time, which may just have moved.
+    if (args.messages !== undefined || args.timeZone !== undefined) {
+      const last = await lastRotaDay(ctx, khatma._id);
+      if (last && last.closedAt === null) {
+        await ctx.db.patch(last._id, {
+          closesAt: instantAt(
+            addDays(last.date, 1),
+            (args.messages ?? rota.messages).dayAt,
+            timeZone,
+          ),
+        });
+      }
+    }
     return { ok: true };
   },
 });

@@ -763,8 +763,8 @@ describe("People", () => {
       screen.getByRole("button", { name: new RegExp(t.rota.stopReading) }),
     );
     expect(m.fns.freeJuz.mock.calls).toEqual([
-      [{ ...args, juz: 1 }],
-      [{ ...args, juz: 5 }],
+      [{ ...args, participantId: "p1", juz: 1 }],
+      [{ ...args, participantId: "p1", juz: 5 }],
     ]);
     expect(m.fns.removeParticipant).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
