@@ -4,6 +4,7 @@ import { api, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
 import type { ReadingDays } from "./lib/rota";
+import { ensureJoinCode } from "./rota";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -143,6 +144,72 @@ test("creates a rota khatma with the organizer on slot 1", async () => {
       [1, participants[0]?._id],
     ]);
   });
+});
+
+test("stores a 6-character join code, different for each khatma", async () => {
+  const t = convexTest(schema, modules);
+  const who = await organizer(t);
+  const first = await create(t, who);
+  const second = await create(t, who);
+  const codes = await t.run(async (ctx) => {
+    const found = [];
+    for (const { inviteCode } of [first, second]) {
+      const khatma = await ctx.db
+        .query("khatmas")
+        .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+        .unique();
+      found.push(khatma?.joinCode);
+    }
+    return found;
+  });
+  for (const joinCode of codes) {
+    expect(joinCode).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+  }
+  expect(codes[0]).not.toBe(codes[1]);
+});
+
+test("insertRota returns null when the join code is taken", async () => {
+  const t = convexTest(schema, modules);
+  const who = await organizer(t);
+  const { inviteCode } = await create(t, who);
+  const joinCode = await t.run(async (ctx) => {
+    const khatma = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+      .unique();
+    return khatma!.joinCode!;
+  });
+  const created = await t.mutation(internal.rota.insertRota, {
+    personId: who.personId,
+    name: "ختمة أخرى",
+    days: fridays,
+    firstDate: "2027-01-15",
+    endDate: null,
+    inviteCode: "another-invite-code",
+    joinCode,
+    shareToken: "share",
+  });
+  expect(created).toBeNull();
+});
+
+test("ensureJoinCode gives a khatma without one a code, once", async () => {
+  const t = convexTest(schema, modules);
+  const who = await organizer(t);
+  const { inviteCode } = await create(t, who);
+  const result = await t.run(async (ctx) => {
+    const khatma = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+      .unique();
+    await ctx.db.patch(khatma!._id, { joinCode: undefined });
+    const bare = (await ctx.db.get(khatma!._id))!;
+    const code1 = await ensureJoinCode(ctx, bare);
+    const code2 = await ensureJoinCode(ctx, (await ctx.db.get(bare._id))!);
+    return { code1, code2, stored: (await ctx.db.get(bare._id))!.joinCode };
+  });
+  expect(result.code1).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+  expect(result.code2).toBe(result.code1);
+  expect(result.stored).toBe(result.code1);
 });
 
 test("refuses someone who was not allowed to create one", async () => {

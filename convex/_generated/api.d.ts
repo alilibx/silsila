@@ -41,6 +41,7 @@ import type * as lib_noteText from "../lib/noteText.js";
 import type * as lib_pace from "../lib/pace.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_rota from "../lib/rota.js";
+import type * as lib_rotaJoin from "../lib/rotaJoin.js";
 import type * as lib_rotaPlace from "../lib/rotaPlace.js";
 import type * as lib_schedule from "../lib/schedule.js";
 import type * as lib_session from "../lib/session.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   "lib/pace": typeof lib_pace;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/rota": typeof lib_rota;
+  "lib/rotaJoin": typeof lib_rotaJoin;
   "lib/rotaPlace": typeof lib_rotaPlace;
   "lib/schedule": typeof lib_schedule;
   "lib/session": typeof lib_session;

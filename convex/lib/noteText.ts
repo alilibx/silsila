@@ -1,3 +1,4 @@
+import { counted, type CountForms } from "./arabicCount";
 import { toArabicDigits } from "./digits";
 
 /**
@@ -16,6 +17,10 @@ export const NOTE_KINDS = [
   "organizerMoved",
   "rotaUnread",
   "rotaSummary",
+  "rotaJoinRequest",
+  "rotaSilent",
+  "rotaSilenced",
+  "rotaStopped",
 ] as const;
 
 export type NoteKind = (typeof NOTE_KINDS)[number];
@@ -25,6 +30,8 @@ export type NoteTextInput = {
   juz: number[];
   count: number | null;
   until: number | null;
+  /** A rota participant's name, for the organizer notes about them. */
+  name?: string | null;
 };
 
 const DAY_MS = 86_400_000;
@@ -40,6 +47,8 @@ const dayMonthFormat = new Intl.DateTimeFormat("ar", {
   day: "numeric",
   month: "long",
 });
+
+const DAYS: CountForms = { few: "أيام", many: "يوماً", other: "يوم" };
 
 /** `١٢`, `١٢ و١٥`, `٣، ١٢ و١٥`. */
 export function juzList(juz: readonly number[]): string {
@@ -102,5 +111,13 @@ export function noteText(n: NoteTextInput, now: number = Date.now()): string {
         : `لم تُسجَّل بعد قراءة الأجزاء ${juzList(n.juz)} في ختمة اليوم.`;
     case "rotaSummary":
       return `ختمة اليوم: ${toArabicDigits(n.count ?? 0)} من ٣٠ جزءاً تمّت.`;
+    case "rotaJoinRequest":
+      return `طلب انضمام من ${n.name ?? ""}.`;
+    case "rotaSilent":
+      return `لم يردّ ${n.name ?? ""} منذ ${counted(n.count ?? 0, DAYS)}.`;
+    case "rotaSilenced":
+      return `أوقفنا رسائل الختمة إلى ${n.name ?? ""} لأنه لم يردّ منذ مدة.`;
+    case "rotaStopped":
+      return `أوقف ${n.name ?? ""} رسائل الختمة.`;
   }
 }

@@ -11,6 +11,7 @@ import { organizerOf, requireOrganizer } from "./organizer";
 import { randomToken } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
 import { checkRateLimit } from "./lib/rateLimit";
+import { randomJoinCode } from "./lib/rotaJoin";
 import {
   addDays,
   isReadingDate,
@@ -103,6 +104,7 @@ export const insertRota = internalMutation({
     firstDate: v.string(),
     endDate: v.union(v.string(), v.null()),
     inviteCode: v.string(),
+    joinCode: v.string(),
     shareToken: v.string(),
   },
   handler: async (ctx, args): Promise<{ inviteCode: string } | null> => {
@@ -139,6 +141,11 @@ export const insertRota = internalMutation({
       .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
       .first();
     if (taken) return null;
+    const joinTaken = await ctx.db
+      .query("khatmas")
+      .withIndex("by_joinCode", (q) => q.eq("joinCode", args.joinCode))
+      .first();
+    if (joinTaken) return null;
 
     const allowed = await checkRateLimit(
       ctx,
@@ -155,6 +162,7 @@ export const insertRota = internalMutation({
       grace: DEFAULT_GRACE.none,
       creatorPersonId: person._id,
       inviteCode: args.inviteCode,
+      joinCode: args.joinCode,
       completedRounds: 0,
       createdAt: now,
       kind: "rota",
@@ -217,6 +225,7 @@ export const create = action({
         firstDate: args.firstDate,
         endDate: args.endDate,
         inviteCode: randomToken(9),
+        joinCode: randomJoinCode(),
         shareToken: randomToken(8),
       });
       if (created) return created;
@@ -224,6 +233,29 @@ export const create = action({
     throw new Error("could not allocate an invite code");
   },
 });
+
+/**
+ * The rota khatma's join code, drawing and storing one when it has none (a
+ * khatma created before join codes). For mutations: `by_joinCode` is checked
+ * inside the transaction, so a drawn code is never taken.
+ */
+export async function ensureJoinCode(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+): Promise<string> {
+  if (khatma.joinCode !== undefined) return khatma.joinCode;
+  for (let attempt = 0; attempt < INVITE_CODE_ATTEMPTS * 3; attempt++) {
+    const joinCode = randomJoinCode();
+    const taken = await ctx.db
+      .query("khatmas")
+      .withIndex("by_joinCode", (q) => q.eq("joinCode", joinCode))
+      .first();
+    if (taken) continue;
+    await ctx.db.patch(khatma._id, { joinCode });
+    return joinCode;
+  }
+  throw new Error("could not allocate a join code");
+}
 
 // ---------------------------------------------------------------------------
 // People

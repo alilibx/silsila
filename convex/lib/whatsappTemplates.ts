@@ -44,6 +44,11 @@ export const NOTE_TEMPLATES: Record<NoteKind, string | null> = {
   // The organizer's rota day notes: in-app and push only.
   rotaUnread: null,
   rotaSummary: null,
+  // Notes about a participant's own messages: in-app and push only.
+  rotaJoinRequest: null,
+  rotaSilent: null,
+  rotaSilenced: null,
+  rotaStopped: null,
 };
 /** "Open for help" with two or more ajza': Arabic agreement needs its own body. */
 export const OPEN_FOR_HELP_MANY = "wirdak_open_for_help_many_v3";
@@ -115,6 +120,10 @@ function noteParams(note: NoteTextInput, now: number): string[] {
     case "organizerMoved":
     case "rotaUnread":
     case "rotaSummary":
+    case "rotaJoinRequest":
+    case "rotaSilent":
+    case "rotaSilenced":
+    case "rotaStopped":
       return [];
   }
 }

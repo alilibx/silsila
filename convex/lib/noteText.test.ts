@@ -60,3 +60,22 @@ test("behind names the weekday within 6 days, the date beyond, and nothing once 
   expect(text(NOW - DAY)).toBe("الختمة تحتاج جزأين. هل تأخذ جزءاً؟");
   expect(text(NOW)).toBe("الختمة تحتاج جزأين. هل تأخذ جزءاً؟");
 });
+
+test("the rota participant notes name them and count days in Arabic digits", () => {
+  const input = { ...base, name: "أحمد" };
+  expect(noteText({ ...input, kind: "rotaJoinRequest" })).toBe(
+    "طلب انضمام من أحمد.",
+  );
+  expect(noteText({ ...input, kind: "rotaSilent", count: 3 })).toBe(
+    "لم يردّ أحمد منذ ٣ أيام.",
+  );
+  expect(noteText({ ...input, kind: "rotaSilent", count: 12 })).toBe(
+    "لم يردّ أحمد منذ ١٢ يوماً.",
+  );
+  expect(noteText({ ...input, kind: "rotaSilenced" })).toBe(
+    "أوقفنا رسائل الختمة إلى أحمد لأنه لم يردّ منذ مدة.",
+  );
+  expect(noteText({ ...input, kind: "rotaStopped" })).toBe(
+    "أوقف أحمد رسائل الختمة.",
+  );
+});

@@ -230,6 +230,63 @@ test("rota tables accept their documented shapes", async () => {
       pushedAt: null,
       clearedAt: null,
     });
+    await ctx.db.patch(khatmaId, { joinCode: "ABC234" });
+    await ctx.db.patch(participantId, {
+      joinedAt: 1,
+      stoppedAt: null,
+      silencedAt: null,
+      lastReplyAt: 2,
+      silentDays: 0,
+    });
+    await ctx.db.patch(dayId, { reminderSentAt: 3, celebratedAt: null });
+    const readRow = await ctx.db
+      .query("rotaReads")
+      .withIndex("by_day_juz", (q) => q.eq("dayId", dayId))
+      .first();
+    await ctx.db.patch(readRow!._id, { notYetAt: 4 });
+    await ctx.db.insert("rotaJoinRequests", {
+      khatmaId,
+      phone: "+966500000005",
+      profileName: null,
+      createdAt: 0,
+      resolvedAt: null,
+      outcome: null,
+    });
+    await ctx.db.insert("waContacts", {
+      phone: "+966500000005",
+      lastInboundAt: 0,
+    });
+    await ctx.db.insert("rotaOutbox", {
+      khatmaId,
+      participantId,
+      dayId,
+      kind: "juz",
+      juz: [1],
+      number: null,
+      createdAt: 0,
+      sentAt: null,
+      skippedAt: null,
+    });
+    await ctx.db.insert("notes", {
+      personId,
+      khatmaId,
+      kind: "rotaSilent",
+      name: "x",
+      juz: [],
+      count: 3,
+      until: null,
+      assignmentId: null,
+      roundNumber: null,
+      createdAt: 0,
+      pushedAt: null,
+      clearedAt: null,
+    });
+    expect(
+      await ctx.db
+        .query("khatmas")
+        .withIndex("by_joinCode", (q) => q.eq("joinCode", "ABC234"))
+        .first(),
+    ).toMatchObject({ _id: khatmaId });
     const kinds = await ctx.db
       .query("khatmas")
       .withIndex("by_kind", (q) => q.eq("kind", "rota"))
