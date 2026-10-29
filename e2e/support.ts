@@ -20,10 +20,13 @@ export function randomPhone(): string {
 }
 
 /** Runs an internal Convex function on the local backend (`bun run convex run`). */
-async function convexRun(fn: string, args: object): Promise<void> {
-  await run("bun", ["run", "convex", "run", fn, JSON.stringify(args)], {
-    cwd: new URL("..", import.meta.url).pathname,
-  });
+async function convexRun(fn: string, args: object): Promise<string> {
+  const { stdout } = await run(
+    "bun",
+    ["run", "convex", "run", fn, JSON.stringify(args)],
+    { cwd: new URL("..", import.meta.url).pathname },
+  );
+  return stdout;
 }
 
 /**
@@ -33,8 +36,27 @@ async function convexRun(fn: string, args: object): Promise<void> {
 export async function simulateIncoming(
   from: string,
   text: string,
+  payload?: string,
 ): Promise<void> {
-  await convexRun("dev:simulateIncoming", { from, text });
+  await convexRun("dev:simulateIncoming", { from, text, payload });
+}
+
+/**
+ * The payload of a button on the rota message `phone` (digits only) got for the khatma's open day,
+ * for `simulateIncoming` to send as that tap (dev-only helper).
+ */
+export async function rotaPayload(
+  inviteCode: string,
+  phone: string,
+  action: "done" | "notYet" | "dua",
+): Promise<string> {
+  const stdout = await convexRun("dev:rotaPayload", {
+    inviteCode,
+    phone: `+${phone}`,
+    action,
+  });
+  // The CLI prints the return value as JSON on its last line.
+  return JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as string;
 }
 
 /** Ends the grace of the current hold of `juz` now, instead of waiting hours (dev-only helper). */
