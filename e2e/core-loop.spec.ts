@@ -166,8 +166,20 @@ test("core loop: create, take, finish, invite, join, switch", async ({
   ).toBeVisible();
 
   // At a very large phone text size nothing runs off the screen: the page never scrolls
-  // sideways, and no tab, bar label or the switch button is cut off.
+  // sideways, and no tab, bar label or the switch button is cut off. Measured in the real
+  // font: a system fallback has other widths, so first make sure Readex Pro is in use.
   await page.addStyleTag({ content: "html { font-size: 225% !important; }" });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        await document.fonts.ready;
+        return [...document.fonts].some(
+          (face) =>
+            face.family.includes("Readex Pro") && face.status === "loaded",
+        );
+      }),
+    )
+    .toBe(true);
   const overflow = await page.evaluate(() => {
     const root = document.documentElement;
     const clipped = [

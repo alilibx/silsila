@@ -11,6 +11,9 @@
       "devDependencies": {
         "@edge-runtime/vm": "^5.0.0",
         "@eslint/js": "^10.0.1",
+        "@fontsource/amiri-quran": "^5.3.0",
+        "@fontsource/aref-ruqaa": "^5.3.0",
+        "@fontsource/readex-pro": "^5.3.0",
         "@playwright/test": "^1.64.1",
         "@types/node": "^22.20.5",
         "@types/web-push": "^3.6.4",
@@ -183,6 +186,12 @@
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.7.3", "", { "dependencies": { "@eslint/core": "1.2.1", "levn": "0.4.1" } }, "sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q=="],
 
     "@exodus/bytes": ["@exodus/bytes@1.16.0", "", { "peerDependencies": { "@noble/hashes": "^1.8.0 || ^2.0.0" }, "optionalPeers": ["@noble/hashes"] }, "sha512-IcpW84uEn3N7ETtNZMlxKhfl6Pec8rUNGOTBtWbK1FKhJxIFAptZyVrvVRVBimAJxJCgc3PxepxkdWWG4DVzfA=="],
+
+    "@fontsource/amiri-quran": ["@fontsource/amiri-quran@5.3.0", "", {}, "sha512-z/Y3JCqGWnWLpfJGBWPf7C42IxHjxxuwgcCHLmsU/hYd65GHXkZ/XTVpEGtWrEx9VlzdzMMRHDNTJvs8OwAeEw=="],
+
+    "@fontsource/aref-ruqaa": ["@fontsource/aref-ruqaa@5.3.0", "", {}, "sha512-GC+ckm4v2zndUWuR2JiMdO333mNZqrzxHN/9rpBJhLwDwcwYXzr+GzCRzgK6afGMhYnV0pwrqeGeLm4ZNmWhWQ=="],
+
+    "@fontsource/readex-pro": ["@fontsource/readex-pro@5.3.0", "", {}, "sha512-llvAZL81cEA7kgp9AnhgMRUVsZqb2i5njgLN0uQCNa0+jI8jjscZPOVyiqnUUGvzwmCFhsHw2OBQeF4MyygCXA=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 
