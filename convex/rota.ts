@@ -773,7 +773,12 @@ export const acceptJoinRequest = sessionMutation({
         .collect()
     ).some((p) => p.stoppedAt != null && p.stoppedAt >= request.createdAt);
     if (stoppedSince) {
-      await ctx.db.patch(request._id, { resolvedAt: now, outcome: "declined" });
+      await ctx.db.patch(request._id, {
+        resolvedAt: now,
+        outcome: "declined",
+        // The phone's own «إيقاف» ended it, so it doesn't hold off a later join.
+        declinedBy: "member",
+      });
       return { error: "not_found" };
     }
     const existing = (

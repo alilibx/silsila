@@ -120,7 +120,7 @@ describe("privacy policy: rotating khatma disclosures", () => {
   it("says who sees phone numbers, with the rotating khatma exception", () => {
     const ar = flat("من يرى بياناتك");
     for (const words of [
-      "والاستثناء الختمة بالتناوب",
+      "إلا في الختمة بالتناوب",
       "الأرقام التي أدخلها بنفسه",
       "الرقم كاملاً لكل من قبله من طلب انضمام",
       "ويرى مشرفو وِردك هذه الأرقام حين يساعدونك",
