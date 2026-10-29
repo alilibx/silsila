@@ -73,6 +73,10 @@ async function setup(
     firstDate: over.firstDate ?? "2027-01-15",
     endDate: over.endDate ?? null,
   });
+  await t.mutation(api.rota.finishSetup, {
+    sessionToken: who.token,
+    inviteCode,
+  });
   const khatmaId = await t.run(async (ctx) => {
     const k = await ctx.db
       .query("khatmas")
@@ -171,6 +175,7 @@ test("settings shows the organizer everything, and nothing to anyone else", asyn
       "2027-03-05",
     ],
     quiet: { startHour: 22, endHour: 7 },
+    archived: false,
   });
 
   const stranger = await person(t);
@@ -316,6 +321,114 @@ test("update refuses bad days, dates, times and zones", async () => {
     timeZone: "Asia/Dubai",
     messages: MESSAGES,
   });
+});
+
+test("an end date can't be set before today or before the last started day", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, { days: { kind: "daily" } });
+  await tickAt(t, s, "2027-01-15T08:00");
+  await tickAt(t, s, "2027-01-17T08:00");
+
+  vi.setSystemTime(dubai("2027-01-17T12:00"));
+  // after the first date, but already behind us: the khatma would archive itself
+  expect(await update(t, s, { endDate: "2027-01-16" })).toEqual({
+    error: "invalid_dates",
+  });
+  expect(await update(t, s, { endDate: "2027-01-17" })).toEqual({ ok: true });
+
+  // 09:00 in Dubai on the 17th is still the 16th in Honolulu, behind the day of the 17th
+  vi.setSystemTime(dubai("2027-01-17T09:00"));
+  await update(t, s, { endDate: null });
+  await update(t, s, { timeZone: "Pacific/Honolulu" });
+  expect(await update(t, s, { endDate: "2027-01-16" })).toEqual({
+    error: "invalid_dates",
+  });
+  expect((await settings(t, s))?.endDate).toBeNull();
+});
+
+test("an archived khatma is read-only for its organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, { days: { kind: "daily" } });
+  await tickAt(t, s, "2027-01-15T11:00");
+  const added = await t.mutation(api.rota.addParticipant, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    name: "قارئ",
+    phone: "+971506660099",
+  });
+  if (!("participantId" in added)) throw new Error(JSON.stringify(added));
+  const participantId = added.participantId;
+  const readId = (await t.query(api.rota.today, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+  }))!.tiles[0]!.readId;
+  await t.run(async (ctx) => {
+    const k = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...k!.rota!, archivedAt: NOW },
+    });
+  });
+
+  expect((await settings(t, s))?.archived).toBe(true);
+  const base = { sessionToken: s.token, inviteCode: s.inviteCode };
+  const calls: [string, () => Promise<unknown>][] = [
+    [
+      "addParticipant",
+      () =>
+        t.mutation(api.rota.addParticipant, {
+          ...base,
+          name: "آخر",
+          phone: "+971506660098",
+        }),
+    ],
+    [
+      "giveJuz",
+      () => t.mutation(api.rota.giveJuz, { ...base, participantId, juz: 5 }),
+    ],
+    [
+      "moveJuz",
+      () =>
+        t.mutation(api.rota.moveJuz, {
+          ...base,
+          participantId,
+          fromJuz: 2,
+          toJuz: 6,
+        }),
+    ],
+    ["freeJuz", () => t.mutation(api.rota.freeJuz, { ...base, juz: 2 })],
+    [
+      "removeParticipant",
+      () => t.mutation(api.rota.removeParticipant, { ...base, participantId }),
+    ],
+    [
+      "reassign",
+      () => t.mutation(api.rota.reassign, { ...base, readId, participantId }),
+    ],
+    ["markDone", () => t.mutation(api.rota.markDone, { ...base, readId })],
+    [
+      "markNotDone",
+      () => t.mutation(api.rota.markNotDone, { ...base, readId }),
+    ],
+    ["update", () => t.mutation(api.rota.update, { ...base, name: "جديد" })],
+    [
+      "setPaused",
+      () => t.mutation(api.rota.setPaused, { ...base, paused: true }),
+    ],
+    [
+      "addPauseDate",
+      () => t.mutation(api.rota.addPauseDate, { ...base, date: "2027-01-20" }),
+    ],
+    [
+      "removePauseDate",
+      () =>
+        t.mutation(api.rota.removePauseDate, { ...base, date: "2027-01-20" }),
+    ],
+    ["finishSetup", () => t.mutation(api.rota.finishSetup, base)],
+  ];
+  for (const [name, call] of calls) {
+    await expect(call(), name).rejects.toThrow(/archived/);
+  }
+  expect(await settings(t, s)).toMatchObject({ name: "ختمة", pausedAt: null });
 });
 
 test("message times are checked against the live quiet hours", async () => {

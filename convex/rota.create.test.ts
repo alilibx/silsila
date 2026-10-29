@@ -1,6 +1,6 @@
 import { convexTest, type TestConvexForDataModel } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
 import type { ReadingDays } from "./lib/rota";
@@ -105,6 +105,7 @@ test("creates a rota khatma with the organizer on slot 1", async () => {
       pausedAt: null,
       pauseDates: [],
       archivedAt: null,
+      setupDoneAt: null,
       messages: {
         dayAt: 480,
         reminder: { at: 960, on: true },
@@ -211,23 +212,102 @@ test("a daily khatma may start today and end later", async () => {
   });
 });
 
-test("a khatma made after its first day's start time starts that day at once", async () => {
+async function daysOf(t: T, inviteCode: string) {
+  return await t.run(async (ctx) => {
+    const khatma = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+      .unique();
+    return await ctx.db
+      .query("rotaDays")
+      .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma!._id))
+      .collect();
+  });
+}
+
+function finishSetup(t: T, who: { token: string }, inviteCode: string) {
+  return t.mutation(api.rota.finishSetup, {
+    sessionToken: who.token,
+    inviteCode,
+  });
+}
+
+test("a khatma set up after its first day's start time starts that day once setup is done, with the people added", async () => {
   const t = convexTest(schema, modules);
   const who = await organizer(t);
   // 15:00 in Dubai, after the 08:00 start time.
   vi.setSystemTime(Date.UTC(2027, 0, 15, 11, 0, 0));
   const { inviteCode } = await create(t, who);
+  for (const phone of ["+971506660001", "+971506660002"]) {
+    await t.mutation(api.rota.addParticipant, {
+      sessionToken: who.token,
+      inviteCode,
+      name: "قارئ",
+      phone,
+    });
+  }
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await daysOf(t, inviteCode)).toEqual([]);
+
+  expect(await finishSetup(t, who, inviteCode)).toEqual({ ok: true });
   await t.finishAllScheduledFunctions(vi.runAllTimers);
 
+  const days = await daysOf(t, inviteCode);
+  expect(days.map((d) => [d.n, d.date])).toEqual([[1, "2027-01-15"]]);
   await t.run(async (ctx) => {
+    const reads = await ctx.db
+      .query("rotaReads")
+      .withIndex("by_day_juz", (q) => q.eq("dayId", days[0]!._id))
+      .collect();
+    const held = reads.filter((r) => r.holderId !== null).map((r) => r.juz);
+    expect(held).toEqual([1, 2, 3]);
+  });
+});
+
+test("no day starts while the khatma is still being set up", async () => {
+  const t = convexTest(schema, modules);
+  const who = await organizer(t);
+  const { inviteCode } = await create(t, who);
+  const khatmaId = await t.run(async (ctx) => {
     const khatma = await ctx.db
       .query("khatmas")
       .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
       .unique();
-    const days = await ctx.db
-      .query("rotaDays")
-      .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma!._id))
-      .collect();
-    expect(days.map((d) => [d.n, d.date])).toEqual([[1, "2027-01-15"]]);
+    return khatma!._id;
   });
+  // 15:00 on the first date, and the sweep ticks it.
+  vi.setSystemTime(Date.UTC(2027, 0, 15, 11, 0, 0));
+  await t.mutation(internal.rotaDays.tick, { khatmaId });
+  await t.mutation(internal.rotaDays.sweep, {});
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await daysOf(t, inviteCode)).toEqual([]);
+
+  await finishSetup(t, who, inviteCode);
+  await t.mutation(internal.rotaDays.tick, { khatmaId });
+  expect((await daysOf(t, inviteCode)).map((d) => d.n)).toEqual([1]);
+});
+
+test("finishing setup twice keeps the first time, and only the organizer can", async () => {
+  const t = convexTest(schema, modules);
+  const who = await organizer(t);
+  const { inviteCode } = await create(t, who);
+  const doneAt = async () =>
+    await t.run(async (ctx) => {
+      const khatma = await ctx.db
+        .query("khatmas")
+        .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+        .unique();
+      return khatma!.rota!.setupDoneAt;
+    });
+  await finishSetup(t, who, inviteCode);
+  const first = await doneAt();
+  // convex-test's clock may tick a millisecond or two inside a call.
+  expect(first).toBeGreaterThanOrEqual(NOW);
+  expect(first).toBeLessThan(NOW + 1000);
+  vi.setSystemTime(NOW + 60_000);
+  expect(await finishSetup(t, who, inviteCode)).toEqual({ ok: true });
+  expect(await doneAt()).toBe(first);
+
+  const stranger = await organizer(t);
+  expect(await code(finishSetup(t, stranger, inviteCode))).toBe("forbidden");
 });

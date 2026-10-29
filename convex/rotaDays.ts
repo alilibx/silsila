@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
-import { notify } from "./notes";
+import { clearNotes, notify } from "./notes";
 import {
   addDays,
   cycleOf,
@@ -47,8 +47,9 @@ function lastDay(
 }
 
 /**
- * Whether a day should start now: today is a reading date after the last
- * started day (days only go forward, even if the time zone moved west).
+ * Whether a day should start now: setup is done, and today is a reading date
+ * after the last started day (days only go forward, even if the time zone
+ * moved west). A khatma from before setup was tracked counts as set up.
  */
 async function shouldStart(
   ctx: MutationCtx,
@@ -58,6 +59,7 @@ async function shouldStart(
   today: string,
   now: number,
 ): Promise<boolean> {
+  if (rota.setupDoneAt === null) return false;
   if (rota.pausedAt !== null) return false;
   if (last && today <= last.date) return false;
   if (rota.endDate !== null && today > rota.endDate) return false;
@@ -117,6 +119,23 @@ async function startDay(
   return day;
 }
 
+/**
+ * A new unread list or summary replaces the organizer's older ones in the
+ * khatma, so only the latest stays on their screen.
+ */
+async function clearOlderOrganizerNotes(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+): Promise<void> {
+  for (const kind of ["rotaUnread", "rotaSummary"] as const) {
+    await clearNotes(ctx, {
+      khatmaId: khatma._id,
+      personId: khatma.creatorPersonId,
+      kind,
+    });
+  }
+}
+
 /** The organizer's unread list and summary, once each, on the day dated today. */
 async function sendOrganizerNotes(
   ctx: MutationCtx,
@@ -143,6 +162,7 @@ async function sendOrganizerNotes(
   if (wantsUnread) {
     const juz = reads.filter((r) => r.doneAt === null).map((r) => r.juz);
     if (juz.length > 0) {
+      await clearOlderOrganizerNotes(ctx, khatma);
       await notify(ctx, {
         personId: khatma.creatorPersonId,
         khatmaId: khatma._id,
@@ -154,6 +174,7 @@ async function sendOrganizerNotes(
   }
   if (wantsSummary) {
     const done = reads.filter((r) => r.doneAt !== null);
+    await clearOlderOrganizerNotes(ctx, khatma);
     await notify(ctx, {
       personId: khatma.creatorPersonId,
       khatmaId: khatma._id,

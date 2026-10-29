@@ -38,6 +38,7 @@ type Over = Partial<{
   messages: RotaMessages;
   pausedAt: number | null;
   pauseDates: string[];
+  setupDoneAt: number | null;
 }>;
 
 /** A rota khatma (default: daily, first date tomorrow) with its organizer on slot 1. */
@@ -69,6 +70,10 @@ async function setup(t: T, over: Over = {}) {
         pausedAt: over.pausedAt ?? null,
         pauseDates: over.pauseDates ?? [],
         archivedAt: null,
+        // Left out unless given: khatmas made before setup was tracked count as set up.
+        ...(over.setupDoneAt !== undefined
+          ? { setupDoneAt: over.setupDoneAt }
+          : {}),
       },
     });
     await ctx.db.insert("members", {
@@ -359,6 +364,42 @@ test("the organizer gets one unread list at the set time", async () => {
   expect(sent[0]).toMatchObject({ kind: "rotaUnread" });
   expect(sent[0]?.juz).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
   expect((await days(t, s))[0]?.unreadSentAt).toBe(dubai("2027-01-16T19:00"));
+});
+
+test("a khatma still being set up starts no day", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, { setupDoneAt: null });
+  await tickAt(t, s, "2027-01-16T08:00");
+  await tickAt(t, s, "2027-01-16T12:00");
+  expect(await days(t, s)).toHaveLength(0);
+});
+
+test("a new unread list or summary clears the organizer's older ones in the khatma", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, {
+    messages: { ...MESSAGES, summary: { at: 1260, on: true } },
+  });
+  await tickAt(t, s, "2027-01-16T08:00");
+  await tickAt(t, s, "2027-01-16T19:00");
+  const uncleared = async () =>
+    (await notes(t, s))
+      .filter((n) => n.clearedAt === null)
+      .map((n) => [n.kind, n.createdAt]);
+  expect(await uncleared()).toEqual([
+    ["rotaUnread", dubai("2027-01-16T19:00")],
+  ]);
+
+  await tickAt(t, s, "2027-01-16T21:00");
+  expect(await uncleared()).toEqual([
+    ["rotaSummary", dubai("2027-01-16T21:00")],
+  ]);
+
+  await tickAt(t, s, "2027-01-17T08:00");
+  await tickAt(t, s, "2027-01-17T19:00");
+  expect(await uncleared()).toEqual([
+    ["rotaUnread", dubai("2027-01-17T19:00")],
+  ]);
+  expect(await notes(t, s)).toHaveLength(3);
 });
 
 test("no unread list when it is off", async () => {

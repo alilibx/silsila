@@ -57,7 +57,7 @@ export const forceGraceEnd = internalMutation({
 /**
  * Dev-only: lets a verified person create rotating khatmas, as an admin would
  * (without the audit entry), so a test needn't sign in to the admin app:
- * `bun run convex run dev:allowRota '{"phone":"971501234567"}'`.
+ * `bun run convex run dev:allowRota '{"phone":"+971501234567"}'`.
  */
 export const allowRota = internalMutation({
   args: { phone: v.string() },

@@ -167,6 +167,8 @@ export const insertRota = internalMutation({
         pausedAt: null,
         pauseDates: [],
         archivedAt: null,
+        // No day starts until the organizer finishes adding people (`finishSetup`).
+        setupDoneAt: null,
       },
     });
     await ctx.db.insert("members", {
@@ -188,8 +190,6 @@ export const insertRota = internalMutation({
       removedAt: null,
     });
     await ctx.db.insert("rotaSlots", { khatmaId, slot: 1, participantId });
-    // A khatma made after its first day's start time starts that day now.
-    await ctx.scheduler.runAfter(0, internal.rotaDays.tick, { khatmaId });
     return { inviteCode: args.inviteCode };
   },
 });
@@ -228,16 +228,49 @@ export const create = action({
 // ---------------------------------------------------------------------------
 // People
 
-/** The organizer and their rota khatma, or `forbidden` (also for a pool khatma). */
+type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
+
+/**
+ * The organizer, their rota khatma and its settings, for every change the
+ * organizer makes: `forbidden` for anyone else (and for a pool khatma), and
+ * `archived` once the khatma is archived, which leaves it read-only.
+ */
 async function requireRotaOrganizer(
   ctx: MutationCtx & SessionContext,
   inviteCode: string,
-): Promise<{ person: Doc<"people">; khatma: Doc<"khatmas"> }> {
-  const found = await requireOrganizer(ctx, inviteCode);
-  if (found.khatma.kind !== "rota")
+): Promise<{
+  person: Doc<"people">;
+  khatma: Doc<"khatmas">;
+  rota: RotaConfig;
+}> {
+  const { person, khatma } = await requireOrganizer(ctx, inviteCode);
+  const rota = khatma.rota;
+  if (khatma.kind !== "rota" || !rota) {
     throw new ConvexError({ code: "forbidden" });
-  return found;
+  }
+  if (rota.archivedAt !== null) throw new ConvexError({ code: "archived" });
+  return { person, khatma, rota };
 }
+
+/**
+ * Ends setup: from now the khatma's days may start, and if today's start
+ * time has passed already, today's day starts at once. Safe to repeat.
+ */
+export const finishSetup = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<{ ok: true }> => {
+    const { khatma, rota } = await requireRotaOrganizer(ctx, args.inviteCode);
+    if (rota.setupDoneAt === null) {
+      await ctx.db.patch(khatma._id, {
+        rota: { ...rota, setupDoneAt: Date.now() },
+      });
+      await ctx.scheduler.runAfter(0, internal.rotaDays.tick, {
+        khatmaId: khatma._id,
+      });
+    }
+    return { ok: true };
+  },
+});
 
 /** An active participant of the khatma, or null. */
 async function activeParticipant(
@@ -548,6 +581,8 @@ type TodayView = {
   next: { number: number; date: string | null };
   paused: boolean;
   archived: boolean;
+  /** False until the organizer finishes setup; no day starts before. */
+  setupDone: boolean;
   tiles: {
     readId: Id<"rotaReads">;
     juz: number;
@@ -645,6 +680,7 @@ export const today = sessionQuery({
       next: { number: target.number, date: target.date },
       paused: rota.pausedAt !== null,
       archived: rota.archivedAt !== null,
+      setupDone: rota.setupDoneAt !== null,
       tiles,
       participants,
     };
@@ -753,6 +789,8 @@ type SettingsView = {
   /** The next reading dates that can still be paused or un-paused. */
   upcoming: string[];
   quiet: { startHour: number; endHour: number };
+  /** An archived khatma can no longer be changed. */
+  archived: boolean;
 };
 
 /** The first date has passed, or its day has started: it can't move any more. */
@@ -801,6 +839,7 @@ export const settings = sessionQuery({
         new Set(),
       ).filter((date) => rota.endDate === null || date <= rota.endDate),
       quiet: { startHour: quiet.startHour, endHour: quiet.endHour },
+      archived: rota.archivedAt !== null,
     };
   },
 });
@@ -830,9 +869,7 @@ export const update = sessionMutation({
           | "invalid_name";
       }
   > => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
-    const rota = khatma.rota;
-    if (!rota) throw new ConvexError({ code: "forbidden" });
+    const { khatma, rota } = await requireRotaOrganizer(ctx, args.inviteCode);
 
     // A rota khatma always has a name, as at creation.
     const name =
@@ -858,6 +895,13 @@ export const update = sessionMutation({
       (endDate !== null && (!isDate(endDate) || endDate < firstDate))
     ) {
       return { error: "invalid_dates" };
+    }
+    // A new end date behind today or the last started day would archive the khatma for good.
+    if (args.endDate !== undefined && args.endDate !== null) {
+      const last = await lastRotaDay(ctx, khatma._id);
+      if (args.endDate < today || (last && args.endDate < last.date)) {
+        return { error: "invalid_dates" };
+      }
     }
     const passed = await firstDatePassed(ctx, khatma, rota, today);
     if (passed && firstDate !== rota.firstDate) {
@@ -896,9 +940,7 @@ export const update = sessionMutation({
 export const setPaused = sessionMutation({
   args: { inviteCode: v.string(), paused: v.boolean() },
   handler: async (ctx, args): Promise<{ ok: true }> => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
-    const rota = khatma.rota;
-    if (!rota) throw new ConvexError({ code: "forbidden" });
+    const { khatma, rota } = await requireRotaOrganizer(ctx, args.inviteCode);
     const pausedAt = args.paused ? (rota.pausedAt ?? Date.now()) : null;
     await ctx.db.patch(khatma._id, { rota: { ...rota, pausedAt } });
     return { ok: true };
@@ -911,9 +953,7 @@ export const addPauseDate = sessionMutation({
     ctx,
     args,
   ): Promise<{ ok: true } | { error: "not_reading_date" | "past" }> => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
-    const rota = khatma.rota;
-    if (!rota) throw new ConvexError({ code: "forbidden" });
+    const { khatma, rota } = await requireRotaOrganizer(ctx, args.inviteCode);
     if (
       !isDate(args.date) ||
       !isReadingDate(rota.days, rota.firstDate, args.date) ||
@@ -945,9 +985,7 @@ export const removePauseDate = sessionMutation({
     ctx,
     args,
   ): Promise<{ ok: true } | { error: "not_reading_date" | "past" }> => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
-    const rota = khatma.rota;
-    if (!rota) throw new ConvexError({ code: "forbidden" });
+    const { khatma, rota } = await requireRotaOrganizer(ctx, args.inviteCode);
     if (!isDate(args.date)) return { error: "not_reading_date" };
     if (args.date < localDate(Date.now(), rota.timeZone)) {
       return { error: "past" };

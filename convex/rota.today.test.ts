@@ -48,8 +48,8 @@ async function person(t: T, name = "المنظم") {
   return { personId, token };
 }
 
-/** A weekly (Fridays) rota khatma whose first day, today, has started. */
-async function setup(t: T) {
+/** A weekly (Fridays) rota khatma, set up, whose first day is today. */
+async function setup(t: T, finished = true) {
   const who = await person(t);
   const { inviteCode } = await t.action(api.rota.create, {
     sessionToken: who.token,
@@ -58,6 +58,12 @@ async function setup(t: T) {
     firstDate: "2027-01-15",
     endDate: null,
   });
+  if (finished) {
+    await t.mutation(api.rota.finishSetup, {
+      sessionToken: who.token,
+      inviteCode,
+    });
+  }
   const khatmaId = await t.run(async (ctx) => {
     const k = await ctx.db
       .query("khatmas")
@@ -348,4 +354,20 @@ test("a read of another khatma is not_found for this khatma's organizer", async 
     expect(await act(t, a, name, args)).toEqual({ error: "not_found" });
   }
   expect((await tile(t, b, 8)).state).toBe("unread");
+});
+
+test("today says whether setup is done", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, false);
+  await startDay(t, s);
+  expect(await today(t, s)).toMatchObject({ setupDone: false, day: null });
+  await t.mutation(api.rota.finishSetup, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+  });
+  await startDay(t, s);
+  expect(await today(t, s)).toMatchObject({
+    setupDone: true,
+    day: { number: 1 },
+  });
 });

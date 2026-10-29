@@ -45,6 +45,11 @@ export const rotaConfigValidator = v.object({
   /** Reading dates skipped while paused. */
   pauseDates: v.array(v.string()),
   archivedAt: v.union(v.number(), v.null()),
+  /**
+   * When the organizer finished setting the khatma up; no day starts before
+   * then. Null while setting up; missing on khatmas made before this field.
+   */
+  setupDoneAt: v.optional(v.union(v.number(), v.null())),
 });
 
 export const ROTA_SIZE = 30;
