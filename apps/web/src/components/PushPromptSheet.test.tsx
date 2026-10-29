@@ -9,6 +9,9 @@ vi.mock("../lib/push", () => ({
   enablePush: (...args: unknown[]) => m.enable(...args),
 }));
 
+const ph = vi.hoisted(() => ({ capture: vi.fn() }));
+vi.mock("posthog-js", () => ({ default: { capture: ph.capture } }));
+
 const wa = vi.hoisted(() => ({
   me: { whatsappNotes: false } as { whatsappNotes: boolean } | null,
   set: vi.fn(),
@@ -28,6 +31,7 @@ beforeEach(() => {
   onClose.mockReset();
   wa.me = { whatsappNotes: false };
   wa.set.mockReset();
+  ph.capture.mockReset();
 });
 
 describe("PushPromptSheet", () => {
@@ -76,5 +80,26 @@ describe("PushPromptSheet", () => {
     expect(
       screen.queryByRole("button", { name: "أرسلها لي على واتساب" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("records the WhatsApp choice once", async () => {
+    wa.set.mockResolvedValue({ ok: true });
+    ui();
+    await userEvent.click(
+      screen.getByRole("button", { name: "أرسلها لي على واتساب" }),
+    );
+    expect(ph.capture).toHaveBeenCalledExactlyOnceWith(
+      "notification_prompt_choice",
+      { prompt: "push", choice: "whatsapp" },
+    );
+  });
+
+  it("records the sheet's own close as dismissed", async () => {
+    ui();
+    await userEvent.click(screen.getByRole("button", { name: "إغلاق" }));
+    expect(ph.capture).toHaveBeenCalledExactlyOnceWith(
+      "notification_prompt_choice",
+      { prompt: "push", choice: "dismissed" },
+    );
   });
 });

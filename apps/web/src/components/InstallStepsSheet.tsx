@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 import { t } from "../i18n/ar";
+import {
+  trackPromptChoice,
+  type NotificationChoice,
+} from "../lib/notificationPrompt";
 import { Button } from "./Button";
 import { Sheet } from "./Sheet";
 import { WhatsAppOffer } from "./WhatsAppOffer";
@@ -63,10 +67,21 @@ function Step({
  * The iPhone steps for putting Wirdak on the home screen. The sign-in hand-off doesn't depend on
  * this sheet: `useHandoffManifest` keeps the token-carrying manifest in place the whole time a
  * signed-in iPhone Safari tab is open, so adding straight from the Share menu works too.
+ * `fromPrompt`: shown as the once-only prompt after a first juz', so the choice is recorded.
  */
-export function InstallStepsSheet({ onClose }: { onClose: () => void }) {
+export function InstallStepsSheet({
+  onClose,
+  fromPrompt = false,
+}: {
+  onClose: () => void;
+  fromPrompt?: boolean;
+}) {
+  const choose = (choice: NotificationChoice) => {
+    if (fromPrompt) trackPromptChoice("install", choice);
+    onClose();
+  };
   return (
-    <Sheet title={t.install.title} onClose={onClose}>
+    <Sheet title={t.install.title} onClose={() => choose("dismissed")}>
       <p className="leading-relaxed text-ink-soft">{t.install.intro}</p>
       <ol className="mt-4 grid gap-3">
         <Step n={1} glyph={<ShareIcon />}>
@@ -80,9 +95,12 @@ export function InstallStepsSheet({ onClose }: { onClose: () => void }) {
         </Step>
       </ol>
       <div className="mt-5 grid gap-3">
-        <Button onClick={onClose}>{t.install.added}</Button>
-        <WhatsAppOffer onDone={onClose} />
-        <Button variant="ghost" onClick={onClose}>
+        <Button onClick={() => choose("added")}>{t.install.added}</Button>
+        <WhatsAppOffer
+          prompt={fromPrompt ? "install" : undefined}
+          onDone={onClose}
+        />
+        <Button variant="ghost" onClick={() => choose("not_now")}>
           {t.install.notNow}
         </Button>
       </div>

@@ -340,6 +340,8 @@ export function useVerification(intent?: VerifyIntent) {
     step,
     maskedPhone: live?.maskedPhone ?? null,
     error,
+    /** The key of `error`, for analytics: never the person's input. */
+    errorCode: code,
     canRetry: step === "error" && code !== null && !NO_RETRY.has(code),
     busy: busy !== null,
     displayName: saved?.displayName ?? "",

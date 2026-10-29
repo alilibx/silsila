@@ -252,14 +252,14 @@ export function useKhatmaActions(
     if (pushAsked()) return;
     const support = pushSupport();
     markPushAsked();
-    setSheet({
-      kind:
-        support === "ready"
-          ? "push"
-          : support === "ios_install"
-            ? "install"
-            : "whatsapp",
-    });
+    const kind =
+      support === "ready"
+        ? "push"
+        : support === "ios_install"
+          ? "install"
+          : "whatsapp";
+    posthog.capture("notification_prompt_shown", { prompt: kind });
+    setSheet({ kind });
   }
 
   async function confirmTake(juz: number) {

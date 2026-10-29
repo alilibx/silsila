@@ -12,7 +12,11 @@ const m = vi.hoisted(() => ({
   asked: false,
   support: "ready" as string,
   markAsked: vi.fn(),
+  enablePush: vi.fn(),
+  capture: vi.fn(),
 }));
+
+vi.mock("posthog-js", () => ({ default: { capture: m.capture } }));
 
 vi.mock("../lib/session", () => ({
   useSessionToken: () => "tok",
@@ -26,7 +30,7 @@ vi.mock("../lib/push", () => ({
     m.markAsked();
   },
   pushSupport: () => m.support,
-  enablePush: vi.fn(),
+  enablePush: m.enablePush,
 }));
 vi.mock("../components/InstallStepsSheet", () => ({
   InstallStepsSheet: (props: { onClose: () => void }) => (
@@ -68,6 +72,8 @@ beforeEach(() => {
   m.asked = false;
   m.support = "ready";
   m.markAsked.mockReset();
+  m.enablePush.mockReset();
+  m.capture.mockReset();
   m.take.mockReset().mockResolvedValue({ ok: true });
   m.query.mockReturnValue(makeView({ me }));
   render(
@@ -121,5 +127,56 @@ describe("push after the first take", () => {
     await takeSuggestion();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(m.markAsked).not.toHaveBeenCalled();
+  });
+
+  describe("analytics", () => {
+    const events = (name: string) =>
+      m.capture.mock.calls
+        .filter(([event]) => event === name)
+        .map(([, props]) => props as Record<string, unknown>);
+
+    it("records which prompt was shown", async () => {
+      m.support = "ios_install";
+      await takeSuggestion();
+      expect(events("notification_prompt_shown")).toEqual([
+        { prompt: "install" },
+      ]);
+    });
+
+    it("records 'not now' and the sheet's own close apart", async () => {
+      await takeSuggestion();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "ليس الآن",
+        }),
+      );
+      expect(events("notification_prompt_choice")).toEqual([
+        { prompt: "push", choice: "not_now" },
+      ]);
+    });
+
+    it("records enabling push with the browser's answer", async () => {
+      m.enablePush.mockResolvedValue("denied");
+      await takeSuggestion();
+      await userEvent.click(
+        screen.getByRole("button", { name: "فعّل الإشعارات" }),
+      );
+      await act(async () => {});
+      expect(events("notification_prompt_choice")).toEqual([
+        { prompt: "push", choice: "enable", result: "denied" },
+      ]);
+    });
+
+    it("records a failed push setup as an error", async () => {
+      m.enablePush.mockRejectedValue(new Error("boom"));
+      await takeSuggestion();
+      await userEvent.click(
+        screen.getByRole("button", { name: "فعّل الإشعارات" }),
+      );
+      await act(async () => {});
+      expect(events("notification_prompt_choice")).toEqual([
+        { prompt: "push", choice: "enable", result: "error" },
+      ]);
+    });
   });
 });
