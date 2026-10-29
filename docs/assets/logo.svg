@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="336" height="150" viewBox="0 0 336 150" role="img" aria-label="Wirdak · وِردك">
-  <!-- The misbaha mark from scripts/images/icon.html; وِردك in Aref Ruqaa Bold and Wirdak in Readex Pro Medium, outlined so it needs no font. -->
+  <!-- Written by scripts/render-logo.ts: the misbaha mark from scripts/images/icon.html; وِردك in Aref Ruqaa Bold and Wirdak in Readex Pro Medium, outlined so it needs no font. -->
   <g>
     <circle cx="63.6" cy="10.4" r="5.4" fill="#C98A1E"/>
     <circle cx="74.8" cy="11.6" r="5.4" fill="#1F5A45"/>

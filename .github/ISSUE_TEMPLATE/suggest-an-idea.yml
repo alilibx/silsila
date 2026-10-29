@@ -1,7 +1,7 @@
 name: Suggest an idea
 description: A new feature or a change to how Wirdak works.
 title: "<the idea>"
-labels: ["idea"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:

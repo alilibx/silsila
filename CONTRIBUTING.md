@@ -23,7 +23,7 @@ anonymous Convex backend, with no cloud account and no real WhatsApp.
 2. Keep the change small and focused on one thing.
 3. Add or update tests next to the code: `*.test.ts` for `convex/`, and tests under `apps/web/src` for the website.
    Behaviour that crosses the website and backend belongs in the Playwright smoke test in `e2e/`.
-4. Write user-facing text in Arabic first, then English, in `apps/web/src/i18n`. Check the layout right to left.
+4. Put user-facing text in `apps/web/src/i18n/ar.ts`, in Arabic, and check the layout right to left.
 5. Run the checks:
 
    ```sh

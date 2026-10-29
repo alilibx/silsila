@@ -36,10 +36,3 @@ body:
     attributes:
       label: Device and browser
       description: For example "iPhone 15, iOS 26, Safari, added to the home screen" or "Android 16, Chrome".
-  - type: dropdown
-    id: language
-    attributes:
-      label: App language
-      options:
-        - Arabic
-        - English

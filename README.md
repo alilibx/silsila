@@ -19,7 +19,7 @@ Simple enough for a 10-year-old and an 80-year-old.</p>
   <a href="https://github.com/alilibx/wirdak/releases"><img src="https://img.shields.io/github/v/release/alilibx/wirdak?label=release&color=1f5a45" alt="Latest release"></a>
   <a href="https://github.com/alilibx/wirdak/actions/workflows/main.yml"><img src="https://img.shields.io/github/actions/workflow/status/alilibx/wirdak/main.yml?branch=main&label=build" alt="Build and deploy"></a>
   <br>
-  <img src="https://img.shields.io/badge/Arabic%20first-RTL-c98a1e" alt="Arabic first, right to left">
+  <img src="https://img.shields.io/badge/Arabic-RTL-c98a1e" alt="Arabic, right to left">
   <img src="https://img.shields.io/badge/PWA-installable-555?logo=pwa&logoColor=white" alt="Installable web app">
   <img src="https://img.shields.io/badge/TypeScript-6-555?logo=typescript&logoColor=white" alt="TypeScript 6">
   <img src="https://img.shields.io/badge/React-19-555?logo=react&logoColor=white" alt="React 19">
@@ -50,7 +50,7 @@ reply with their names, and one person ends up chasing everyone. Wirdak replaces
 itself. Invite the people you love, take one juz' at a time, and when all 30 are done the group completes the khatma
 together and the next round begins.
 
-Wirdak is Arabic first, right to left, with English second. It's a fast, mobile-first website that installs as an app,
+Wirdak is in Arabic, right to left. It's a fast, mobile-first website that installs as an app,
 with no app store and no password.
 
 ## Contents
@@ -112,6 +112,7 @@ scripts; the tools themselves (Vite, Vitest, Convex) run on Node.
 git clone https://github.com/alilibx/wirdak && cd wirdak
 bun install
 cp apps/web/.env.example apps/web/.env.local
+cp apps/admin/.env.example apps/admin/.env.local
 CONVEX_AGENT_MODE=anonymous bun run dev   # local Convex backend + website + admin app
 ```
 
@@ -139,7 +140,8 @@ bun run e2e
 - Real pushes need the VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`; see
   [docs/deploy.md](docs/deploy.md)). Without them the dev backend logs `push skipped (no VAPID)`, and the in-app notes
   still appear.
-- Regenerate the app icons and the link preview image with `bun run tsx scripts/render-images.ts`.
+- Regenerate the app icons and the link preview image with `bun run tsx scripts/render-images.ts`, and the README
+  logo with `bun run tsx scripts/render-logo.ts <ArefRuqaa-Bold.ttf> <ReadexPro.ttf>` (needs HarfBuzz's `hb-view`).
 
 Design specs and implementation plans live in [`docs/superpowers/`](docs/superpowers/).
 
