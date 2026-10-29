@@ -9,8 +9,7 @@ import { endGraceIfDue, isHeld } from "./grace";
 import { randomToken } from "./lib/crypto";
 import { encodePayload } from "./lib/rotaPayload";
 import { SETTING_DEFAULTS } from "./lib/settings";
-import { onStaging } from "./rotaOutbox";
-import { isDev } from "./whatsapp";
+import { isDev, isStaging } from "./whatsapp";
 
 /**
  * Dev-only stand-in for a WhatsApp message arriving at the webhook:
@@ -88,7 +87,7 @@ export const allowRota = internalMutation({
 /**
  * Dev-only: the payload of a button on the message that a rota participant got
  * for the khatma's open day, the one `dev:simulateIncoming` takes as `payload`
- * to stand in for a tap on «أتممت» (`done`), «لم أقرأ بعد» (`notYet`) or
+ * to stand in for a tap on «أتممت» (`done`), «ليس بعد» (`notYet`) or
  * «دعاء الختم» (`dua`):
  * `bun run convex run dev:rotaPayload '{"inviteCode":"…","phone":"+971501234567","action":"done"}'`.
  */
@@ -130,7 +129,7 @@ export const rotaPayload = internalQuery({
         dayId: day._id,
         participantId: participant._id,
       },
-      onStaging(),
+      isStaging(),
     );
   },
 });

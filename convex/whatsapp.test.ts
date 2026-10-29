@@ -126,7 +126,7 @@ test("parseIncoming extracts text messages", () => {
   ).toEqual([]);
 });
 
-test("parseIncoming ignores non-text messages and malformed input", () => {
+test("parseIncoming ignores malformed input", () => {
   expect(parseIncoming(null)).toEqual([]);
   expect(parseIncoming("nope")).toEqual([]);
   expect(parseIncoming({ entry: "x" })).toEqual([]);
@@ -134,7 +134,6 @@ test("parseIncoming ignores non-text messages and malformed input", () => {
   expect(
     parseIncoming(
       webhook([
-        { from: "971501234567", id: "wamid.img", type: "image", image: {} },
         { from: "971501234567", id: "wamid.bad", type: "text", text: {} },
         { from: "+97150", id: "wamid.from", type: "text", text: { body: "x" } },
         { from: "971501234567", type: "text", text: { body: "no id" } },
@@ -154,6 +153,42 @@ test("parseIncoming ignores non-text messages and malformed input", () => {
       profileName: "Ali",
     },
   ]);
+});
+
+test("parseIncoming reads media, stickers, voice notes and reactions as media with no text", () => {
+  const types = [
+    "image",
+    "sticker",
+    "audio",
+    "video",
+    "document",
+    "location",
+    "contacts",
+    "reaction",
+  ];
+  expect(
+    parseIncoming(
+      webhook([
+        ...types.map((type) => ({
+          from: "971501234567",
+          id: `wamid.${type}`,
+          type,
+          [type]: {},
+        })),
+        // still not a message we read
+        { from: "971501234567", id: "wamid.sys", type: "system", system: {} },
+        { from: "+97150", id: "wamid.from", type: "sticker", sticker: {} },
+      ]),
+    ),
+  ).toEqual(
+    types.map((type) => ({
+      waMessageId: `wamid.${type}`,
+      from: "971501234567",
+      text: "",
+      media: true,
+      profileName: "Ali",
+    })),
+  );
 });
 
 test("parseIncoming can keep only messages to our business number", () => {
@@ -1051,8 +1086,8 @@ test("relay endpoint is closed on a deployment Meta calls", async () => {
 
 test("relay endpoint never matches a button tap to a sign-in code", async () => {
   asStaging();
-  // staging's own site, so a tap marked for staging is this deployment's
-  vi.stubEnv("SITE_URL", "https://stg.wirdak.app");
+  // staging itself, so a tap marked for staging is this deployment's
+  vi.stubEnv("WIRDAK_ENV", "staging");
   const t = convexTest(schema, modules);
   await t.run((ctx) =>
     ctx.db.insert("verifications", {

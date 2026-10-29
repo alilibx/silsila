@@ -16,12 +16,14 @@ const BATCH = 500;
 /**
  * Retention: rate-limit rows (which may be IP-keyed) are purged as soon as their
  * window has expired (`expiresAt < now`), so an IP is held at most as long as its
- * window (spec 9: at most 24 hours). Phone numbers in verifications 24 hours;
- * WhatsApp dedupe ids 7 days.
+ * window (spec 9: at most 24 hours). Phone numbers in verifications and in
+ * WhatsApp windows (`waContacts`) 24 hours; WhatsApp dedupe ids 7 days.
  */
 const INBOUND_TTL_MS = 7 * DAY_MS;
 const VERIFICATION_TTL_MS = DAY_MS;
 const HANDOFF_TTL_MS = DAY_MS;
+/** A phone's 24-hour WhatsApp window: once it has closed, the row says nothing. */
+const WA_CONTACT_TTL_MS = DAY_MS;
 /** Audit rows are kept 2 years (spec 4.5). */
 export const AUDIT_TTL_MS = 2 * 365 * DAY_MS;
 
@@ -170,6 +172,7 @@ async function deleteBatch(
       | "auditLog"
       | "adminSessions"
       | "counters"
+      | "waContacts"
     >;
   }[],
 ): Promise<boolean> {
@@ -223,6 +226,12 @@ export const purge = internalMutation({
         [...clearedNotes, ...cappedNotes].map((n) => [n._id, n] as const),
       ).values(),
     ];
+    const waContacts = await ctx.db
+      .query("waContacts")
+      .withIndex("by_lastInboundAt", (q) =>
+        q.lt("lastInboundAt", now - WA_CONTACT_TTL_MS),
+      )
+      .take(BATCH + 1);
     const handoffs = await ctx.db
       .query("handoffTokens")
       .withIndex("by_createdAt", (q) => q.lt("createdAt", now - HANDOFF_TTL_MS))
@@ -254,6 +263,7 @@ export const purge = internalMutation({
       await deleteBatch(ctx, signInCounters),
       await deleteBatch(ctx, inbound),
       await deleteBatch(ctx, verifications),
+      await deleteBatch(ctx, waContacts),
       await deleteBatch(ctx, notes),
       await deleteBatch(ctx, handoffs),
       await deleteBatch(ctx, audit),

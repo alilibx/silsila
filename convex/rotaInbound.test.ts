@@ -15,6 +15,7 @@ import {
   manyKhatmasText,
   notOnListText,
   stopText,
+  unknownJoinText,
   whichKhatmaText,
 } from "./lib/rotaTemplates";
 import schema from "./schema";
@@ -171,7 +172,7 @@ async function send(
   t: T,
   from: string,
   text: string,
-  extra: { payload?: string; profileName?: string } = {},
+  extra: { payload?: string; profileName?: string; media?: boolean } = {},
 ) {
   await t.action(internal.whatsapp.handleIncoming, {
     waMessageId: `wamid.${++seq}`,
@@ -395,11 +396,11 @@ test("an archived khatma's join code says it has ended and is not relayed", asyn
   ).toEqual([]);
 });
 
-test("a join text for a code this deployment lacks gets the sign-in reply", async () => {
+test("a join text for a code this deployment lacks says the khatma wasn't found", async () => {
   const t = convexTest(schema, modules);
   await setup(t, [{ slot: 1 }]);
   await send(t, phoneOf(0), joinText("ختمة", "ZZZ999"));
-  expect(sent.map((m) => m.body)).toEqual([NO_MATCH_REPLY]);
+  expect(sent.map((m) => m.body)).toEqual([unknownJoinText]);
   expect(
     await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
   ).toEqual([]);
@@ -432,6 +433,54 @@ test("«أتممت» marks the tapper's reads done once, and a closed day change
   expect((await readsOf(t, day._id)).filter((r) => r.notYetAt != null)).toEqual(
     [],
   );
+});
+
+test("the holder's «أتممت» still counts after their juz' was reassigned", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }, { slot: 2 }]);
+  const day = await startDay(t, s);
+  const [a, b] = s.participants as [
+    Id<"rotaParticipants">,
+    Id<"rotaParticipants">,
+  ];
+  // juz' 1 went to B, then A read it anyway
+  await t.run(async (ctx) => {
+    const one = (await ctx.db.query("rotaReads").collect()).find(
+      (r) => r.juz === 1,
+    )!;
+    await ctx.db.patch(one._id, { readerId: b, reassignedAt: 1 });
+  });
+  await send(t, phoneOf(0), "أتممت", { payload: tap("done", day._id, a) });
+  const one = (await readsOf(t, day._id)).find((r) => r.juz === 1)!;
+  expect(one.doneAt).toBe(Date.now());
+  expect(one.doneByOrganizer).toBe(false);
+  // B's own juz' is untouched
+  expect((await readsOf(t, day._id)).find((r) => r.juz === 2)?.doneAt).toBe(
+    null,
+  );
+  expect(sent.map((m) => m.body)).toEqual([
+    "*ختمة*\nتقبّل الله منك. ١ من ٣٠ جزءاً تمّت اليوم.",
+  ]);
+});
+
+test("a holder's typed «تم» counts for the juz' reassigned away", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }, { slot: 2 }]);
+  const day = await startDay(t, s);
+  const b = s.participants[1]!;
+  await t.run(async (ctx) => {
+    const one = (await ctx.db.query("rotaReads").collect()).find(
+      (r) => r.juz === 1,
+    )!;
+    await ctx.db.patch(one._id, { readerId: b, reassignedAt: 1 });
+  });
+  await send(t, phoneOf(0), "تم");
+  expect((await readsOf(t, day._id)).find((r) => r.juz === 1)?.doneAt).toBe(
+    Date.now(),
+  );
+  expect(sent.map((m) => m.body)).toEqual([
+    "*ختمة*\nتقبّل الله منك. ١ من ٣٠ جزءاً تمّت اليوم.",
+  ]);
 });
 
 test("B's phone with A's payload changes nothing", async () => {
@@ -570,6 +619,32 @@ test("«إيقاف» from a phone that only asked to join declines its requests"
   sent.length = 0;
   await send(t, STRANGER, "إيقاف");
   expect(sent.map((m) => m.body)).not.toContain(stopText);
+});
+
+test("«إيقاف» from a member also declines the phone's open join requests elsewhere", async () => {
+  const t = convexTest(schema, modules);
+  const one = await setup(t, [{ slot: 1 }]);
+  const two = await setup(t, [{ slot: 1, phone: "+971500000200" }], {
+    name: "ختمة الجيران",
+    joinCode: "JNC567",
+    organizerId: one.personId,
+  });
+  // listed in the first khatma, asking to join the second
+  await send(t, phoneOf(0), joinText("ختمة الجيران", "JNC567"));
+  await send(t, phoneOf(0), "إيقاف");
+  const requests = await t.run((ctx) =>
+    ctx.db.query("rotaJoinRequests").collect(),
+  );
+  expect(requests).toEqual([
+    expect.objectContaining({
+      khatmaId: two.khatmaId,
+      resolvedAt: Date.now(),
+      outcome: "declined",
+    }),
+  ]);
+  expect((await participant(t, one.participants[0]!)).stoppedAt).toBe(
+    Date.now(),
+  );
 });
 
 test("«إيقاف» from a stranger with no request is not a rota message", async () => {
@@ -771,6 +846,133 @@ test("every message opens the window and counts as a reply", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Join requests: blocked numbers and declined ones
+
+test("a join from a blocked number files no request, tells nobody and gets no reply", async () => {
+  withRelay();
+  const t = convexTest(schema, modules);
+  await setup(t, [{ slot: 1 }]);
+  await t.run(async (ctx) => {
+    const admin = await ctx.db.insert("admins", {
+      phone: "+971500000099",
+      addedBy: null,
+      addedAt: 0,
+    });
+    await ctx.db.insert("blockedPhones", {
+      phone: `+${STRANGER}`,
+      blockedBy: admin,
+      at: 0,
+      note: null,
+    });
+  });
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  expect(
+    await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
+  ).toEqual([]);
+  expect(await notes(t)).toEqual([]);
+  expect(sent).toEqual([]);
+  expect(relayed).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.query("waContacts").collect())).toEqual(
+    [],
+  );
+});
+
+test("a join within 7 days of a declined request files nothing new; after that it does", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  await t.run(async (ctx) => {
+    const [r] = await ctx.db.query("rotaJoinRequests").collect();
+    await ctx.db.patch(r!._id, {
+      resolvedAt: Date.now(),
+      outcome: "declined",
+    });
+  });
+  sent.length = 0;
+
+  vi.setSystemTime(Date.now() + 6 * 86_400_000);
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  expect(
+    await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
+  ).toHaveLength(1);
+  expect(await notes(t)).toHaveLength(1);
+  expect(sent.map((m) => m.body)).toEqual([`*ختمة*\n${notOnListText}`]);
+
+  vi.setSystemTime(Date.now() + 2 * 86_400_000);
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  const requests = await t.run((ctx) =>
+    ctx.db.query("rotaJoinRequests").collect(),
+  );
+  expect(requests.filter((r) => r.resolvedAt === null)).toHaveLength(1);
+  expect((await notes(t)).map((n) => [n.khatmaId, n.kind])).toEqual([
+    [s.khatmaId, "rotaJoinRequest"],
+    [s.khatmaId, "rotaJoinRequest"],
+  ]);
+});
+
+// ---------------------------------------------------------------------------
+// The 24-hour window
+
+test("only a phone with a participant or a join request gets a window", async () => {
+  const t = convexTest(schema, modules);
+  await setup(t, [{ slot: 1 }]);
+  const contacts = () => t.run((ctx) => ctx.db.query("waContacts").collect());
+
+  await send(t, STRANGER, "السلام عليكم");
+  await send(t, STRANGER, "تم");
+  await send(t, STRANGER, joinText("ختمة", "ZZZ999"));
+  expect(await contacts()).toEqual([]);
+
+  // the join request is filed, then the window opens
+  await send(t, STRANGER, joinText("ختمة", "JNC234"));
+  expect((await contacts()).map((c) => c.phone)).toEqual([`+${STRANGER}`]);
+
+  await send(t, phoneOf(0), "السلام عليكم");
+  expect((await contacts()).map((c) => c.phone).sort()).toEqual(
+    [`+${STRANGER}`, `+${phoneOf(0)}`].sort(),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Media, stickers and voice notes
+
+test("media from a rota phone counts as a reply and gets no answer", async () => {
+  withRelay();
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  const a = s.participants[0]!;
+  await t.run((ctx) =>
+    ctx.db.patch(a, { silentDays: 4, silencedAt: 3, lastReplyAt: 2 }),
+  );
+  await send(t, phoneOf(0), "", { media: true });
+  expect(await participant(t, a)).toMatchObject({
+    lastReplyAt: Date.now(),
+    silentDays: 0,
+    silencedAt: null,
+  });
+  expect(await t.run((ctx) => ctx.db.query("waContacts").collect())).toEqual([
+    expect.objectContaining({
+      phone: `+${phoneOf(0)}`,
+      lastInboundAt: Date.now(),
+    }),
+  ]);
+  expect(sent).toEqual([]);
+  expect(relayed).toEqual([]);
+});
+
+test("media from any other phone is ignored: no reply, no relay, no window", async () => {
+  withRelay();
+  const t = convexTest(schema, modules);
+  await setup(t, [{ slot: 1 }]);
+  await send(t, STRANGER, "", { media: true });
+  expect(sent).toEqual([]);
+  expect(relayed).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.query("waContacts").collect())).toEqual(
+    [],
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Relay to staging (which shares production's number)
 
 function withRelay() {
@@ -805,12 +1007,13 @@ test("relay is chosen for a staging payload and for an unknown join code", async
     [STRANGER, "تم", undefined, undefined],
   ]);
   // The staging tap changed nothing here and got no reply from production;
-  // the texts staging didn't take get production's sign-in reply.
+  // a join code neither deployment has says so, and the typed reply staging
+  // didn't take gets production's sign-in reply.
   expect((await readsOf(t, day._id)).every((r) => r.doneAt === null)).toBe(
     true,
   );
   expect(sent.map((m) => [m.to, m.body])).toEqual([
-    [STRANGER, NO_MATCH_REPLY],
+    [STRANGER, unknownJoinText],
     [STRANGER, NO_MATCH_REPLY],
   ]);
 });

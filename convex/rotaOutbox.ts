@@ -33,14 +33,12 @@ import { quietHours } from "./lib/settings";
 import { localDate, nextAwake } from "./lib/wakingTime";
 import { khatmaTitle, type TemplateMessage } from "./lib/whatsappTemplates";
 import {
+  isDev,
+  isStaging,
   sendWhatsAppButtons,
   sendWhatsAppTemplate,
   sendWhatsAppText,
-  siteUrl,
 } from "./whatsapp";
-
-// Convex provides `process.env`; the project doesn't pull in @types/node.
-declare const process: { env: Record<string, string | undefined> };
 
 type Kind = Doc<"rotaOutbox">["kind"];
 type Participant = Doc<"rotaParticipants">;
@@ -49,12 +47,6 @@ type Participant = Doc<"rotaParticipants">;
 type FreeForm = { text: string; buttons?: { id: string; title: string }[] };
 
 const WINDOW_MS = 24 * 3_600_000;
-const STAGING_SITE = "https://stg.wirdak.app";
-
-/** Whether this deployment is staging, whose button payloads are marked for it. */
-export function onStaging(): boolean {
-  return siteUrl() === STAGING_SITE;
-}
 
 /** Whether a participant may be sent messages Wirdak starts: on the list, joined, not stopped or silenced. */
 function reachable(p: Participant | null): p is Participant {
@@ -76,7 +68,9 @@ const MERGED_KINDS: ReadonlySet<Kind> = new Set(["assigned", "covered"]);
  * stopped or was silenced, or for a message already queued for the same
  * day, kind and participant (rows without a day are never duplicates). The
  * exception is `assigned` and `covered`: ajza' added while the message waits
- * join it, and once it was sent or skipped they get a new one.
+ * join it, and once it was sent or skipped they get a new one. A juz' covered
+ * before the message that assigned it went out leaves that message instead
+ * (which goes when it names nothing more): the reader never heard of it.
  */
 export async function enqueue(
   ctx: MutationCtx,
@@ -104,6 +98,11 @@ export async function enqueue(
           .eq("participantId", row.participantId),
       )
       .collect();
+    if (row.kind === "covered") {
+      const juz = await unassignUnsent(ctx, row.participantId, dayId, row.juz);
+      if (juz.length === 0) return null;
+      row = { ...row, juz };
+    }
     if (MERGED_KINDS.has(row.kind)) {
       // More ajza' for a message not yet sent join it; once it went out, the
       // new ones are a message of their own.
@@ -131,6 +130,38 @@ export async function enqueue(
   const at = nextAwake(now, khatma.rota.timeZone, await quietHours(ctx));
   await ctx.scheduler.runAt(at, internal.rotaOutbox.deliver, { outboxId });
   return outboxId;
+}
+
+/**
+ * Takes `juz` out of the participant's unsent `assigned` messages of the day,
+ * deleting one left with nothing, and returns the ajza' none of them named.
+ */
+async function unassignUnsent(
+  ctx: MutationCtx,
+  participantId: Id<"rotaParticipants">,
+  dayId: Id<"rotaDays">,
+  juz: number[],
+): Promise<number[]> {
+  const unsent = (
+    await ctx.db
+      .query("rotaOutbox")
+      .withIndex("by_day_kind_participant", (q) =>
+        q
+          .eq("dayId", dayId)
+          .eq("kind", "assigned")
+          .eq("participantId", participantId),
+      )
+      .collect()
+  ).filter((r) => r.sentAt === null && r.skippedAt === null);
+  let left = juz;
+  for (const r of unsent) {
+    const kept = r.juz.filter((j) => !juz.includes(j));
+    if (kept.length === r.juz.length) continue;
+    left = left.filter((j) => !r.juz.includes(j));
+    if (kept.length === 0) await ctx.db.delete(r._id);
+    else await ctx.db.patch(r._id, { juz: kept });
+  }
+  return left;
 }
 
 /** The payloads of a day's «أتممت» and «ليس بعد» buttons. */
@@ -167,6 +198,12 @@ export async function welcomeMessage(
   const rota = khatma.rota;
   if (!rota) throw new Error("not a rota khatma");
   const title = khatmaTitle(khatma);
+  // No day starts before the organizer finishes setting the khatma up.
+  if (rota.setupDoneAt === null) {
+    return {
+      text: titled(khatma, welcomeText(participant.name, title, "notStarted")),
+    };
+  }
   const last = await lastRotaDay(ctx, khatma._id);
   if (
     last &&
@@ -188,7 +225,7 @@ export async function welcomeMessage(
       const text = `${welcomeText(participant.name, title, null)}\n${juzText(last.number, juz)}`;
       const payloads = donePayloads(
         { dayId: last._id, participantId: participant._id },
-        onStaging(),
+        isStaging(),
       );
       return {
         text: titled(khatma, text),
@@ -324,6 +361,11 @@ export const plan = internalQuery({
         return null;
       }
     }
+    if (row.kind === "complete" && row.dayId !== null) {
+      // A juz' marked not done since leaves the day incomplete.
+      const day = await ctx.db.get(row.dayId);
+      if (!day || day.completedAt === null) return null;
+    }
     const now = Date.now();
     const awake = nextAwake(now, rota.timeZone, await quietHours(ctx));
     if (awake > now) return { retryAt: awake };
@@ -345,7 +387,7 @@ export const plan = internalQuery({
       row,
       { name: khatma.name, createdAt: khatma.createdAt },
       windowOpen,
-      onStaging(),
+      isStaging(),
     );
     return message === null ? null : { phone: participant.phone, message };
   },
@@ -424,11 +466,10 @@ export const deliver = internalAction({
 export const sendSample = internalAction({
   args: { phone: v.string() },
   handler: async (_ctx, args): Promise<boolean[]> => {
-    const deployment = process.env.WIRDAK_ENV;
-    if (deployment !== "dev" && deployment !== "staging") {
+    if (!isDev() && !isStaging()) {
       throw new Error("sendSample runs only when WIRDAK_ENV is dev or staging");
     }
-    const staging = onStaging();
+    const staging = isStaging();
     const khatma = { name: "ختمة العائلة", createdAt: Date.now() };
     const ids = { dayId: "sample", participantId: "sample" };
     const payloads = {

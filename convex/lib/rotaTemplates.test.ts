@@ -18,6 +18,7 @@ import {
   ROTA_BUTTONS,
   stopText,
   thanksText,
+  unknownJoinText,
   weekdayText,
   welcomeText,
   whichKhatmaText,
@@ -110,6 +111,10 @@ test("welcome text names the day and time of the next message, if any", () => {
   expect(welcomeText("أحمد", "ختمة العائلة", null)).toBe(
     "أهلاً أحمد، انضممت إلى ختمة العائلة.",
   );
+  // before the organizer finished setting the khatma up, no day is promised
+  expect(welcomeText("أحمد", "ختمة العائلة", "notStarted")).toBe(
+    "أهلاً أحمد، انضممت إلى ختمة العائلة. تصلك رسالة جزئك حين يبدأ المنظّم الختمة.",
+  );
 });
 
 test("the free texts use Arabic digits", () => {
@@ -130,6 +135,9 @@ test("the fixed texts", () => {
   );
   expect(helpText).toBe("اضغط «أتممت» أو «ليس بعد» في رسالة جزئك.");
   expect(whichKhatmaText).toBe("لأي ختمة؟");
+  expect(unknownJoinText).toBe(
+    "لم نجد هذه الختمة. تأكّد من الرابط مع منظّم الختمة.",
+  );
   expect(ROTA_BUTTONS).toEqual({
     done: "أتممت",
     notYet: "ليس بعد",

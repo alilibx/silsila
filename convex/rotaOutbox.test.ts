@@ -306,20 +306,34 @@ test("a juz' message outside the window goes as the template with payloads", asy
   ]);
 });
 
-test("staging marks its payloads", async () => {
+test("staging marks its payloads, told by WIRDAK_ENV and not by its site", async () => {
   vi.stubEnv("SITE_URL", "https://stg.wirdak.app");
   const t = convexTest(schema, modules);
   const ids = await setup(t);
   await queue(t, ids);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent[0]?.text).toContain(
-    `r1|s|done|${ids.dayId}|${ids.participantId}`,
+    `r1|p|done|${ids.dayId}|${ids.participantId}`,
+  );
+
+  sent.length = 0;
+  vi.stubEnv("SITE_URL", "https://wirdak.app");
+  vi.stubEnv("WIRDAK_ENV", "staging");
+  const staging = await setup(t);
+  await queue(t, staging);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent[0]?.text).toContain(
+    `r1|s|done|${staging.dayId}|${staging.participantId}`,
   );
 });
+
+const complete = (t: T, ids: Ids) =>
+  t.run((ctx) => ctx.db.patch(ids.dayId, { completedAt: NOW - 1 }));
 
 test("a completion message inside the window is the completion line, then the dua, as plain text", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t, { windowOpen: true });
+  await complete(t, ids);
   await queue(t, ids, "complete");
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent).toEqual([
@@ -336,6 +350,7 @@ test("a completion message inside the window is the completion line, then the du
 test("a completion message outside the window is the template with the dua button", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t);
+  await complete(t, ids);
   await queue(t, ids, "complete");
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   const dua = encodePayload(
@@ -348,6 +363,55 @@ test("a completion message outside the window is the template with the dua butto
       text: `[wirdak_rota_complete] ختمة العائلة | ١ | ${dua}`,
     },
   ]);
+});
+
+test("a completion message for a day no longer complete is skipped", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  await complete(t, ids);
+  await queue(t, ids, "complete");
+  // the organizer marked a juz' not done before it went out
+  await t.run((ctx) => ctx.db.patch(ids.dayId, { completedAt: null }));
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
+  expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);
+});
+
+test("covered for a juz' still in the reader's unsent assigned message takes it out of that message instead", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const add = (kind: "assigned" | "covered", juz: number[]) =>
+    t.run((ctx) =>
+      enqueue(ctx, {
+        khatmaId: ids.khatmaId,
+        participantId: ids.participantId,
+        dayId: ids.dayId,
+        kind,
+        juz,
+        number: 1,
+      }),
+    );
+  const assigned = await add("assigned", [8, 9]);
+  // juz' 8 moved on before the message went out: no covered, one juz' less
+  expect(await add("covered", [8])).toBeNull();
+  expect((await rows(t)).map((r) => [r.kind, r.juz])).toEqual([
+    ["assigned", [9]],
+  ]);
+  // 9 too, and with 12 they never had: the message is gone, 12 is covered
+  const covered = await add("covered", [9, 12]);
+  expect(covered).not.toBeNull();
+  expect(await t.run((ctx) => ctx.db.get(assigned!))).toBeNull();
+  expect((await rows(t)).map((r) => [r.kind, r.juz])).toEqual([
+    ["covered", [12]],
+  ]);
+  // once an assigned message went out, covered is sent as usual
+  const sentRow = await add("assigned", [20]);
+  await t.run((ctx) => ctx.db.patch(sentRow!, { sentAt: NOW }));
+  await add("covered", [20]);
+  expect(
+    (await rows(t)).filter((r) => r.kind === "covered").map((r) => r.juz),
+  ).toEqual([[12, 20]]);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
 });
 
 test("covered and cycle messages go as their template, or as plain text in the window", async () => {
@@ -551,6 +615,22 @@ test("a welcome with no juz' to read today says when the next day comes", async 
   expect(sent[0]?.text).toContain("أهلاً سارة");
   expect(sent[0]?.text).toContain("تصلك رسالة جزئك يوم");
   expect(sent[0]?.text).not.toContain(`[${ROTA_BUTTONS.done}]`);
+});
+
+test("a welcome before setup is finished promises no day: the juz' comes when the organizer starts", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true, readDone: true });
+  await t.run(async (ctx) => {
+    const k = (await ctx.db.get(ids.khatmaId))!;
+    await ctx.db.patch(ids.khatmaId, {
+      rota: { ...k.rota!, setupDoneAt: null },
+    });
+  });
+  await queue(t, ids, "welcome");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent.map((s) => s.text)).toEqual([
+    "*ختمة العائلة*\nأهلاً سارة، انضممت إلى ختمة العائلة. تصلك رسالة جزئك حين يبدأ المنظّم الختمة.",
+  ]);
 });
 
 test("a welcome outside the window is skipped: there is no template, the next juz' message follows", async () => {

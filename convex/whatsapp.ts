@@ -9,6 +9,7 @@ import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
 import { findJoinCode } from "./lib/rotaJoin";
 import { decodePayload } from "./lib/rotaPayload";
 import { classifyReply } from "./lib/rotaReplies";
+import { unknownJoinText } from "./lib/rotaTemplates";
 import { cleanKhatmaName } from "./lib/text";
 import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
 
@@ -55,6 +56,11 @@ export function env(name: EnvName): string | undefined {
  */
 export function isDev(): boolean {
   return process.env.WIRDAK_ENV === "dev";
+}
+
+/** Whether this deployment is staging (`WIRDAK_ENV=staging`), which shares production's number. */
+export function isStaging(): boolean {
+  return process.env.WIRDAK_ENV === "staging";
 }
 
 /** Shorter relay secrets are treated as unset (`openssl rand -hex 32` is 64). */
@@ -212,12 +218,14 @@ const MAX_PAYLOAD = 256;
 export type IncomingMessage = {
   waMessageId: string;
   from: string;
-  /** The message text; for a button tap, the button's title. */
+  /** The message text; for a button tap, the button's title; empty for media. */
   text: string;
   /** The tapped button's payload (a template quick reply, or an interactive reply). */
   payload?: string;
   /** The sender's WhatsApp profile name. */
   profileName?: string;
+  /** A photo, sticker, voice note or other message with no text to read. */
+  media?: boolean;
 };
 
 function isObject(x: unknown): x is Record<string, unknown> {
@@ -243,11 +251,24 @@ function toMessage(
   return { waMessageId: id, from, text };
 }
 
-/** `m`'s text and button payload: a text message, or a button tap. */
+/** Messages with nothing to read that still come from the person: they count as a reply. */
+const MEDIA_TYPES: ReadonlySet<unknown> = new Set([
+  "image",
+  "sticker",
+  "audio",
+  "video",
+  "document",
+  "location",
+  "contacts",
+  "reaction",
+]);
+
+/** `m`'s text and button payload: a text message, a button tap, or media (no text). */
 function textAndPayload(
   m: Record<string, unknown>,
-): { text: unknown; payload?: string } | null {
+): { text: unknown; payload?: string; media?: true } | null {
   if (m.type === "text" && isObject(m.text)) return { text: m.text.body };
+  if (MEDIA_TYPES.has(m.type)) return { text: "", media: true };
   if (m.type === "button" && isObject(m.button)) {
     return payloadOf(m.button.text, m.button.payload);
   }
@@ -303,8 +324,9 @@ function profileNames(contacts: unknown): Map<string, string> {
 /**
  * Messages from a Cloud API webhook payload: text, template quick-reply taps
  * and interactive reply-button taps (their title as `text`, their payload as
- * `payload`), each with the sender's profile name. Anything else (statuses,
- * media, malformed entries) is skipped.
+ * `payload`), and media, stickers, voice notes and reactions (`media`, with
+ * no text), each with the sender's profile name. Anything else (statuses,
+ * malformed entries) is skipped.
  * With `onlyPhoneNumberId`, messages addressed to any other business number
  * (`value.metadata.phone_number_id`), or with no metadata, are skipped too.
  */
@@ -341,6 +363,7 @@ export function parseIncoming(
           ...message,
           text: message.text.slice(0, MAX_TEXT),
           ...(content.payload !== undefined && { payload: content.payload }),
+          ...(content.media && { media: true }),
           ...(profileName !== undefined && { profileName }),
         });
       }
@@ -751,10 +774,11 @@ async function answerRota(
 }
 
 /**
- * Dedupes one message, routes it and sends the reply. A button tap, a join
- * message, and a rota word from a phone with a rota participant go to the
- * rota and never to sign-in matching (or its rate limit); anything else is
- * matched against sign-in codes first, then left to the rota. Returns
+ * Dedupes one message, routes it and sends the reply. Media only counts as a
+ * rota reply and is never answered. A button tap, a join message, and a rota
+ * word from a phone with a rota participant go to the rota and never to
+ * sign-in matching (or its rate limit); anything else is matched against
+ * sign-in codes first, then left to the rota. Returns
  * `"taken"` when nothing more should be sent (an answer, a duplicate, a bad
  * sender, or a rate-limited phone), `"unknown_code"` when another deployment
  * may place it (a sign-in code, a join code or a button tap this one doesn't
@@ -772,6 +796,15 @@ export async function takeIncoming(
   if (!fresh) return "taken";
 
   const phone = `+${message.from}`;
+  // Media has nothing to read: from a rota phone it counts as a reply, and it
+  // is never answered, relayed or matched against sign-in codes.
+  if (message.media) {
+    await ctx.runMutation(internal.rotaInbound.recordMedia, {
+      phone,
+      now: Date.now(),
+    });
+    return "taken";
+  }
   // A button tap is never a sign-in message, however its title reads.
   if (message.payload !== undefined) {
     if (await answerRota(ctx, phone, message)) return "taken";
@@ -825,6 +858,7 @@ export const handleIncoming = internalAction({
     text: v.string(),
     payload: v.optional(v.string()),
     profileName: v.optional(v.string()),
+    media: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<void> => {
     const outcome = await takeIncoming(ctx, args);
@@ -833,6 +867,9 @@ export const handleIncoming = internalAction({
     if (outcome === "unknown_code" && (await relayIncoming(args))) return;
     // A tap never gets the sign-in reply.
     if (args.payload !== undefined) return;
-    await sendWhatsAppText(`+${args.from}`, NO_MATCH_REPLY);
+    // A join code neither deployment has is a khatma we can't find.
+    const reply =
+      findJoinCode(args.text) !== null ? unknownJoinText : NO_MATCH_REPLY;
+    await sendWhatsAppText(`+${args.from}`, reply);
   },
 });

@@ -68,6 +68,26 @@ test("purge deletes old messages and verifications and keeps recent ones", async
   });
 });
 
+test("purge deletes a phone's window once it has closed, after 24 hours", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("waContacts", {
+      phone: "+971500000001",
+      lastInboundAt: NOW - 25 * HOUR,
+    });
+    await ctx.db.insert("waContacts", {
+      phone: "+971500000002",
+      lastInboundAt: NOW - 23 * HOUR,
+    });
+  });
+  await t.mutation(internal.maintenance.purge, {});
+  expect(
+    await t.run(async (ctx) =>
+      (await ctx.db.query("waContacts").collect()).map((c) => c.phone),
+    ),
+  ).toEqual(["+971500000002"]);
+});
+
 test("purge removes expired rate-limit windows and keeps live ones", async () => {
   const MIN = 60_000;
   const t = convexTest(schema, modules);

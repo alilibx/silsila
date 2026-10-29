@@ -5,10 +5,11 @@ import {
   internalQuery,
   type MutationCtx,
 } from "./_generated/server";
+import { isBlocked } from "./lib/blocked";
 import { notify } from "./notes";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
-import { onStaging, titled, welcomeMessage } from "./rotaOutbox";
-import { MAX_BUTTON_TITLE, MAX_REPLY_BUTTONS } from "./whatsapp";
+import { titled, welcomeMessage } from "./rotaOutbox";
+import { isStaging, MAX_BUTTON_TITLE, MAX_REPLY_BUTTONS } from "./whatsapp";
 import { findJoinCode } from "./lib/rotaJoin";
 import { decodePayload, encodePayload } from "./lib/rotaPayload";
 import { lastRotaDay } from "./lib/rotaPlace";
@@ -62,16 +63,34 @@ const about = (khatma: Khatma, text: string) => reply(titled(khatma, text));
 const isActive = (p: Participant) => p.removedAt == null;
 const hasJoined = (p: Participant) => isActive(p) && p.joinedAt != null;
 
+/** A declined join request holds off another from the same phone for this long. */
+const DECLINED_COOLDOWN_MS = 7 * 86_400_000;
+
 /**
- * Opens the phone's 24-hour window and counts the message as a reply from
- * each of its participants, which resets the silence count and turns
- * messages a silence stopped back on. Returns the phone's active participants.
+ * Opens the phone's 24-hour window, but only for a phone Wirdak may write to:
+ * one on a rota khatma's list, or with a join request waiting. Every other
+ * number's messages leave no trace here.
  */
-async function recordReply(
+async function openWindow(
   ctx: MutationCtx,
   phone: string,
   now: number,
-): Promise<Participant[]> {
+): Promise<void> {
+  const listed = (
+    await ctx.db
+      .query("rotaParticipants")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .collect()
+  ).some(isActive);
+  const asking =
+    !listed &&
+    (
+      await ctx.db
+        .query("rotaJoinRequests")
+        .withIndex("by_phone", (q) => q.eq("phone", phone))
+        .collect()
+    ).some((r) => r.resolvedAt === null);
+  if (!listed && !asking) return;
   const contact = await ctx.db
     .query("waContacts")
     .withIndex("by_phone", (q) => q.eq("phone", phone))
@@ -81,6 +100,18 @@ async function recordReply(
   } else {
     await ctx.db.insert("waContacts", { phone, lastInboundAt: now });
   }
+}
+
+/**
+ * Counts the message as a reply from each of the phone's participants, which
+ * resets the silence count and turns messages a silence stopped back on.
+ * Returns the phone's active participants.
+ */
+async function recordReply(
+  ctx: MutationCtx,
+  phone: string,
+  now: number,
+): Promise<Participant[]> {
   const rows = await ctx.db
     .query("rotaParticipants")
     .withIndex("by_phone", (q) => q.eq("phone", phone))
@@ -96,14 +127,21 @@ async function recordReply(
   return active;
 }
 
-/** The participant's reads of a day. */
-function readsOf(ctx: MutationCtx, participant: Participant, day: Day) {
-  return ctx.db
+/**
+ * A day's reads as one participant sees them: the ones they read now, and the
+ * ones they hold that went to someone else (their «أتممت» still counts for
+ * those, spec 6.2), with all of the day's reads.
+ */
+async function readsOf(ctx: MutationCtx, participant: Participant, day: Day) {
+  const all = await ctx.db
     .query("rotaReads")
-    .withIndex("by_reader_day", (q) =>
-      q.eq("readerId", participant._id).eq("dayId", day._id),
-    )
+    .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
     .collect();
+  const reading = all.filter((r) => r.readerId === participant._id);
+  const handedOn = all.filter(
+    (r) => r.holderId === participant._id && r.readerId !== participant._id,
+  );
+  return { all, reading, handedOn };
 }
 
 /** The day's reminder time, when it is on and still ahead today. */
@@ -119,9 +157,11 @@ function reminderAhead(rota: RotaConfig, day: Day, now: number): string | null {
 
 /**
  * «أتممت» or «ليس بعد» for one participant's reads of one day. «أتممت» marks
- * all of them done (two slots, one tap); the tap that completes the day
- * brings the dua with the thanks, and everyone else gets the completion
- * message. Changes nothing on a closed day or with nothing left to read.
+ * all of them done (two slots, one tap), and the ones they hold that were
+ * handed to someone else too; the tap that completes the day brings the dua
+ * with the thanks, and everyone else gets the completion message. «ليس بعد»
+ * marks only what they read now. Changes nothing on a closed day or with
+ * nothing left to read.
  */
 async function answerDay(
   ctx: MutationCtx,
@@ -133,22 +173,23 @@ async function answerDay(
 ): Promise<InboundReply[]> {
   const rota = khatma.rota;
   if (!rota || day.closedAt !== null) return [about(khatma, closedText)];
-  const unread = (await readsOf(ctx, participant, day)).filter(
-    (r) => r.doneAt === null,
-  );
-  if (unread.length === 0) return [about(khatma, alreadyText)];
-  if (action === "notYet") {
-    for (const r of unread) await ctx.db.patch(r._id, { notYetAt: now });
-    return [about(khatma, notYetText(reminderAhead(rota, day, now)))];
+  const { all, reading, handedOn } = await readsOf(ctx, participant, day);
+  const unread = reading.filter((r) => r.doneAt === null);
+  const unreadHandedOn = handedOn.filter((r) => r.doneAt === null);
+  if (unread.length === 0 && unreadHandedOn.length === 0) {
+    return [about(khatma, alreadyText)];
   }
-  for (const r of unread) {
+  if (action === "notYet") {
+    // A juz' handed to someone else is theirs to answer for now.
+    for (const r of unread) await ctx.db.patch(r._id, { notYetAt: now });
+    const reminder = unread.length > 0 ? reminderAhead(rota, day, now) : null;
+    return [about(khatma, notYetText(reminder))];
+  }
+  const marked = [...unread, ...unreadHandedOn];
+  for (const r of marked) {
     await ctx.db.patch(r._id, { doneAt: now, doneByOrganizer: false });
   }
-  const reads = await ctx.db
-    .query("rotaReads")
-    .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
-    .collect();
-  const done = reads.filter((r) => r.doneAt !== null).length;
+  const done = all.filter((r) => r.doneAt !== null).length + marked.length;
   const replies = [about(khatma, thanksText(done))];
   if (await completeIfDone(ctx, day._id)) {
     await celebrateIfComplete(ctx, day._id, participant._id);
@@ -170,7 +211,7 @@ async function answerTap(
   now: number,
 ): Promise<InboundResult> {
   const decoded = decodePayload(payload);
-  if (decoded === null || decoded.staging !== onStaging()) return NONE;
+  if (decoded === null || decoded.staging !== isStaging()) return NONE;
   const participantId = ctx.db.normalizeId(
     "rotaParticipants",
     decoded.participantId,
@@ -203,7 +244,9 @@ async function welcome(
  * A join message for a rota khatma, or null when this deployment has no such
  * khatma. An archived khatma only says it has ended. A listed phone joins (or rejoins
  * after «إيقاف»); any other phone files one open join request, and the
- * organizer is told once. A join never signs anyone in.
+ * organizer is told once. A blocked number gets no request and no reply, and
+ * a number declined in the last 7 days gets the reply but no new request.
+ * A join never signs anyone in.
  */
 async function join(
   ctx: MutationCtx,
@@ -225,13 +268,23 @@ async function join(
     .collect();
   const participant = rows.find(isActive);
   if (!participant) {
+    // A number an admin blocked asks nobody anything, and hears nothing back.
+    if (await isBlocked(ctx, args.phone)) return [];
     const requests = await ctx.db
       .query("rotaJoinRequests")
       .withIndex("by_khatma_phone", (q) =>
         q.eq("khatmaId", khatma._id).eq("phone", args.phone),
       )
       .collect();
-    if (!requests.some((r) => r.resolvedAt === null)) {
+    const waiting = requests.some((r) => r.resolvedAt === null);
+    // A request declined lately isn't filed (or told) again yet.
+    const declinedLately = requests.some(
+      (r) =>
+        r.outcome === "declined" &&
+        r.resolvedAt !== null &&
+        r.resolvedAt > args.now - DECLINED_COOLDOWN_MS,
+    );
+    if (!waiting && !declinedLately) {
       const profileName = args.profileName ? args.profileName : null;
       await ctx.db.insert("rotaJoinRequests", {
         khatmaId: khatma._id,
@@ -347,7 +400,8 @@ async function answerTyped(
   for (const participant of joined) {
     const day = await lastRotaDay(ctx, participant.khatmaId);
     if (!day || day.closedAt !== null) continue;
-    const reads = await readsOf(ctx, participant, day);
+    const { reading, handedOn } = await readsOf(ctx, participant, day);
+    const reads = [...reading, ...handedOn];
     if (reads.length === 0) continue;
     anyRead = true;
     if (!reads.some((r) => r.doneAt === null)) continue;
@@ -368,7 +422,7 @@ async function answerTyped(
       open.map(({ participant, day }, i) => ({
         id: encodePayload(
           { action, dayId: day._id, participantId: participant._id },
-          onStaging(),
+          isStaging(),
         ),
         title: buttonTitles[i]!,
       })),
@@ -390,13 +444,14 @@ export const hasParticipant = internalQuery({
 
 /**
  * One incoming WhatsApp message that no sign-in code took. Every message
- * first opens the phone's window and counts as a reply. Then, in order: a
+ * first counts as a reply from the phone's participants. Then, in order: a
  * button tap, a join message, and a typed reply from a phone with a rota
  * participant (a rota word from any of them; anything else only from a
  * joined one, and not when `mayBeSignIn`, so another deployment's sign-in
  * code is left for the relay). `none` means it isn't a rota message here (a
  * phone with no participant, or a join code or a tap this deployment
- * doesn't have).
+ * doesn't have). Last, the phone's 24-hour window opens if it is on a list
+ * or has a join request waiting.
  */
 export const handle = internalMutation({
   args: {
@@ -408,33 +463,60 @@ export const handle = internalMutation({
     now: v.number(),
   },
   handler: async (ctx, args): Promise<InboundResult> => {
-    const active = await recordReply(ctx, args.phone, args.now);
-    if (args.payload !== undefined) {
-      return await answerTap(ctx, args.phone, args.payload, args.now);
-    }
-    const code = findJoinCode(args.text);
-    if (code !== null) return (await join(ctx, args, code)) ?? NONE;
-    if (active.length === 0) {
-      // «إيقاف» from a number that only asked to join withdraws its requests.
-      if (classifyReply(args.text) !== "stop") return NONE;
-      return (await declineRequests(ctx, args.phone, args.now))
-        ? [reply(stopText)]
-        : NONE;
-    }
-    const joined = active.filter(hasJoined);
-    const word = classifyReply(args.text);
-    switch (word) {
-      case "stop":
-        return await stop(ctx, joined, args.now);
-      case "done":
-      case "notYet":
-        return await answerTyped(ctx, joined, word, args.now);
-      case "dua":
-        return [reply(duaText())];
-      case null:
-        return joined.length === 0 || args.mayBeSignIn
-          ? NONE
-          : [reply(helpText)];
-    }
+    const result = await route(ctx, args);
+    // After the message is handled, so a join request filed just now counts.
+    await openWindow(ctx, args.phone, args.now);
+    return result;
   },
 });
+
+/** Media from a rota phone: a reply like any other, with nothing to answer. */
+export const recordMedia = internalMutation({
+  args: { phone: v.string(), now: v.number() },
+  handler: async (ctx, args): Promise<void> => {
+    const active = await recordReply(ctx, args.phone, args.now);
+    if (active.length > 0) await openWindow(ctx, args.phone, args.now);
+  },
+});
+
+/** What `handle` does with the message, before the window opens. */
+async function route(
+  ctx: MutationCtx,
+  args: {
+    phone: string;
+    text: string;
+    payload?: string;
+    profileName?: string;
+    mayBeSignIn?: boolean;
+    now: number;
+  },
+): Promise<InboundResult> {
+  const active = await recordReply(ctx, args.phone, args.now);
+  if (args.payload !== undefined) {
+    return await answerTap(ctx, args.phone, args.payload, args.now);
+  }
+  const code = findJoinCode(args.text);
+  if (code !== null) return (await join(ctx, args, code)) ?? NONE;
+  if (active.length === 0) {
+    // «إيقاف» from a number that only asked to join withdraws its requests.
+    if (classifyReply(args.text) !== "stop") return NONE;
+    return (await declineRequests(ctx, args.phone, args.now))
+      ? [reply(stopText)]
+      : NONE;
+  }
+  const joined = active.filter(hasJoined);
+  const word = classifyReply(args.text);
+  switch (word) {
+    case "stop":
+      // Withdraws any join request too, so accepting one can't write to them.
+      await declineRequests(ctx, args.phone, args.now);
+      return await stop(ctx, joined, args.now);
+    case "done":
+    case "notYet":
+      return await answerTyped(ctx, joined, word, args.now);
+    case "dua":
+      return [reply(duaText())];
+    case null:
+      return joined.length === 0 || args.mayBeSignIn ? NONE : [reply(helpText)];
+  }
+}

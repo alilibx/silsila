@@ -11,10 +11,7 @@ import { NOTE_KINDS, type NoteKind } from "./lib/noteText";
 import { quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
 import { NOTE_TEMPLATES, noteTemplate } from "./lib/whatsappTemplates";
-import { sendWhatsAppTemplate, siteUrl } from "./whatsapp";
-
-// Convex provides `process.env`; the project doesn't pull in @types/node.
-declare const process: { env: Record<string, string | undefined> };
+import { isDev, isStaging, sendWhatsAppTemplate, siteUrl } from "./whatsapp";
 
 type Khatma = Pick<Doc<"khatmas">, "name" | "createdAt" | "inviteCode">;
 
@@ -125,8 +122,7 @@ export const sampleTarget = internalQuery({
 export const sendSample = internalAction({
   args: { phone: v.string(), kind: v.string(), many: v.optional(v.boolean()) },
   handler: async (ctx, args): Promise<boolean> => {
-    const deployment = process.env.WIRDAK_ENV;
-    if (deployment !== "dev" && deployment !== "staging") {
+    if (!isDev() && !isStaging()) {
       throw new Error("sendSample runs only when WIRDAK_ENV is dev or staging");
     }
     if (!(NOTE_KINDS as readonly string[]).includes(args.kind)) {

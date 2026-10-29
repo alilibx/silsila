@@ -18,11 +18,13 @@ import {
   isValidReadingDays,
   messageTimesError,
   nextReadingDates,
+  readingDaysKind,
   readingDaysValidator,
   rotaMessagesValidator,
   ROTA_SIZE,
   slotFor,
   type ReadingDays,
+  type ReadingDaysKind,
   type RotaMessages,
 } from "./lib/rota";
 import {
@@ -349,6 +351,8 @@ type PersonState = {
 type PeopleView = {
   /** The khatma's title, as the join message names it. */
   title: string;
+  /** How often the khatma is read, as the share message says it. */
+  daysKind: ReadingDaysKind;
   /** The wa.me link members tap to join; null until the khatma has a join code. */
   joinLink: string | null;
   /** Numbers that sent the join code and wait for the organizer's answer. */
@@ -396,6 +400,7 @@ export const people = sessionQuery({
     const found = await organizerOf(ctx, args.inviteCode, ctx.person);
     if (!found || found.khatma.kind !== "rota") return null;
     const { person, khatma } = found;
+    if (!khatma.rota) return null;
     const target = await targetDay(ctx, khatma);
     const byJuz = await slotRowsByJuz(ctx, khatma._id, target.number);
     const participants = (
@@ -429,6 +434,7 @@ export const people = sessionQuery({
     ).sort((a, b) => a.createdAt - b.createdAt);
     return {
       title: khatmaTitle(khatma),
+      daysKind: readingDaysKind(khatma.rota.days),
       joinLink: khatmaJoinLink(khatma, env("WHATSAPP_PUBLIC_NUMBER")),
       requests: requests.map((r) => ({
         id: r._id,
@@ -709,6 +715,21 @@ export const ensureJoinLink = sessionMutation({
   },
 });
 
+/** The welcome for a member accepted from a join request: they were told the organizer would let them know. */
+function welcomeRow(
+  khatmaId: Id<"khatmas">,
+  participantId: Id<"rotaParticipants">,
+) {
+  return {
+    khatmaId,
+    participantId,
+    dayId: null,
+    kind: "welcome" as const,
+    juz: [],
+    number: null,
+  };
+}
+
 /** An open join request of this khatma, or null. */
 async function openRequest(
   ctx: QueryCtx,
@@ -723,8 +744,10 @@ async function openRequest(
 
 /**
  * Accepts a join request: the number becomes a participant on that juz' of the
- * next day to start, already joined (their join message was the opt-in). If the
- * number was added meanwhile, the request is closed and linked to that person.
+ * next day to start, already joined (their join message was the opt-in), and
+ * is welcomed. If the number was added meanwhile, the request is closed, that
+ * person counts as joined and is welcomed. A number that sent «إيقاف» after
+ * asking withdrew the request: it is declined, and `not_found`.
  */
 export const acceptJoinRequest = sessionMutation({
   args: {
@@ -743,6 +766,16 @@ export const acceptJoinRequest = sessionMutation({
     const request = await openRequest(ctx, khatma._id, args.requestId);
     if (!request) return { error: "not_found" };
     const now = Date.now();
+    const stoppedSince = (
+      await ctx.db
+        .query("rotaParticipants")
+        .withIndex("by_phone", (q) => q.eq("phone", request.phone))
+        .collect()
+    ).some((p) => p.stoppedAt != null && p.stoppedAt >= request.createdAt);
+    if (stoppedSince) {
+      await ctx.db.patch(request._id, { resolvedAt: now, outcome: "declined" });
+      return { error: "not_found" };
+    }
     const existing = (
       await ctx.db
         .query("rotaParticipants")
@@ -756,6 +789,7 @@ export const acceptJoinRequest = sessionMutation({
         await ctx.db.patch(existing._id, { joinedAt: now });
       }
       await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
+      await enqueue(ctx, welcomeRow(khatma._id, existing._id));
       return { error: "already_added" };
     }
 
@@ -779,15 +813,7 @@ export const acceptJoinRequest = sessionMutation({
       return { error: "juz_taken" };
     }
     await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
-    // The member was told the organizer would let them know.
-    await enqueue(ctx, {
-      khatmaId: khatma._id,
-      participantId: placed.participantId,
-      dayId: null,
-      kind: "welcome",
-      juz: [],
-      number: null,
-    });
+    await enqueue(ctx, welcomeRow(khatma._id, placed.participantId));
     return { ok: true, participantId: placed.participantId };
   },
 });
@@ -1017,15 +1043,23 @@ export const markDone = sessionMutation({
   ): Promise<
     { ok: true; completed: boolean } | { error: "not_found" | "closed" }
   > => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const { person, khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
     const found = await readOf(ctx, khatma, args.readId);
     if (!found) return { error: "not_found" };
     if (found.day.closedAt !== null) return { error: "closed" };
+    const now = Date.now();
     if (found.read.doneAt === null) {
       await ctx.db.patch(found.read._id, {
-        doneAt: Date.now(),
+        doneAt: now,
         doneByOrganizer: true,
       });
+    }
+    // The organizer marking their own juz' is their reply: they never go silent.
+    for (const id of new Set([found.read.readerId, found.read.holderId])) {
+      const own = id ? await ctx.db.get(id) : null;
+      if (own?.personId === person._id) {
+        await ctx.db.patch(own._id, { lastReplyAt: now, silentDays: 0 });
+      }
     }
     const completed = await completeIfDone(ctx, found.day._id);
     if (completed) await celebrateIfComplete(ctx, found.day._id);

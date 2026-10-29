@@ -249,7 +249,7 @@ export default defineSchema({
     doneAt: nullableNumber,
     doneByOrganizer: v.boolean(),
     reassignedAt: nullableNumber,
-    /** The reader answered «لم أقرأ بعد»; missing means no. */
+    /** The reader answered «ليس بعد»; missing means no. */
     notYetAt: v.optional(nullableNumber),
   })
     .index("by_day_juz", ["dayId", "juz"])
@@ -268,11 +268,16 @@ export default defineSchema({
     .index("by_khatma_phone", ["khatmaId", "phone"])
     .index("by_phone", ["phone"]),
 
-  /** The last message each phone sent us: its 24-hour WhatsApp window. */
+  /**
+   * The last message each rota phone sent us: its 24-hour WhatsApp window.
+   * Only phones on a rota list or with a join request; purged once closed.
+   */
   waContacts: defineTable({
     phone: v.string(), // E.164
     lastInboundAt: v.number(),
-  }).index("by_phone", ["phone"]),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_lastInboundAt", ["lastInboundAt"]),
 
   /** A message to a rota participant, queued for the sender to deliver. */
   rotaOutbox: defineTable({

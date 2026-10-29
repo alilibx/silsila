@@ -161,16 +161,20 @@ export function clockText(minutes: number): string {
 
 /**
  * The reply to the member's join message. `next` holds the weekday and the
- * time of their next juz' message, already formatted, or null with no day
- * ahead to promise.
+ * time of their next juz' message, already formatted; `notStarted` while the
+ * organizer is still setting the khatma up, so no day can be promised yet; or
+ * null with no day ahead to promise.
  */
 export function welcomeText(
   name: string,
   title: string,
-  next: { weekday: string; time: string } | null,
+  next: { weekday: string; time: string } | "notStarted" | null,
 ): string {
   const joined = `أهلاً ${name}، انضممت إلى ${title}.`;
   if (next === null) return joined;
+  if (next === "notStarted") {
+    return `${joined} تصلك رسالة جزئك حين يبدأ المنظّم الختمة.`;
+  }
   return `${joined} تصلك رسالة جزئك يوم ${next.weekday} الساعة ${next.time}.`;
 }
 
@@ -206,6 +210,9 @@ export function manyKhatmasText(titles: string[]): string {
 }
 /** A join message for an archived khatma. */
 export const endedText = "انتهت هذه الختمة.";
+/** A join message whose code no khatma has, here or on staging. */
+export const unknownJoinText =
+  "لم نجد هذه الختمة. تأكّد من الرابط مع منظّم الختمة.";
 
 /** Both duas of the khatm, each followed by its reference. */
 export function duaText(): string {

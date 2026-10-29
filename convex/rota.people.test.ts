@@ -491,6 +491,24 @@ function participantRow(t: T, id: Id<"rotaParticipants">) {
   return t.run((ctx) => ctx.db.get(id));
 }
 
+test("people says how often the khatma is read, for the share message", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  expect((await people(t, s))?.daysKind).toBe("weekly");
+  const khatma = await khatmaOf(t, s);
+  const kindFor = async (days: NonNullable<typeof khatma.rota>["days"]) => {
+    await t.run((ctx) =>
+      ctx.db.patch(khatma._id, { rota: { ...khatma.rota!, days } }),
+    );
+    return (await people(t, s))?.daysKind;
+  };
+  expect(await kindFor({ kind: "daily" })).toBe("daily");
+  expect(
+    await kindFor({ kind: "weekly", weekdays: [1, 5], everyWeeks: 2 }),
+  ).toBe("biweekly");
+  expect(await kindFor({ kind: "monthly", days: [1] })).toBe("monthly");
+});
+
 test("people has the join link built from the code and the public number", async () => {
   vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", PUBLIC_NUMBER);
   const t = convexTest(schema, modules);
@@ -744,6 +762,33 @@ test("accepting a number that became a participant meanwhile closes the request 
   const view = await people(t, s);
   expect(view?.participants).toHaveLength(2);
   expect(view?.requests).toEqual([]);
+  // they asked to hear from the khatma, so they get the welcome too
+  const outbox = await t.run((ctx) => ctx.db.query("rotaOutbox").collect());
+  expect(outbox.map((r) => [r.participantId, r.kind])).toEqual([
+    [added, "welcome"],
+  ]);
+});
+
+test("accepting a request from a number that sent «إيقاف» after asking is not_found and adds nobody", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const other = await setup(t);
+  // listed in another khatma, where they stopped the messages after asking here
+  const theirs = participantId(await add(t, other, { phone: "+971501112233" }));
+  const id = await request(t, s);
+  await t.run((ctx) => ctx.db.patch(theirs, { stoppedAt: NOW - 10 }));
+  expect(await accept(t, s, id, 9)).toEqual({ error: "not_found" });
+  expect((await people(t, s))?.participants).toHaveLength(1);
+  expect(await t.run((ctx) => ctx.db.query("rotaOutbox").collect())).toEqual(
+    [],
+  );
+  expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
+    outcome: "declined",
+  });
+
+  // A join request sent after the stop is a new opt-in, and can be accepted.
+  const later = await request(t, s, { createdAt: NOW - 5 });
+  expect(await accept(t, s, later, 9)).toMatchObject({ ok: true });
 });
 
 test("declining closes the request without adding anyone", async () => {
