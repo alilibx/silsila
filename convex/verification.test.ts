@@ -163,6 +163,24 @@ function otherPin(pin: string) {
   return String((Number(pin) + 1) % 1_000_000).padStart(6, "0");
 }
 
+test("a button tap never matches a pending sign-in code, whatever its title says", async () => {
+  const t = convexTest(schema, modules);
+  await addPerson(t);
+  const v = await start(t);
+  await t.action(internal.whatsapp.handleIncoming, {
+    waMessageId: "wamid.tap",
+    from: PHONE,
+    text: v.message,
+    payload: "r1|p|done|d1|p1",
+  });
+  expect((await status(t, v)).status).toBe("pending");
+  expect(sent).toEqual([]);
+
+  // the same text typed is a sign-in message and matches
+  await send(t, v.message);
+  expect((await status(t, v)).status).not.toBe("pending");
+});
+
 test("start over HTTP returns a formatted code and the ready-made message", async () => {
   const t = convexTest(schema, modules);
   const res = await t.fetch("/api/verification/start", {

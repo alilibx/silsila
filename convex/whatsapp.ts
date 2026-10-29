@@ -6,6 +6,7 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
+import { cleanKhatmaName } from "./lib/text";
 import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
 
 // ---------------------------------------------------------------------------
@@ -204,8 +205,6 @@ export const MAX_SCANNED_TEXT = 500;
 
 /** A button payload is at most this long (Meta allows 256). */
 const MAX_PAYLOAD = 256;
-/** The sender's WhatsApp profile name is kept to this many characters. */
-const MAX_PROFILE_NAME = 60;
 
 export type IncomingMessage = {
   waMessageId: string;
@@ -272,11 +271,18 @@ function payloadOf(
     : null;
 }
 
-/** A profile name cut to length, or `undefined` when there is none. */
+/**
+ * A profile name as `cleanKhatmaName` cleans it (control and bidi characters
+ * out, 60 code points, a letter or digit left), or `undefined` when there is none.
+ */
 function cleanProfileName(name: unknown): string | undefined {
   if (typeof name !== "string") return undefined;
-  const cut = name.trim().slice(0, MAX_PROFILE_NAME).trim();
-  return cut === "" ? undefined : cut;
+  return cleanKhatmaName(name) ?? undefined;
+}
+
+/** `s` cut to `max` code points, so a cut never leaves half a surrogate pair. */
+function cutCodePoints(s: string, max: number): string {
+  return Array.from(s).slice(0, max).join("");
 }
 
 /** The profile names in `value.contacts`, by `wa_id`. */
@@ -584,8 +590,8 @@ export async function sendWhatsAppButtons(
         buttons: buttons.slice(0, MAX_REPLY_BUTTONS).map((b) => ({
           type: "reply",
           reply: {
-            id: b.id.slice(0, MAX_PAYLOAD),
-            title: b.title.slice(0, MAX_BUTTON_TITLE),
+            id: cutCodePoints(b.id, MAX_PAYLOAD),
+            title: cutCodePoints(b.title, MAX_BUTTON_TITLE),
           },
         })),
       },
@@ -716,6 +722,9 @@ export async function takeIncoming(
     waMessageId: message.waMessageId,
   });
   if (!fresh) return "taken";
+  // A button tap is never a sign-in message, however its title reads. Nothing
+  // answers it here; the rota reply routing takes it from this point.
+  if (message.payload !== undefined) return "taken";
 
   const phone = `+${message.from}`;
   // Generated here (never in a mutation); used only if the number already
@@ -751,8 +760,6 @@ export const handleIncoming = internalAction({
     profileName: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<void> => {
-    // A button tap is no sign-in message: nothing here answers it.
-    if (args.payload !== undefined) return;
     const outcome = await takeIncoming(ctx, args);
     if (outcome === "taken") return;
     // A code we don't have may have been started on staging.

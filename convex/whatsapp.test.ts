@@ -257,6 +257,37 @@ test("parseIncoming reads button taps and the sender's profile name", () => {
   expect("payload" in text!).toBe(false);
 });
 
+/** A UTF-16 surrogate with no partner: Convex refuses it in an argument. */
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+test("profile names lose control and bidi characters and are cut by code point", () => {
+  const name = (profileName: string) =>
+    parseIncoming(
+      webhook(
+        [
+          {
+            from: "971501234567",
+            id: "wamid.n",
+            type: "text",
+            text: { body: "hi" },
+          },
+        ],
+        {
+          contacts: [{ wa_id: "971501234567", profile: { name: profileName } }],
+        },
+      ),
+    )[0]!.profileName;
+  expect(name("\u202Eعلي\u202C\u0007  أحمد")).toBe("علي أحمد");
+  // an emoji straddling the cut is dropped whole, never split
+  const cut = name("ا".repeat(59) + "😀😀");
+  expect(cut).toBe("ا".repeat(59) + "😀");
+  expect(cut).not.toMatch(LONE_SURROGATE);
+  // nothing readable left: no name
+  expect(name("\u202E\u200B  ")).toBeUndefined();
+  expect(name("😀")).toBeUndefined();
+});
+
 test("parseRelayed carries the payload and profile name", () => {
   const relayed = {
     waMessageId: "wamid.btn",
@@ -523,6 +554,18 @@ test("sendWhatsAppButtons posts an interactive reply-buttons message", async () 
   expect(describeMessage(payloads[0])).toBe(
     `هل أتممت وردك؟\n[تمّ] r1|p|done|d1|p1\n[ليس بعد] r1|p|notYet|d1|p1\n[${"ن".repeat(20)}] c`,
   );
+});
+
+test("sendWhatsAppButtons cuts titles by code point", async () => {
+  await sendWhatsAppButtons("+971501234567", "x", [
+    { id: "a", title: "ن".repeat(19) + "😀😀" },
+  ]);
+  const interactive = payloads[0]!.interactive as {
+    action: { buttons: { reply: { title: string } }[] };
+  };
+  const title = interactive.action.buttons[0]!.reply.title;
+  expect(title).toBe("ن".repeat(19) + "😀");
+  expect(title).not.toMatch(LONE_SURROGATE);
 });
 
 test("sendWhatsAppTemplate leaves out empty components", async () => {
@@ -941,6 +984,40 @@ test("relay endpoint is closed on a deployment Meta calls", async () => {
   expect(
     await t.run((ctx) => ctx.db.query("inboundMessages").collect()),
   ).toEqual([]);
+});
+
+test("relay endpoint never matches a button tap to a sign-in code", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  await t.run((ctx) =>
+    ctx.db.insert("verifications", {
+      codeNormalized: "ZZZZ2222ZZ",
+      secretHash: "hash",
+      displayName: "علي",
+      status: "pending",
+      pinAttempts: 0,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 600_000,
+    }),
+  );
+  // a tap whose title holds a valid pending code
+  const res = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, payload: "r1|s|done|d1|p1" }),
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ handled: true });
+  expect(sent).toEqual([]);
+  const rows = await t.run((ctx) => ctx.db.query("verifications").collect());
+  expect(rows.map((r) => r.status)).toEqual(["pending"]);
+
+  // the same text without a payload is a sign-in message and matches
+  const typed = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, waMessageId: "wamid.r2" }),
+  );
+  expect(await typed.json()).toEqual({ handled: true });
+  expect(sent).toHaveLength(1);
 });
 
 test("relay endpoint rejects malformed messages", async () => {

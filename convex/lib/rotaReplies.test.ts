@@ -11,6 +11,11 @@ test("done phrases", () => {
     "قرأت",
     "قرأته",
     "الحمد لله تم",
+    "تم الحمد لله",
+    "تم بحمد الله",
+    "تم والحمد لله",
+    "قرأت الحمد لله",
+    "تم ✅",
     "done",
     "✅",
     "👍",
@@ -61,11 +66,17 @@ test("diacritics, tatweel, alef forms, ta marbuta, case and spacing don't matter
   expect(classifyReply("✅️")).toBe("done");
 });
 
-test("done and stop count as the first word of a longer text", () => {
-  expect(classifyReply("تم والحمد لله")).toBe("done");
-  expect(classifyReply("done thanks")).toBe("done");
+test("stop counts as the first word of a longer text, done does not", () => {
   expect(classifyReply("stop please")).toBe("stop");
   expect(classifyReply("إيقاف الرسائل")).toBe("stop");
+  expect(classifyReply("تم نقل الموعد")).toBeNull();
+  expect(classifyReply("قرأت الرسالة لكن")).toBeNull();
+  expect(classifyReply("done thanks")).toBeNull();
+});
+
+test("punctuation is dropped before the ta marbuta rule", () => {
+  expect(classifyReply("قرأتة!")).toBe("done");
+  expect(classifyReply("تم، والحمد لله.")).toBe("done");
 });
 
 test("not-yet and dua need the whole text", () => {

@@ -23,23 +23,28 @@ export function joinText(title: string, code: string): string {
 /**
  * The join code in an incoming message, or null. The text must hold «انضمام»
  * and a 6-symbol token of the code alphabet (case and digit script ignored).
- * The last such token wins: `joinText` ends with the code, and a Latin title
- * can look like one.
+ * `joinText` puts the code right after the last «·», so that token is the
+ * code, whatever follows it (a Latin title can look like a code, too). With no
+ * «·», the last such token wins.
  */
 export function findJoinCode(text: string): string | null {
   const plain = normalizeDigits(text).replace(DIACRITICS_AND_TATWEEL, "");
   if (!plain.includes(JOIN_WORD)) return null;
-  const tokens = plain.toUpperCase().split(/[^A-Z0-9]+/);
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    const token = tokens[i]!;
-    if (
-      token.length === JOIN_CODE_LENGTH &&
-      [...token].every((ch) => CODE_ALPHABET.includes(ch))
-    ) {
-      return token;
-    }
-  }
-  return null;
+  const dot = plain.lastIndexOf("·");
+  const tokens = (dot === -1 ? plain : plain.slice(dot + 1))
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((token) => token !== "");
+  if (dot !== -1) return isJoinCode(tokens[0]) ? tokens[0]! : null;
+  return tokens.findLast(isJoinCode) ?? null;
+}
+
+function isJoinCode(token: string | undefined): boolean {
+  return (
+    token !== undefined &&
+    token.length === JOIN_CODE_LENGTH &&
+    [...token].every((ch) => CODE_ALPHABET.includes(ch))
+  );
 }
 
 /** A wa.me link that opens a chat with the join message already typed. */
