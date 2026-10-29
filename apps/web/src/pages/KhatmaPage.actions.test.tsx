@@ -1,7 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
-import { Link, MemoryRouter, Route, Routes } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HoldView, KhatmaView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
@@ -211,6 +211,14 @@ describe("take", () => {
     );
   });
 
+  it("puts focus on the جزئي tab after a take from الأجزاء", async () => {
+    m.take.mockResolvedValue({ ok: true });
+    const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=pool");
+    await user.click(screen.getByRole("button", { name: /^الجزء ٥،/ }));
+    await user.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
+    expect(screen.getByRole("tab", { name: t.nav.tabs.mine })).toHaveFocus();
+  });
+
   it("stays on the pool tab when the take fails", async () => {
     m.take.mockResolvedValue({ ok: false, reason: "taken" });
     const { user } = setup(makeView({ me: signedIn() }), "/j/CODE?tab=pool");
@@ -297,6 +305,36 @@ describe("take", () => {
     expect(m.take).toHaveBeenCalledTimes(1);
     await act(async () => finish({ ok: true }));
     expect(toast()).toHaveTextContent("لك الآن");
+  });
+
+  it("a take that lands after leaving the khatma does not pull the person back", async () => {
+    let finish!: (v: { ok: true }) => void;
+    m.take.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    m.query.mockReturnValue(makeView({ me: signedIn() }));
+    const raw = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    function Where() {
+      const { pathname, search } = useLocation();
+      return <output data-testid="where">{pathname + search}</output>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/j/CODE?tab=pool"]}>
+        <Link to="/j/OTHER">other khatma</Link>
+        <Where />
+        <Routes>
+          <Route path="/j/:inviteCode" element={<KhatmaRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await raw.click(screen.getByRole("button", { name: /^الجزء ٩،/ }));
+    await raw.click(screen.getByRole("button", { name: "نعم، هذا جزئي" }));
+    await raw.click(screen.getByRole("link", { name: "other khatma" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("/j/OTHER");
+    await act(async () => finish({ ok: true }));
+    expect(screen.getByTestId("where")).toHaveTextContent("/j/OTHER");
   });
 });
 

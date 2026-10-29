@@ -3,7 +3,7 @@ import type { KhatmaView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
 import { NoteCard, takeTarget } from "../components/NoteCard";
@@ -64,9 +64,30 @@ export function KhatmaPage() {
     inviteCode,
     ...(from ? { from } : {}),
   });
+  // Tab ids live here so a tab change the page makes can move focus to the new tab.
+  const tabIds = useId();
+  const [focusTab, setFocusTab] = useState<KhatmaTab | null>(null);
+  // A tab change from inside a panel unmounts the control that had focus. Put focus on the newly
+  // selected tab, unless something else (a sheet that just opened) has already taken it.
+  useEffect(() => {
+    // The tab comes from the URL, which can update a render after this request.
+    if (focusTab === null || focusTab !== tab) return;
+    const el = document.getElementById(`${tabIds}-tab-${focusTab}`);
+    if (!el) return;
+    setFocusTab(null);
+    if (
+      document.activeElement === null ||
+      document.activeElement === document.body
+    )
+      el.focus();
+  });
+  const showTab = (next: KhatmaTab) => {
+    setTab(next);
+    setFocusTab(next);
+  };
   // A confirmed take shows the person their juz' card, which lives on the mine tab.
   const actions = useKhatmaActions(view, inviteCode, {
-    onTaken: () => setTab("mine"),
+    onTaken: () => showTab("mine"),
   });
   const { sheet, busy } = actions;
   const share = useShareSheet();
@@ -123,7 +144,9 @@ export function KhatmaPage() {
           notes={notes ?? []}
           inviteCode={inviteCode}
           tab={tab}
+          tabIds={tabIds}
           onTab={setTab}
+          onShowTab={showTab}
           onSwitch={
             mine !== undefined && mine.length >= 2
               ? () => setSwitching(true)
@@ -211,7 +234,11 @@ type ContentProps = {
   notes: NoteView[];
   inviteCode: string;
   tab: KhatmaTab;
+  /** The prefix of the tab and panel ids. */
+  tabIds: string;
   onTab: (tab: KhatmaTab) => void;
+  /** Selects a tab from inside a panel and moves focus to it. */
+  onShowTab: (tab: KhatmaTab) => void;
   /** Opens the switch-khatma sheet; `null` hides the button (fewer than two khatmas). */
   onSwitch: (() => void) | null;
   busy: boolean;
@@ -313,7 +340,9 @@ function MemberContent({
   notes,
   inviteCode,
   tab,
+  tabIds: ids,
   onTab,
+  onShowTab,
   onSwitch,
   busy,
   onTake,
@@ -326,8 +355,6 @@ function MemberContent({
   onRemind,
   hasOpen,
 }: ContentProps) {
-  const ids = useId();
-
   return (
     <main className="mx-auto max-w-xl p-5">
       <header className="mb-3.5">
@@ -407,7 +434,7 @@ function MemberContent({
               onFinish={onFinish}
               onRelease={onRelease}
               onStillReading={onStillReading}
-              onPickYourself={() => onTab("pool")}
+              onPickYourself={() => onShowTab("pool")}
               busy={busy}
             />
           </>

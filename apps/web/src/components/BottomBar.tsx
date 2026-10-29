@@ -64,7 +64,7 @@ const ICONS: Record<Item, ReactNode> = {
 export function BottomBar() {
   const sessionToken = useSessionToken();
   const me = useQuery(api.sessions.me, { sessionToken });
-  const mine = useQuery(api.khatmas.mine, { sessionToken });
+  const mine = useQuery(api.khatmas.mine, me ? { sessionToken } : "skip");
   // A stored token the server answers as signed out is dead. Clearing it here covers every page,
   // including /new, which would otherwise hide its back link and show no bar either.
   useClearDeadToken(sessionToken, me === null);
@@ -106,7 +106,8 @@ function Bar({ children }: { children: ReactNode }) {
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(measure);
-    observer?.observe(nav);
+    // The border box includes the safe-area padding, which changes when an iPhone rotates.
+    observer?.observe(nav, { box: "border-box" });
     measure();
     return () => {
       observer?.disconnect();
@@ -138,11 +139,13 @@ function BarLink({
   dot?: boolean;
   children: string;
 }) {
+  const { pathname } = useLocation();
   const isActive = active === item;
   return (
     <Link
       to={to}
-      aria-current={isActive ? "page" : undefined}
+      // On a khatma, the home link is the section but leads elsewhere: current, not this page.
+      aria-current={isActive ? (pathname === to ? "page" : "true") : undefined}
       aria-label={
         dot
           ? `${children}${t.common.listSeparator}${t.notes.newMessage}`

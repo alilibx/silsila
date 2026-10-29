@@ -454,6 +454,15 @@ describe("KhatmaPage", () => {
       expect(grid()).toBeInTheDocument();
     });
 
+    it("اختر بنفسك puts focus on the الأجزاء tab, not the top of the page", async () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE");
+      await userEvent.click(
+        screen.getByRole("button", { name: t.card.pickYourself }),
+      );
+      expect(tab(t.nav.tabs.pool)).toHaveFocus();
+    });
+
     const cards = [
       {
         inviteCode: "CODE",

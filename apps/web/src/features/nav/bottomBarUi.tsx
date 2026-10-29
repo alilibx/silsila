@@ -2,7 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -34,7 +34,8 @@ export function useBottomBarHidden(): boolean {
 export function useHideBottomBar(): void {
   // Only the stable setter: depending on the whole context would re-run on every change.
   const setHidden = useContext(Ctx)?.setHidden;
-  useEffect(() => {
+  // A layout effect hides the bar before the screen first paints, so it never flashes over it.
+  useLayoutEffect(() => {
     if (!setHidden) return;
     setHidden(true);
     return () => setHidden(false);
