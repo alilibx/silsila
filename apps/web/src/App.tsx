@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router";
+import { Route, Routes, useLocation } from "react-router";
 import { HandoffGate } from "./features/handoff/HandoffGate";
 import { useHandoffManifest } from "./features/handoff/useHandoffManifest";
 import { HelpButton } from "./features/help/HelpButton";
@@ -9,6 +9,7 @@ import { useHelpDeepLink } from "./features/help/useHelpDeepLink";
 import { OpenInBrowser } from "./features/status/OpenInBrowser";
 import { StatusBanners } from "./features/status/StatusBanners";
 import { BottomBar } from "./components/BottomBar";
+import { RetryBoundary } from "./components/RetryBoundary";
 import { useTouch } from "./lib/useTouch";
 import { CreatePage } from "./pages/CreatePage";
 import { HomePage } from "./pages/HomePage";
@@ -28,24 +29,35 @@ export function App() {
   useTouch();
   useHandoffManifest();
   useClaimVisitorHelp();
+  // A failed query retries inside its own part of the screen; a new page starts over.
+  const { pathname } = useLocation();
   return (
     <HandoffGate>
       <HelpProvider>
         <BottomBarProvider>
-          <StatusBanners />
+          <RetryBoundary resetKey={pathname} quiet>
+            <StatusBanners />
+          </RetryBoundary>
           <OpenInBrowser />
           <HelpButton />
           <HelpDeepLink />
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/new" element={<CreatePage />} />
-            <Route path="/j/:inviteCode" element={<KhatmaRoute />} />
-            <Route path="/j/:inviteCode/settings" element={<OrganizerPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/signout" element={<SignOutPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-          <BottomBar />
+          <RetryBoundary resetKey={pathname}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/new" element={<CreatePage />} />
+              <Route path="/j/:inviteCode" element={<KhatmaRoute />} />
+              <Route
+                path="/j/:inviteCode/settings"
+                element={<OrganizerPage />}
+              />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/signout" element={<SignOutPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </RetryBoundary>
+          <RetryBoundary resetKey={pathname} quiet>
+            <BottomBar />
+          </RetryBoundary>
         </BottomBarProvider>
       </HelpProvider>
     </HandoffGate>
