@@ -1,0 +1,38 @@
+name: Report a bug
+description: Something in the website, the admin app, or the docs that doesn't work as it should.
+title: "<what's wrong>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security issues go through [private reporting](https://github.com/alilibx/wirdak/security/advisories/new) instead. Don't include phone numbers, invite links, or session tokens.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - The website (wirdak.app)
+        - The admin app
+        - WhatsApp verification or messages
+        - Notifications (push or WhatsApp)
+        - Local development, tests, or the docs
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The steps, one per line. For development issues, the commands and their output.
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      description: For example "iPhone 15, iOS 26, Safari, added to the home screen" or "Android 16, Chrome".
