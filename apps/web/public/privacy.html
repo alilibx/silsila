@@ -196,10 +196,12 @@
             شركة Meta ما فيها ورقم المشارك لتوصيلها.
           </li>
           <li>
-            نسجّل وقت آخر رسالة وصلتنا من كل رقم في ختمة بالتناوب، لنعرف هل يجوز
-            أن نردّ عليه برسالة عادية (يسمح واتساب بذلك خلال ٢٤ ساعة من رسالته)،
-            وهل انقطع المشارك عن الردّ فنوقف رسائله. نحذف وقت آخر رسالة من الرقم
-            بعد ٢٤ ساعة، ونُبقي وقت آخر ردّ للمشارك ما دام في الختمة.
+            نسجّل وقت آخر رسالة وصلتنا من كل رقم في ختمة بالتناوب، ومن كل رقم له
+            طلب انضمام معلّق، لنعرف هل يجوز أن نردّ عليه برسالة عادية (يسمح
+            واتساب بذلك خلال ٢٤ ساعة من رسالته)، وهل انقطع المشارك عن الردّ
+            فنوقف رسائله. نُبقي سجلّ نافذة الـ٢٤ ساعة يوماً واحداً على الأكثر،
+            ويبقى وقت آخر ردّ للمشارك مع سجلّه في الختمة، حتى بعد إزالته منها،
+            إلى أن تُحذف الختمة.
           </li>
           <li>
             إن أرسل أحدٌ رسالة الانضمام ولم يكن في قائمة الختمة، حفظنا رقمه واسم
@@ -227,7 +229,12 @@
 
         <h2>من يرى بياناتك</h2>
         <ul>
-          <li>رقم هاتفك لا يراه أحد غيرك، وتراه أنت مخفياً في معظمه.</li>
+          <li>
+            رقم هاتفك لا يراه أحد غيرك، وتراه أنت مخفياً في معظمه. والاستثناء
+            الختمة بالتناوب: يرى منظّمها الأرقام التي أدخلها بنفسه، والرقم
+            كاملاً لكل من قبله من طلب انضمام. ويرى مشرفو وِردك هذه الأرقام حين
+            يساعدونك.
+          </li>
           <li>
             اسمك يراه أعضاء الختمة ومن يفتح رابطها، بجانب الجزء الذي تقرؤه الآن.
             وإن كنت صاحب الدعوة، يظهر اسمك في معاينة الرابط حين يُشارَك. منظّم
@@ -247,7 +254,8 @@
         <ul>
           <li>
             <span class="ltr">Meta</span> (واتساب): لاستقبال رسائل التحقق وإرسال
-            رموز الدخول والتنبيهات، وتنبيهات الختمات لمن فعّلها.
+            رموز الدخول والتنبيهات، وتنبيهات الختمات لمن فعّلها، ورسائل الختمة
+            بالتناوب: الجزء والتذكير وإعادة الإسناد والختم والدعاء وردودنا.
           </li>
           <li>
             <span class="ltr">Convex</span>: قاعدة البيانات والخادم، في أيرلندا.
@@ -396,12 +404,14 @@
             participant's number, in order to deliver them.
           </li>
           <li>
-            We record when each number in a rotating khatma last wrote to us, to
-            know whether we may reply with an ordinary message (WhatsApp allows
-            that within 24 hours of their message) and whether a participant has
-            stopped replying, so we stop messaging them. We delete when a number
-            last wrote after 24 hours, and keep when a participant last replied
-            while they are in the khatma.
+            We record when each number in a rotating khatma last wrote to us, and
+            each number with a pending join request, to know whether we may
+            reply with an ordinary message (WhatsApp allows that within 24 hours
+            of their message) and whether a participant has stopped replying, so
+            we stop messaging them. We keep the 24-hour window record for at most
+            a day, and the time a participant last replied stays with their
+            entry in the khatma, even after they are removed, until the khatma is
+            deleted.
           </li>
           <li>
             If someone sends a khatma's join message without being on its list,
@@ -433,7 +443,13 @@
 
         <h2>Who sees your data</h2>
         <ul>
-          <li>Nobody else sees your phone number. You see it partly masked.</li>
+          <li>
+            Nobody else sees your phone number. You see it partly masked. The
+            exception is a rotating khatma: its organizer sees the numbers they
+            entered themselves, and the full number of anyone they accepted from
+            a join request. Wirdak's admins can see these numbers when they help
+            you.
+          </li>
           <li>
             Members of a khatma, and anyone who opens its link, see your name
             next to the juz' you're reading now. If you sent the invite, your
@@ -454,8 +470,9 @@
         <ul>
           <li>
             Meta (WhatsApp): receiving verification messages, sending sign-in
-            codes and alerts, and sending khatma alerts to people who turn them
-            on.
+            codes and alerts, sending khatma alerts to people who turn them on,
+            and delivering the rotating khatma messages: the juz', reminders,
+            reassignment and completion messages, the dua, and our replies.
           </li>
           <li>Convex: database and server, in Ireland.</li>
           <li>Vercel: website hosting.</li>

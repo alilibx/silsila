@@ -111,3 +111,60 @@ describe("privacy policy: rotating khatma messages", () => {
     }
   });
 });
+
+describe("privacy policy: rotating khatma disclosures", () => {
+  const html = readFileSync(join(WEB, "public", "privacy.html"), "utf8");
+  const flat = (heading: string) =>
+    section(html, heading).replace(/\s+/g, " ");
+
+  it("says who sees phone numbers, with the rotating khatma exception", () => {
+    const ar = flat("من يرى بياناتك");
+    for (const words of [
+      "والاستثناء الختمة بالتناوب",
+      "الأرقام التي أدخلها بنفسه",
+      "الرقم كاملاً لكل من قبله من طلب انضمام",
+      "ويرى مشرفو وِردك هذه الأرقام حين يساعدونك",
+    ]) {
+      expect(ar).toContain(words);
+    }
+    const en = flat("Who sees your data");
+    for (const words of [
+      "The exception is a rotating khatma",
+      "the numbers they entered themselves",
+      "the full number of anyone they accepted from a join request",
+      "Wirdak's admins can see these numbers when they help you",
+    ]) {
+      expect(en).toContain(words);
+    }
+  });
+
+  it("lists the rotating khatma messages Meta delivers", () => {
+    const ar = flat("مزوّدو الخدمة");
+    expect(ar).toContain(
+      "ورسائل الختمة بالتناوب: الجزء والتذكير وإعادة الإسناد والختم والدعاء وردودنا",
+    );
+    const en = flat("Service providers");
+    expect(en).toContain(
+      "delivering the rotating khatma messages: the juz', reminders, reassignment and completion messages, the dua, and our replies",
+    );
+  });
+
+  it("says who the last-message record covers and how long it is kept", () => {
+    const ar = flat("واتساب");
+    for (const words of [
+      "ومن كل رقم له طلب انضمام معلّق",
+      "يوماً واحداً على الأكثر",
+      "حتى بعد إزالته منها، إلى أن تُحذف الختمة",
+    ]) {
+      expect(ar).toContain(words);
+    }
+    const en = flat("WhatsApp");
+    for (const words of [
+      "each number with a pending join request",
+      "for at most a day",
+      "even after they are removed, until the khatma is deleted",
+    ]) {
+      expect(en).toContain(words);
+    }
+  });
+});
