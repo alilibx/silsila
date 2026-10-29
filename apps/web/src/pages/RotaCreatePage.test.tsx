@@ -109,8 +109,15 @@ function renderSetup() {
   );
 }
 
-// 2026-10-29 is a Thursday, so tomorrow is Friday the 30th in every time zone.
+// 2026-10-29 is a Thursday. The device's time zone is pinned to UTC so "tomorrow" is Friday the
+// 30th whatever zone the machine running the tests is in.
 beforeEach(() => {
+  const resolved = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockImplementation(
+    function (this: Intl.DateTimeFormat) {
+      return { ...resolved.call(this), timeZone: "UTC" };
+    },
+  );
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-29T08:00:00Z"));
   m.create.mockReset();
@@ -122,6 +129,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("RotaCreatePage (step 1)", () => {
@@ -212,6 +220,25 @@ describe("RotaCreatePage (step 1)", () => {
         firstDate: "2026-11-05",
         endDate: "2027-03-01",
       }),
+    );
+  });
+
+  it("keeps the date field on the day the line shows when the picked start is not a reading day", async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await user.click(screen.getByRole("radio", { name: "كل أسبوع" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: `${t.rota.startLabel}: ${t.rota.change}`,
+      }),
+    );
+    // Thursday 5 November is not a Friday, so the start moves on to Friday the 6th.
+    fireEvent.change(screen.getByLabelText(t.rota.startDateInput), {
+      target: { value: "2026-11-05" },
+    });
+    expect(screen.getByText("الجمعة ٦ نوفمبر")).toBeInTheDocument();
+    expect(screen.getByLabelText(t.rota.startDateInput)).toHaveValue(
+      "2026-11-06",
     );
   });
 
@@ -345,6 +372,43 @@ describe("RotaPeopleSetup (step 2)", () => {
       expect(screen.getByLabelText(t.rota.personPhone)).toHaveValue("123");
     },
   );
+
+  it("maps a thrown error code to its message, and a failed call to the network message", async () => {
+    const user = userEvent.setup();
+    renderSetup();
+    await user.type(screen.getByLabelText(t.rota.personName), "سارة");
+    await user.type(screen.getByLabelText(t.rota.personPhone), "+971500000009");
+    m.addParticipant.mockRejectedValue(new ConvexError({ code: "forbidden" }));
+    await user.click(screen.getByRole("button", { name: "أضف" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.errors.forbidden ?? "",
+    );
+    m.addParticipant.mockRejectedValue(
+      new ConvexError({ code: "something_new" }),
+    );
+    await user.click(screen.getByRole("button", { name: "أضف" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.errors.generic,
+    );
+    m.addParticipant.mockRejectedValue(new Error("offline"));
+    await user.click(screen.getByRole("button", { name: "أضف" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.errors.network,
+    );
+  });
+
+  it("maps a thrown error from handing out a juz' the same way", async () => {
+    m.giveJuz.mockRejectedValue(new ConvexError({ code: "forbidden" }));
+    const user = userEvent.setup();
+    renderSetup();
+    await user.click(screen.getByRole("button", { name: /بلا قارئ/ }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /أنا/ }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.errors.forbidden ?? "",
+    );
+  });
 
   it("with the organizer and one more, 28 ajza' are still without a reader", () => {
     setRoster([

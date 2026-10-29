@@ -3,7 +3,13 @@ import { t } from "../i18n/ar";
 
 export type KhatmaTab = "mine" | "pool" | "group";
 
-const TABS: readonly KhatmaTab[] = ["mine", "pool", "group"];
+type TabDef<T extends string> = { id: T; label: string };
+
+const POOL_TABS: readonly TabDef<KhatmaTab>[] = [
+  { id: "mine", label: t.nav.tabs.mine },
+  { id: "pool", label: t.nav.tabs.pool },
+  { id: "group", label: t.nav.tabs.group },
+];
 
 /** The `?tab=` value: `pool` and `group`; anything else is the person's own juz'. */
 export function parseTab(value: string | null): KhatmaTab {
@@ -15,37 +21,46 @@ export function tabParam(tab: KhatmaTab): string | null {
   return tab === "mine" ? null : tab;
 }
 
-type Props = {
-  tab: KhatmaTab;
-  onChange: (tab: KhatmaTab) => void;
+type Props<T extends string> = {
+  tab: T;
+  onChange: (tab: T) => void;
   /** Tab ids are `${idPrefix}-tab-<tab>`; the page renders the panel `${idPrefix}-panel`. */
   idPrefix: string;
+  /** The tabs and their labels. Left out, the pool khatma's three sections. */
+  tabs?: readonly TabDef<T>[];
 };
 
-/** The khatma's three sections as labelled tabs (navigation spec 4.2). No swipe. */
-export function KhatmaTabs({ tab, onChange, idPrefix }: Props) {
-  const refs = useRef<Partial<Record<KhatmaTab, HTMLButtonElement | null>>>({});
+/** The khatma's sections as labelled tabs (navigation spec 4.2). No swipe. */
+export function KhatmaTabs<T extends string = KhatmaTab>({
+  tab,
+  onChange,
+  idPrefix,
+  // The default list is the pool khatma's, which is what `T` is when no list is given.
+  tabs = POOL_TABS as readonly TabDef<string>[] as readonly TabDef<T>[],
+}: Props<T>) {
+  const refs = useRef<Partial<Record<T, HTMLButtonElement | null>>>({});
+  const ids = tabs.map((entry) => entry.id);
 
-  const select = (next: KhatmaTab) => {
+  const select = (next: T) => {
     onChange(next);
     refs.current[next]?.focus();
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    const at = TABS.indexOf(tab);
+    const at = ids.indexOf(tab);
     // In Arabic (dir="rtl") the next tab sits on the ArrowLeft side.
     const forward =
       document.documentElement.dir === "rtl" ? "ArrowLeft" : "ArrowRight";
     const back = forward === "ArrowLeft" ? "ArrowRight" : "ArrowLeft";
     const target =
       event.key === forward
-        ? TABS[(at + 1) % TABS.length]
+        ? ids[(at + 1) % ids.length]
         : event.key === back
-          ? TABS[(at + TABS.length - 1) % TABS.length]
+          ? ids[(at + ids.length - 1) % ids.length]
           : event.key === "Home"
-            ? TABS[0]
+            ? ids[0]
             : event.key === "End"
-              ? TABS[TABS.length - 1]
+              ? ids[ids.length - 1]
               : null;
     if (!target) return;
     event.preventDefault();
@@ -59,7 +74,7 @@ export function KhatmaTabs({ tab, onChange, idPrefix }: Props) {
       onKeyDown={onKeyDown}
       className="mt-4 flex flex-wrap gap-1 rounded-ui bg-paper-2 p-1"
     >
-      {TABS.map((name) => {
+      {tabs.map(({ id: name, label }) => {
         const selected = name === tab;
         return (
           <button
@@ -80,7 +95,7 @@ export function KhatmaTabs({ tab, onChange, idPrefix }: Props) {
                 : "text-ink-soft"
             }`}
           >
-            {t.nav.tabs[name]}
+            {label}
           </button>
         );
       })}

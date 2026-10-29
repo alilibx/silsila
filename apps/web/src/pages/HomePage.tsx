@@ -153,10 +153,16 @@ function KhatmaCard({ khatma }: { khatma: Card }) {
           style={{ width: `${(khatma.done / JUZ_COUNT) * 100}%` }}
         />
       </span>
-      <span className="flex justify-between gap-3 text-base text-ink-soft">
-        <span>{t.home.doneOf(done, total)}</span>
-        <span>{t.schedules[khatma.schedule]}</span>
-      </span>
+      {khatma.kind === "rota" ? (
+        <span className="block text-base text-ink-soft">
+          {t.rota.cardLine(done, total)}
+        </span>
+      ) : (
+        <span className="flex justify-between gap-3 text-base text-ink-soft">
+          <span>{t.home.doneOf(done, total)}</span>
+          <span>{t.schedules[khatma.schedule]}</span>
+        </span>
+      )}
       {khatma.hasNote && (
         <span className="mt-2 flex items-center gap-2 text-base font-semibold text-green-deep">
           <span

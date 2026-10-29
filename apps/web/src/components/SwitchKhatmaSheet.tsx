@@ -94,7 +94,7 @@ function Row({
       </span>
       <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-base text-ink-soft">
         <span>
-          {t.home.doneOf(
+          {(khatma.kind === "rota" ? t.rota.cardLine : t.home.doneOf)(
             toArabicDigits(khatma.done),
             toArabicDigits(JUZ_COUNT),
           )}

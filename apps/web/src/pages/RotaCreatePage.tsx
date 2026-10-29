@@ -1,10 +1,12 @@
 import { api } from "@convex/_generated/api";
-import { addDays, nextReadingDates, type ReadingDays } from "@convex/lib/rota";
+import { addDays, type ReadingDays } from "@convex/lib/rota";
 import { localDate } from "@convex/lib/wakingTime";
 import { useAction, useQuery } from "convex/react";
 import { useRef, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { Button } from "../components/Button";
+import { DateLine } from "../features/rota/DateLine";
+import { firstReadingDay } from "../features/rota/dates";
 import { formatIsoDate } from "../features/rota/format";
 import { ReadingDaysField } from "../features/rota/ReadingDaysField";
 import { StepBar } from "../features/rota/StepBar";
@@ -13,76 +15,6 @@ import { errorCode } from "../lib/errors";
 import { getSessionToken, useSessionToken } from "../lib/session";
 
 const rotaErrors: Record<string, string> = t.rota.errors;
-
-/** The first reading day on or after `from`; `from` itself when none is found. */
-function firstReadingDay(days: ReadingDays, from: string): string {
-  return nextReadingDates(days, from, from, 1, new Set())[0] ?? from;
-}
-
-/** One line of the start or the end: its value and a button that opens a native date field. */
-function DateLine({
-  label,
-  value,
-  inputLabel,
-  inputValue,
-  min,
-  onPick,
-  clearLabel,
-}: {
-  label: string;
-  value: string;
-  inputLabel: string;
-  inputValue: string;
-  min: string;
-  onPick: (date: string | null) => void;
-  /** When set, a button that clears the date (the end line goes back to no end). */
-  clearLabel?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-ui border-2 border-line bg-card px-4 py-2">
-      <div className="flex min-h-14 items-center justify-between gap-3">
-        <span>
-          <span className="block text-base text-ink-soft">{label}</span>
-          <span className="font-medium">{value}</span>
-        </span>
-        <button
-          type="button"
-          aria-label={`${label}: ${t.rota.change}`}
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className="min-h-14 px-3 font-medium text-green underline underline-offset-4"
-        >
-          {t.rota.change}
-        </button>
-      </div>
-      {open && (
-        <div className="pb-2">
-          <input
-            type="date"
-            aria-label={inputLabel}
-            min={min}
-            value={inputValue}
-            onChange={(event) => onPick(event.target.value || null)}
-            className="min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
-          />
-          {clearLabel && inputValue !== "" && (
-            <button
-              type="button"
-              onClick={() => {
-                onPick(null);
-                setOpen(false);
-              }}
-              className="mt-1 min-h-14 font-medium text-green underline underline-offset-4"
-            >
-              {clearLabel}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** Step 1 of 2: the name and the reading days. Only for people an admin turned rota khatmas on for. */
 export function RotaCreatePage() {
@@ -178,7 +110,8 @@ export function RotaCreatePage() {
                 : formatIsoDate(start)
             }
             inputLabel={t.rota.startDateInput}
-            inputValue={pickedStart ?? ""}
+            // A start that is not a reading day moves on; the field shows where it landed.
+            inputValue={pickedStart === null ? "" : start}
             min={tomorrow}
             onPick={(date) => {
               setPickedStart(date);

@@ -115,4 +115,13 @@ describe("SwitchKhatmaSheet", () => {
     await userEvent.click(screen.getByRole("button", { name: t.sheet.close }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("a rotating khatma's row reads «ختمة بالتناوب» with today's count", () => {
+    setup("A", [card(), card({ kind: "rota", inviteCode: "R", done: 26 })]);
+    const row = screen.getByRole("link", {
+      name: /ختمة العائلة/,
+      current: false,
+    });
+    expect(row).toHaveTextContent("ختمة بالتناوب · ٢٦ من ٣٠ اليوم");
+  });
 });

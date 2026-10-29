@@ -1,18 +1,17 @@
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useRef, useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { toArabicDigits } from "@convex/lib/digits";
-import { buttonClass, Button } from "../../components/Button";
+import { buttonClass } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { getSessionToken, useSessionToken } from "../../lib/session";
+import { AddPersonForm } from "./AddPersonForm";
+import { thrownMessage } from "./errors";
 import { StepBar } from "./StepBar";
 
-const addErrors: Record<string, string> = t.rota.addErrors;
 const giveErrors: Record<string, string> = t.rota.giveErrors;
-const fieldClass =
-  "mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink";
 
 type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
 
@@ -47,8 +46,8 @@ function GiveJuzSheet({
       if ("error" in result) {
         setError(giveErrors[result.error] ?? t.errors.generic);
       }
-    } catch {
-      setError(t.errors.network);
+    } catch (caught) {
+      setError(thrownMessage(caught, giveErrors));
     } finally {
       setBusy(false);
     }
@@ -92,47 +91,12 @@ export function RotaPeopleSetup() {
   const { inviteCode = "" } = useParams();
   const sessionToken = useSessionToken();
   const view = useQuery(api.rota.people, { sessionToken, inviteCode });
-  const addParticipant = useMutation(api.rota.addParticipant);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [giving, setGiving] = useState(false);
-  const nameField = useRef<HTMLInputElement>(null);
-  const addingRef = useRef(false);
 
   if (view === undefined) return <main className="mx-auto max-w-xl p-5" />;
   // Only the organizer sets people up.
   if (view === null) {
     return <Navigate to={`/j/${encodeURIComponent(inviteCode)}`} replace />;
-  }
-
-  async function onAdd(event: FormEvent) {
-    event.preventDefault();
-    if (addingRef.current) return;
-    addingRef.current = true;
-    setAdding(true);
-    setError(null);
-    try {
-      const result = await addParticipant({
-        sessionToken: getSessionToken() ?? undefined,
-        inviteCode,
-        name: name.trim(),
-        phone: phone.trim(),
-      });
-      if ("error" in result) {
-        setError(addErrors[result.error] ?? t.errors.generic);
-      } else {
-        setName("");
-        setPhone("");
-        nameField.current?.focus();
-      }
-    } catch {
-      setError(t.errors.network);
-    } finally {
-      addingRef.current = false;
-      setAdding(false);
-    }
   }
 
   return (
@@ -142,47 +106,9 @@ export function RotaPeopleSetup() {
       </h1>
       <StepBar step={2} />
 
-      <form onSubmit={(event) => void onAdd(event)} noValidate className="mt-5">
-        <label htmlFor="rota-person-name" className="block font-medium">
-          {t.rota.personName}
-        </label>
-        <input
-          ref={nameField}
-          id="rota-person-name"
-          type="text"
-          maxLength={60}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className={fieldClass}
-        />
-        <label htmlFor="rota-person-phone" className="mt-4 block font-medium">
-          {t.rota.personPhone}
-        </label>
-        <input
-          id="rota-person-phone"
-          type="text"
-          inputMode="tel"
-          autoComplete="off"
-          dir="ltr"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          aria-describedby="rota-phone-hint"
-          className={`${fieldClass} text-right`}
-        />
-        <p id="rota-phone-hint" className="mt-1 text-base text-ink-soft">
-          {t.rota.phoneHint}
-        </p>
-        {error && (
-          <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
-            {error}
-          </p>
-        )}
-        <div className="mt-4">
-          <Button type="submit" variant="ghost" disabled={adding}>
-            {adding ? t.rota.adding : t.rota.add}
-          </Button>
-        </div>
-      </form>
+      <div className="mt-5">
+        <AddPersonForm inviteCode={inviteCode} />
+      </div>
 
       <ol
         aria-label={t.rota.peopleList}
