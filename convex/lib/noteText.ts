@@ -57,11 +57,23 @@ export function juzList(juz: readonly number[]): string {
   return `${digits.slice(0, -1).join("، ")} و${digits[digits.length - 1]}`;
 }
 
-/** `الجزء ٢٦`, `الجزآن ٥ و٦`, `الأجزاء ٣، ٥ و٦`: the word agreeing with the list. */
+/**
+ * `الجزء ٢٦`, `الجزآن ٥ و٦`, `الأجزاء ٣، ٥ و٦`: the word agreeing with the list,
+ * as a subject. Empty for an empty list.
+ */
 export function juzPhrase(juz: readonly number[]): string {
+  if (juz.length === 0) return "";
   const word =
     juz.length === 1 ? "الجزء" : juz.length === 2 ? "الجزآن" : "الأجزاء";
   return `${word} ${juzList(juz)}`;
+}
+
+/**
+ * The same phrase after a noun or preposition («قراءة الجزأين ٥ و٦»): the dual
+ * takes its genitive form. Empty for an empty list.
+ */
+export function juzPhraseGenitive(juz: readonly number[]): string {
+  return juz.length === 2 ? `الجزأين ${juzList(juz)}` : juzPhrase(juz);
 }
 
 /** The count with the noun agreeing: جزءاً واحداً, جزأين, ٣ أجزاء, ١١ جزءاً. */

@@ -2,7 +2,7 @@ import { toArabicDigits } from "./digits";
 import {
   behindPhrase,
   juzList,
-  juzPhrase,
+  juzPhraseGenitive,
   type NoteKind,
   type NoteTextInput,
 } from "./noteText";
@@ -120,7 +120,7 @@ function noteParams(note: NoteTextInput, now: number): string[] {
     case "behind":
       return [behindPhrase(note.count ?? 0, note.until, now)];
     case "rotaUnread":
-      return [juzPhrase(note.juz)];
+      return [juzPhraseGenitive(note.juz)];
     case "rotaSummary":
       return [toArabicDigits(note.count ?? 0)];
     case "rotaJoinRequest":

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { noteText } from "./noteText";
+import { juzPhrase, juzPhraseGenitive, noteText } from "./noteText";
 
 const NOW = 1_800_000_000_000; // Friday 2027-01-15, midday in Asia/Dubai
 const DAY = 86_400_000;
@@ -78,4 +78,21 @@ test("the rota participant notes name them and count days in Arabic digits", () 
   expect(noteText({ ...input, kind: "rotaStopped" })).toBe(
     "أوقف أحمد رسائل الختمة.",
   );
+});
+
+test("the juz' phrase agrees with one, two and three or more ajza'", () => {
+  expect(juzPhrase([26])).toBe("الجزء ٢٦");
+  expect(juzPhrase([5, 6])).toBe("الجزآن ٥ و٦");
+  expect(juzPhrase([3, 5, 6])).toBe("الأجزاء ٣، ٥ و٦");
+});
+
+test("the genitive phrase differs only in the dual", () => {
+  expect(juzPhraseGenitive([26])).toBe("الجزء ٢٦");
+  expect(juzPhraseGenitive([5, 6])).toBe("الجزأين ٥ و٦");
+  expect(juzPhraseGenitive([3, 5, 6])).toBe("الأجزاء ٣، ٥ و٦");
+});
+
+test("both phrases are empty, with no stray space, for no ajza'", () => {
+  expect(juzPhrase([])).toBe("");
+  expect(juzPhraseGenitive([])).toBe("");
 });

@@ -56,9 +56,15 @@ test("the organizer's rota notes go out as templates with the open button", () =
   expect(send(rotaNote("rotaUnread", { juz: [5, 6] }))).toEqual({
     name: "wirdak_rota_unread",
     header: "ختمة رمضان",
-    body: ["الجزآن ٥ و٦"],
+    body: ["الجزأين ٥ و٦"],
     buttonParam: "j/AB12CD",
   });
+  expect(send(rotaNote("rotaUnread", { juz: [26] }))?.body).toEqual([
+    "الجزء ٢٦",
+  ]);
+  expect(send(rotaNote("rotaUnread", { juz: [3, 5, 6] }))?.body).toEqual([
+    "الأجزاء ٣، ٥ و٦",
+  ]);
   expect(send(rotaNote("rotaSummary", { count: 24 }))).toEqual({
     name: "wirdak_rota_summary",
     header: "ختمة رمضان",

@@ -1,6 +1,6 @@
 import { DUAS } from "./duas";
 import { toArabicDigits } from "./digits";
-import { juzPhrase } from "./noteText";
+import { juzPhrase, juzPhraseGenitive } from "./noteText";
 import { khatmaTitle, type TemplateMessage } from "./whatsappTemplates";
 
 /**
@@ -29,8 +29,6 @@ type Khatma = { name: string | null; createdAt: number };
 /** The payloads of the «أتممت» and «ليس بعد» buttons, in button order. */
 type DonePayloads = { done: string; notYet: string };
 
-const count = (n: number): string => toArabicDigits(n);
-
 /** The member's juz' of the day, with the done and not-yet buttons. */
 export function juzTemplate(
   khatma: Khatma,
@@ -41,7 +39,7 @@ export function juzTemplate(
   return {
     name: ROTA_JUZ,
     header: khatmaTitle(khatma),
-    body: [count(number), juzPhrase(juz)],
+    body: [toArabicDigits(number), juzPhrase(juz)],
     quickReplies: [payloads.done, payloads.notYet],
   };
 }
@@ -55,7 +53,7 @@ export function reminderTemplate(
   return {
     name: ROTA_REMINDER,
     header: khatmaTitle(khatma),
-    body: [juzPhrase(juz)],
+    body: [juzPhraseGenitive(juz)],
     quickReplies: [payloads.done, payloads.notYet],
   };
 }
@@ -70,7 +68,7 @@ export function assignedTemplate(
   return {
     name: ROTA_ASSIGNED,
     header: khatmaTitle(khatma),
-    body: [juzPhrase(juz), count(number)],
+    body: [juzPhraseGenitive(juz), toArabicDigits(number)],
     quickReplies: [payloads.done, payloads.notYet],
   };
 }
@@ -83,7 +81,7 @@ export function coveredTemplate(
   return {
     name: ROTA_COVERED,
     header: khatmaTitle(khatma),
-    body: [juzPhrase(juz)],
+    body: [juzPhraseGenitive(juz)],
   };
 }
 
@@ -96,7 +94,7 @@ export function completeTemplate(
   return {
     name: ROTA_COMPLETE,
     header: khatmaTitle(khatma),
-    body: [count(number)],
+    body: [toArabicDigits(number)],
     quickReplies: [duaPayload],
   };
 }
@@ -127,11 +125,11 @@ export function welcomeText(
 
 /** The juz' message as free-form text; the done and not-yet buttons go with it. */
 export function juzText(number: number, juz: number[]): string {
-  return `الختمة ${count(number)} اليوم. جزؤك: ${juzPhrase(juz)}.`;
+  return `الختمة ${toArabicDigits(number)} اليوم. قراءتك: ${juzPhrase(juz)}.`;
 }
 
 export function thanksText(doneCount: number): string {
-  return `تقبّل الله منك. ${count(doneCount)} من ٣٠ جزءاً تمّت اليوم.`;
+  return `تقبّل الله منك. ${toArabicDigits(doneCount)} من ٣٠ جزءاً تمّت اليوم.`;
 }
 
 /** `reminderTime` is the already formatted time of the day's reminder, or null with none. */

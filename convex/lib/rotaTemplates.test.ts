@@ -20,50 +20,62 @@ import {
   welcomeText,
   whichKhatmaText,
 } from "./rotaTemplates";
-import { juzPhrase } from "./noteText";
 
 const khatma = { name: "ختمة العائلة", createdAt: 0 };
 const payloads = { done: "r1|p|done|d|x", notYet: "r1|p|notYet|d|x" };
 
-test("juz' text agrees with one, two and three or more ajza'", () => {
-  expect(juzPhrase([26])).toBe("الجزء ٢٦");
-  expect(juzPhrase([5, 6])).toBe("الجزآن ٥ و٦");
-  expect(juzPhrase([3, 5, 6])).toBe("الأجزاء ٣، ٥ و٦");
-});
+// One, two and three ajza': the subject of the sentence is always «قراءة» or
+// «قراءتك», so the juz' phrase never has to agree with a verb.
+const one = [26];
+const two = [5, 6];
+const three = [3, 5, 6];
 
-test("the juz' template: title header, khatma number and juz', two reply payloads in order", () => {
-  expect(juzTemplate(khatma, [5, 6], 12, payloads)).toEqual({
+test("the juz' template: title header, khatma number and juz' (nominative), two reply payloads in order", () => {
+  const body = (juz: number[]) => juzTemplate(khatma, juz, 12, payloads).body;
+  expect(juzTemplate(khatma, two, 12, payloads)).toEqual({
     name: "wirdak_rota_juz",
     header: "ختمة العائلة",
     body: ["١٢", "الجزآن ٥ و٦"],
     quickReplies: [payloads.done, payloads.notYet],
   });
+  expect(body(one)).toEqual(["١٢", "الجزء ٢٦"]);
+  expect(body(three)).toEqual(["١٢", "الأجزاء ٣، ٥ و٦"]);
 });
 
-test("the reminder template", () => {
-  expect(reminderTemplate(khatma, [26], payloads)).toEqual({
+test("the reminder template: the juz' phrase is genitive, after «قراءة»", () => {
+  const body = (juz: number[]) => reminderTemplate(khatma, juz, payloads).body;
+  expect(reminderTemplate(khatma, one, payloads)).toEqual({
     name: "wirdak_rota_reminder",
     header: "ختمة العائلة",
     body: ["الجزء ٢٦"],
     quickReplies: [payloads.done, payloads.notYet],
   });
+  expect(body(two)).toEqual(["الجزأين ٥ و٦"]);
+  expect(body(three)).toEqual(["الأجزاء ٣، ٥ و٦"]);
 });
 
-test("the assigned template puts the juz' before the khatma number", () => {
-  expect(assignedTemplate(khatma, [3, 5, 6], 7, payloads)).toEqual({
+test("the assigned template puts the genitive juz' before the khatma number", () => {
+  const body = (juz: number[]) =>
+    assignedTemplate(khatma, juz, 7, payloads).body;
+  expect(assignedTemplate(khatma, three, 7, payloads)).toEqual({
     name: "wirdak_rota_assigned",
     header: "ختمة العائلة",
     body: ["الأجزاء ٣، ٥ و٦", "٧"],
     quickReplies: [payloads.done, payloads.notYet],
   });
+  expect(body(one)).toEqual(["الجزء ٢٦", "٧"]);
+  expect(body(two)).toEqual(["الجزأين ٥ و٦", "٧"]);
 });
 
 test("the covered template has no buttons", () => {
-  expect(coveredTemplate(khatma, [26])).toEqual({
+  const body = (juz: number[]) => coveredTemplate(khatma, juz).body;
+  expect(coveredTemplate(khatma, one)).toEqual({
     name: "wirdak_rota_covered",
     header: "ختمة العائلة",
     body: ["الجزء ٢٦"],
   });
+  expect(body(two)).toEqual(["الجزأين ٥ و٦"]);
+  expect(body(three)).toEqual(["الأجزاء ٣، ٥ و٦"]);
 });
 
 test("the complete template carries the dua payload as its one button", () => {
@@ -99,7 +111,9 @@ test("welcome text names the day and time of the next message, if any", () => {
 });
 
 test("the free texts use Arabic digits", () => {
-  expect(juzText(3, [5, 6])).toBe("الختمة ٣ اليوم. جزؤك: الجزآن ٥ و٦.");
+  expect(juzText(3, one)).toBe("الختمة ٣ اليوم. قراءتك: الجزء ٢٦.");
+  expect(juzText(3, two)).toBe("الختمة ٣ اليوم. قراءتك: الجزآن ٥ و٦.");
+  expect(juzText(3, three)).toBe("الختمة ٣ اليوم. قراءتك: الأجزاء ٣، ٥ و٦.");
   expect(thanksText(12)).toBe("تقبّل الله منك. ١٢ من ٣٠ جزءاً تمّت اليوم.");
   expect(notYetText("٤:٠٠ م")).toBe("لا بأس، نذكّرك الساعة ٤:٠٠ م.");
   expect(notYetText(null)).toBe("لا بأس.");
