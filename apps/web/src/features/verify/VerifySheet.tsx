@@ -36,7 +36,11 @@ export function VerifySheet({ title, intent, onVerified, onClose }: Props) {
   useEffect(() => {
     posthog.capture("verification_step", { step: v.step, intent: reason });
   }, [v.step, reason]);
+  // Only a new code counts: an error still shown when the step moves on is the same error.
+  const shownError = useRef<string | null>(null);
   useEffect(() => {
+    if (v.errorCode === shownError.current) return;
+    shownError.current = v.errorCode;
     if (v.errorCode === null) return;
     posthog.capture("verification_error", {
       code: v.errorCode,

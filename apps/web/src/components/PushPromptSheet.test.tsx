@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setSessionToken } from "../lib/session";
@@ -100,6 +100,25 @@ describe("PushPromptSheet", () => {
     expect(ph.capture).toHaveBeenCalledExactlyOnceWith(
       "notification_prompt_choice",
       { prompt: "push", choice: "dismissed" },
+    );
+  });
+
+  it("records one choice when the sheet is closed while enable runs", async () => {
+    let settle: (result: string) => void = () => {};
+    m.enable.mockReturnValue(
+      new Promise<string>((resolve) => (settle = resolve)),
+    );
+    ui();
+    await userEvent.click(
+      screen.getByRole("button", { name: "فعّل الإشعارات" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "إغلاق" }));
+    settle("granted");
+    await waitFor(() =>
+      expect(ph.capture).toHaveBeenCalledExactlyOnceWith(
+        "notification_prompt_choice",
+        { prompt: "push", choice: "enable", result: "granted" },
+      ),
     );
   });
 });

@@ -16,7 +16,8 @@ export function PushPromptSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
 
   function choose(choice: NotificationChoice) {
-    trackPromptChoice("push", choice);
+    // Closing while enable runs: enable records the choice when it settles.
+    if (!busy) trackPromptChoice("push", choice);
     onClose();
   }
 

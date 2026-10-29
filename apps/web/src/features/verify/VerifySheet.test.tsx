@@ -498,6 +498,30 @@ describe("VerifySheet", () => {
       ]);
     });
 
+    it("records an error once, even when the step moves on before it clears", async () => {
+      m.status = { status: "matched", maskedPhone: "+971 50 ••• 1234" };
+      m.claim.mockRejectedValue(new Error("offline"));
+      const user = userEvent.setup();
+      const view = ui();
+      await signInStart(user);
+      await user.click(
+        await screen.findByRole("button", { name: t.verify.yes }),
+      );
+      await screen.findByText(t.verify.errors.network);
+      m.status = { status: "needs_pin", maskedPhone: "+971 50 ••• 1234" };
+      view.rerender(
+        <VerifySheet
+          title={t.verify.beforeTake}
+          onVerified={onVerified}
+          onClose={onClose}
+        />,
+      );
+      await screen.findByText(t.verify.pinTitle);
+      expect(events("verification_error")).toEqual([
+        { code: "network", step: "confirm", intent: "signin" },
+      ]);
+    });
+
     it("records closing early with the step it stopped at", async () => {
       m.status = { status: "pending", maskedPhone: null };
       const user = userEvent.setup();
