@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { SettingsPage } from "./SettingsPage";
 
-const rows = (Object.keys(SETTING_DEFAULTS) as SettingKey[]).map((key) => ({
+let rows = (Object.keys(SETTING_DEFAULTS) as SettingKey[]).map((key) => ({
   key,
   value: key === "maxMembers" ? 40 : SETTING_DEFAULTS[key],
   defaultValue: SETTING_DEFAULTS[key],
@@ -69,6 +69,26 @@ describe("SettingsPage", () => {
     expect(
       within(panel()).queryByText(label("maintenanceMode")),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps a reset row on the changed tab until the tab changes", async () => {
+    renderAt("?group=changed");
+    rows = rows.map((row) =>
+      row.key === "maxMembers"
+        ? { ...row, value: row.defaultValue, isDefault: true }
+        : row,
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: new RegExp(t.settings.changedTab) }),
+    );
+    expect(within(panel()).getByText(label("maxMembers"))).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("tab", { name: new RegExp(t.settings.groups.pace) }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: new RegExp(t.settings.changedTab) }),
+    );
+    expect(screen.getByText(t.settings.noChanges)).toBeInTheDocument();
   });
 
   it("searches every group by name and description", async () => {

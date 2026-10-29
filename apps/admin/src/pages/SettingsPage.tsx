@@ -76,6 +76,13 @@ export function SettingsPage() {
   const idPrefix = useId();
   const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const loaded = rows !== undefined;
+  // Rows the "changed" tab has listed. They stay until the tab changes, so
+  // resetting one doesn't pull it (and its open sheet) out from under the admin.
+  const listed = useRef<{ tab: Tab; keys: Set<string> }>({
+    tab,
+    keys: new Set(),
+  });
+  if (listed.current.tab !== tab) listed.current = { tab, keys: new Set() };
 
   // The tab row scrolls sideways on a phone; keep the chosen tab on screen.
   useEffect(() => {
@@ -105,8 +112,14 @@ export function SettingsPage() {
       { replace: true },
     );
 
-  const select = (next: Tab) => {
+  // A new tab starts at its top, not wherever the last one was scrolled to.
+  const show = (next: Tab) => {
     update({ group: next, q: "" });
+    document.scrollingElement?.scrollTo?.({ top: 0 });
+  };
+
+  const select = (next: Tab) => {
+    show(next);
     refs.current[next]?.focus();
   };
 
@@ -136,7 +149,10 @@ export function SettingsPage() {
   const keep = searching
     ? (row: SettingRow) => matches(row, words)
     : tab === "changed"
-      ? (row: SettingRow) => !row.isDefault
+      ? (row: SettingRow) => {
+          if (!row.isDefault) listed.current.keys.add(row.key);
+          return listed.current.keys.has(row.key);
+        }
       : () => true;
   const shown = groups
     .map((group) => ({ group, sections: sectionsOf(group, byKey, keep) }))
@@ -183,7 +199,7 @@ export function SettingsPage() {
                 aria-selected={selected}
                 aria-controls={`${idPrefix}-panel`}
                 tabIndex={name === tab ? 0 : -1}
-                onClick={() => update({ group: name, q: "" })}
+                onClick={() => show(name)}
                 className={`shrink-0 whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-sm ${
                   selected
                     ? "border-green bg-green text-white"

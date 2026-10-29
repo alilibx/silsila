@@ -117,11 +117,8 @@ export function SettingField({ setting }: { setting: SettingRow }) {
       <div className="px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span
-              id={labelId}
-              className="flex flex-wrap items-center gap-2 font-medium"
-            >
-              {label}
+            <span className="flex flex-wrap items-center gap-2 font-medium">
+              <span id={labelId}>{label}</span>
               {changed}
             </span>
             <span className="text-sm text-ink-soft">{what}</span>
@@ -162,6 +159,8 @@ export function SettingField({ setting }: { setting: SettingRow }) {
       <button
         type="button"
         aria-label={`${t.settings.edit} ${label}`}
+        // The label replaces the content's name, so the value, badge and description come back as its description.
+        aria-describedby={`${labelId}-value ${labelId}-what`}
         className="flex w-full flex-col gap-0.5 px-4 py-3 text-start hover:bg-paper"
         onClick={() => {
           setError(null);
@@ -174,15 +173,23 @@ export function SettingField({ setting }: { setting: SettingRow }) {
             {changed}
           </span>
           <span className="flex max-w-[50%] shrink-0 items-start gap-2 text-end font-semibold text-green-deep">
-            <span className="line-clamp-2">
+            <span id={`${labelId}-value`} className="line-clamp-2">
               {formatSetting(spec, setting.value)}
+              {!setting.isDefault && (
+                <>
+                  {" "}
+                  <span className="sr-only">{`· ${t.settings.custom}`}</span>
+                </>
+              )}
             </span>
             <span aria-hidden="true" className="font-normal text-ink-soft">
               ‹
             </span>
           </span>
         </span>
-        <span className="text-sm text-ink-soft">{what}</span>
+        <span id={`${labelId}-what`} className="text-sm text-ink-soft">
+          {what}
+        </span>
       </button>
       {open && (
         <Sheet title={label} onClose={() => setOpen(false)}>

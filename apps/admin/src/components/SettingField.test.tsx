@@ -53,11 +53,18 @@ describe("SettingField", () => {
     expect(screen.queryByText(t.settings.custom)).not.toBeInTheDocument();
   });
 
-  it("marks a changed setting", () => {
+  it("marks a changed setting, and reads its value as the row's description", () => {
     render(
       <SettingField setting={{ ...maxMembers, value: 40, isDefault: false }} />,
     );
     expect(screen.getByText(t.settings.custom)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: `${t.settings.edit} ${t.settings.labels.maxMembers}`,
+      }),
+    ).toHaveAccessibleDescription(
+      `٤٠ · ${t.settings.custom} ${t.settings.help.maxMembers.what}`,
+    );
   });
 
   it("explains the default and the range in the sheet", async () => {
@@ -79,14 +86,14 @@ describe("SettingField", () => {
     ).toBeInTheDocument();
   });
 
-  it("flips a switch in place", async () => {
+  it("flips a switch in place, named without its badge", async () => {
     render(
       <SettingField
         setting={{
           key: "maintenanceMode",
-          value: false,
+          value: true,
           defaultValue: false,
-          isDefault: true,
+          isDefault: false,
           spec: { kind: "bool", group: "switches" },
         }}
       />,
@@ -97,7 +104,7 @@ describe("SettingField", () => {
     expect(m.set).toHaveBeenCalledWith({
       adminToken: "tok",
       key: "maintenanceMode",
-      value: true,
+      value: false,
     });
   });
 
