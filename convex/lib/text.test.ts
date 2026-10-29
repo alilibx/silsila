@@ -155,4 +155,9 @@ describe("normalizePhone", () => {
     expect(normalizePhone("+1234567890123456")).toBeNull();
     expect(normalizePhone("+971abc")).toBeNull();
   });
+
+  it("refuses a country code that starts with 0", () => {
+    expect(normalizePhone("+0123456789")).toBeNull();
+    expect(normalizePhone("000971501234567")).toBeNull();
+  });
 });

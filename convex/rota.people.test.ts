@@ -304,7 +304,7 @@ test("a pool khatma is not a rota khatma", async () => {
 test("once day 12 has started, new people join khatma 13 and day 12 keeps its readers", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
-  const { khatmaId, readId } = await t.run(async (ctx) => {
+  const { khatmaId, readId, firstId } = await t.run(async (ctx) => {
     const k = await ctx.db
       .query("khatmas")
       .withIndex("by_inviteCode", (q) => q.eq("inviteCode", s.inviteCode))
@@ -342,7 +342,7 @@ test("once day 12 has started, new people join khatma 13 and day 12 keeps its re
       });
       if (juz === 7) readId = id;
     }
-    return { khatmaId, readId: readId! };
+    return { khatmaId, readId: readId!, firstId: first!._id };
   });
 
   const before = await people(t, s);
@@ -366,6 +366,45 @@ test("once day 12 has started, new people join khatma 13 and day 12 keeps its re
     expect(slots[0]?.participantId).toBe(participantId(r));
     const read = await ctx.db.get(readId);
     expect(read?.readerId).not.toBe(participantId(r));
-    expect(read?.readerId).not.toBeNull();
+    expect(read?.readerId).toBe(firstId);
+  });
+});
+
+test("there is no next day to place people on once the end date has passed", async () => {
+  const t = convexTest(schema, modules);
+  const who = await person(t);
+  const { inviteCode } = await t.action(api.rota.create, {
+    sessionToken: who.token,
+    name: "ختمة",
+    days: { kind: "weekly", weekdays: [5], everyWeeks: 1 },
+    firstDate: "2027-01-15",
+    endDate: "2027-01-15",
+  });
+  const s = { ...who, inviteCode };
+  expect((await people(t, s))?.target.date).toBe("2027-01-15");
+
+  await t.run(async (ctx) => {
+    const k = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+      .unique();
+    await ctx.db.insert("rotaDays", {
+      khatmaId: k!._id,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2027-01-15",
+      startedAt: NOW - 3_600_000,
+      closesAt: NOW + 3_600_000,
+      completedAt: null,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+    });
+  });
+  expect((await people(t, s))?.target).toEqual({
+    number: 2,
+    date: null,
+    isFirst: false,
   });
 });

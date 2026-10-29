@@ -74,7 +74,7 @@ export function maskPhone(e164: string): string {
   return digits.length >= 4 ? `••• ${digits.slice(-4)}` : "•••";
 }
 
-const E164_RE = /^\+\d{8,15}$/;
+const E164_RE = /^\+[1-9]\d{7,14}$/;
 
 /**
  * A typed phone number as `+` and 8 to 15 digits, or `null`. Reads Arabic and

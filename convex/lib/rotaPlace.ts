@@ -9,7 +9,7 @@ export type TargetDay = {
   n: number;
   /** Its khatma number within the cycle, 1 to 30. */
   number: number;
-  /** Its reading date, or null while the khatma is paused. */
+  /** Its reading date, or null while the khatma is paused or has no more days. */
   date: string | null;
   started: false;
 };
@@ -39,6 +39,7 @@ export async function targetDay(
   const today = localDate(Date.now(), rota.timeZone);
   const from = today > rota.firstDate ? today : rota.firstDate;
   // Only today can already have a row, so the first of two candidates is free.
+  // A date is started exactly when a row has it, which is what `tick` checks too.
   for (const date of nextReadingDates(
     rota.days,
     rota.firstDate,
@@ -46,6 +47,7 @@ export async function targetDay(
     2,
     new Set(rota.pauseDates),
   )) {
+    if (rota.endDate !== null && date > rota.endDate) break;
     const started = await ctx.db
       .query("rotaDays")
       .withIndex("by_khatma_date", (q) =>

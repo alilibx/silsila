@@ -66,4 +66,12 @@ crons.interval(
   {},
 );
 
+// Every 15 minutes: start, close and archive the reading days of rotating khatmas.
+crons.cron(
+  "tick rotating khatmas",
+  "*/15 * * * *",
+  internal.rotaDays.sweep,
+  {},
+);
+
 export default crons;

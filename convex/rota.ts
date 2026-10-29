@@ -178,6 +178,8 @@ export const insertRota = internalMutation({
       removedAt: null,
     });
     await ctx.db.insert("rotaSlots", { khatmaId, slot: 1, participantId });
+    // A khatma made after its first day's start time starts that day now.
+    await ctx.scheduler.runAfter(0, internal.rotaDays.tick, { khatmaId });
     return { inviteCode: args.inviteCode };
   },
 });

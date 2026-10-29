@@ -210,3 +210,24 @@ test("a daily khatma may start today and end later", async () => {
     endDate: "2027-01-15",
   });
 });
+
+test("a khatma made after its first day's start time starts that day at once", async () => {
+  const t = convexTest(schema, modules);
+  const who = await organizer(t);
+  // 15:00 in Dubai, after the 08:00 start time.
+  vi.setSystemTime(Date.UTC(2027, 0, 15, 11, 0, 0));
+  const { inviteCode } = await create(t, who);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  await t.run(async (ctx) => {
+    const khatma = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
+      .unique();
+    const days = await ctx.db
+      .query("rotaDays")
+      .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma!._id))
+      .collect();
+    expect(days.map((d) => [d.n, d.date])).toEqual([[1, "2027-01-15"]]);
+  });
+});
