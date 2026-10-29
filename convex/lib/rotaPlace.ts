@@ -1,6 +1,12 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { khatmaNumber, nextReadingDates, ROTA_SIZE, slotFor } from "./rota";
+import {
+  addDays,
+  khatmaNumber,
+  nextReadingDates,
+  ROTA_SIZE,
+  slotFor,
+} from "./rota";
 import { localDate } from "./wakingTime";
 
 /** The next reading day that has not started: where new people and changes to the ajza' land. */
@@ -14,6 +20,8 @@ export type TargetDay = {
   started: false;
 };
 
+type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
+
 /** The rota settings of a khatma that has them (a pool khatma never reaches here). */
 function rotaOf(khatma: Doc<"khatmas">) {
   if (khatma.kind !== "rota" || !khatma.rota) {
@@ -22,23 +30,47 @@ function rotaOf(khatma: Doc<"khatmas">) {
   return khatma.rota;
 }
 
+/** The latest started reading day of the khatma, or null before the first. */
+export function lastRotaDay(
+  ctx: QueryCtx,
+  khatmaId: Id<"khatmas">,
+): Promise<Doc<"rotaDays"> | null> {
+  return ctx.db
+    .query("rotaDays")
+    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatmaId))
+    .order("desc")
+    .first();
+}
+
+/**
+ * The first date a day may still start on: today or the first date, whichever
+ * is later, and always after the last started day. Days only go forward, which
+ * a time zone moved west could otherwise break.
+ */
+export function earliestOpenDate(
+  rota: RotaConfig,
+  last: Doc<"rotaDays"> | null,
+  today: string,
+): string {
+  const from = today > rota.firstDate ? today : rota.firstDate;
+  return last && from <= last.date ? addDays(last.date, 1) : from;
+}
+
 export async function targetDay(
   ctx: QueryCtx,
   khatma: Doc<"khatmas">,
 ): Promise<TargetDay> {
   const rota = rotaOf(khatma);
-  const last = await ctx.db
-    .query("rotaDays")
-    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma._id))
-    .order("desc")
-    .first();
+  const last = await lastRotaDay(ctx, khatma._id);
   const n = (last?.n ?? 0) + 1;
   if (rota.pausedAt !== null) {
     return { n, number: khatmaNumber(n), date: null, started: false };
   }
-  const today = localDate(Date.now(), rota.timeZone);
-  const from = today > rota.firstDate ? today : rota.firstDate;
-  // Only today can already have a row, so the first of two candidates is free.
+  const from = earliestOpenDate(
+    rota,
+    last,
+    localDate(Date.now(), rota.timeZone),
+  );
   // A date is started exactly when a row has it, which is what `tick` checks too.
   for (const date of nextReadingDates(
     rota.days,

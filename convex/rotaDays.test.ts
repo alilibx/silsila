@@ -95,6 +95,13 @@ async function setup(t: T, over: Over = {}) {
 }
 type Setup = Awaited<ReturnType<typeof setup>>;
 
+function setPausedAt(t: T, s: Setup, pausedAt: number | null) {
+  return t.run(async (ctx) => {
+    const k = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, { rota: { ...k!.rota!, pausedAt } });
+  });
+}
+
 async function tickAt(t: T, s: Setup, local: string) {
   vi.setSystemTime(dubai(local));
   await t.mutation(internal.rotaDays.tick, { khatmaId: s.khatmaId });
@@ -243,6 +250,72 @@ test("a paused khatma starts nothing, and starts the next day once resumed", asy
   await tickAt(t, s, "2027-01-16T08:15");
   expect((await days(t, s)).map((d) => [d.n, d.date])).toEqual([
     [1, "2027-01-16"],
+  ]);
+});
+
+test("resuming after a pause starts the next date as the next day, without backfilling", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  await tickAt(t, s, "2027-01-16T08:00");
+  await tickAt(t, s, "2027-01-17T08:00");
+  await setPausedAt(t, s, dubai("2027-01-17T20:00"));
+  await tickAt(t, s, "2027-01-18T08:00");
+  await tickAt(t, s, "2027-01-19T08:00");
+  expect(await days(t, s)).toHaveLength(2);
+
+  await setPausedAt(t, s, null);
+  await tickAt(t, s, "2027-01-20T08:00");
+  expect((await days(t, s)).map((d) => [d.n, d.number, d.date])).toEqual([
+    [1, 1, "2027-01-16"],
+    [2, 2, "2027-01-17"],
+    [3, 3, "2027-01-20"],
+  ]);
+});
+
+test("a time zone moved west never starts a date behind the last started day", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  await tickAt(t, s, "2027-01-16T08:00");
+  await tickAt(t, s, "2027-01-17T08:00");
+  await tickAt(t, s, "2027-01-19T08:00"); // the 18th is missed
+  expect((await days(t, s)).map((d) => [d.n, d.date])).toEqual([
+    [1, "2027-01-16"],
+    [2, "2027-01-17"],
+    [3, "2027-01-19"],
+  ]);
+
+  // 09:00 in Dubai on the 19th is 19:00 on the 18th in Honolulu: a reading
+  // date with no row, after the day start time.
+  await t.run(async (ctx) => {
+    const k = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...k!.rota!, timeZone: "Pacific/Honolulu" },
+    });
+  });
+  await tickAt(t, s, "2027-01-19T09:00");
+  expect((await days(t, s)).map((d) => d.date)).toEqual([
+    "2027-01-16",
+    "2027-01-17",
+    "2027-01-19",
+  ]);
+});
+
+test("a paused khatma sends no unread list or summary", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, {
+    messages: { ...MESSAGES, summary: { at: 1260, on: true } },
+  });
+  await tickAt(t, s, "2027-01-16T08:00");
+  await setPausedAt(t, s, dubai("2027-01-16T12:00"));
+  await tickAt(t, s, "2027-01-16T19:00");
+  await tickAt(t, s, "2027-01-16T21:00");
+  expect(await notes(t, s)).toHaveLength(0);
+
+  await setPausedAt(t, s, null);
+  await tickAt(t, s, "2027-01-16T21:15");
+  expect((await notes(t, s)).map((n) => n.kind).sort()).toEqual([
+    "rotaSummary",
+    "rotaUnread",
   ]);
 });
 

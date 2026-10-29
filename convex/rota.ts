@@ -15,17 +15,26 @@ import {
   addDays,
   isReadingDate,
   isValidReadingDays,
+  messageTimesError,
+  nextReadingDates,
   readingDaysValidator,
+  rotaMessagesValidator,
   ROTA_SIZE,
   slotFor,
+  type ReadingDays,
   type RotaMessages,
 } from "./lib/rota";
-import { slotRowsByJuz, targetDay } from "./lib/rotaPlace";
+import {
+  earliestOpenDate,
+  lastRotaDay,
+  slotRowsByJuz,
+  targetDay,
+} from "./lib/rotaPlace";
 import type { SessionContext } from "./lib/session";
 import { sessionMutation, sessionQuery } from "./lib/session";
-import { getSetting } from "./lib/settings";
+import { getSetting, quietHours } from "./lib/settings";
 import { cleanDisplayName, cleanKhatmaName, normalizePhone } from "./lib/text";
-import { localDate } from "./lib/wakingTime";
+import { localDate, safeTimeZone } from "./lib/wakingTime";
 import { completeIfDone } from "./rotaDays";
 
 const DAY_MS = 86_400_000;
@@ -576,11 +585,10 @@ export const today = sessionQuery({
   args: { inviteCode: v.string() },
   handler: async (ctx, args): Promise<TodayView | null> => {
     const found = await organizerOf(ctx, args.inviteCode, ctx.person);
-    if (!found || found.khatma.kind !== "rota" || !found.khatma.rota) {
-      return null;
-    }
+    if (!found || found.khatma.kind !== "rota") return null;
     const { person, khatma } = found;
-    const rota = khatma.rota!;
+    const rota = khatma.rota;
+    if (!rota) return null;
     const target = await targetDay(ctx, khatma);
     const day = await currentDay(ctx, khatma, rota.timeZone);
     const reads = day
@@ -721,6 +729,231 @@ export const markNotDone = sessionMutation({
     });
     if (found.day.completedAt !== null) {
       await ctx.db.patch(found.day._id, { completedAt: null });
+    }
+    return { ok: true };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Settings
+
+/** How many reading dates the pause-date picker offers. */
+const UPCOMING_DATES = 8;
+
+type SettingsView = {
+  name: string | null;
+  days: ReadingDays;
+  firstDate: string;
+  firstDatePassed: boolean;
+  endDate: string | null;
+  timeZone: string;
+  messages: RotaMessages;
+  pausedAt: number | null;
+  pauseDates: string[];
+  /** The next reading dates that can still be paused or un-paused. */
+  upcoming: string[];
+  quiet: { startHour: number; endHour: number };
+};
+
+/** The first date has passed, or its day has started: it can't move any more. */
+async function firstDatePassed(
+  ctx: QueryCtx,
+  khatma: Doc<"khatmas">,
+  rota: NonNullable<Doc<"khatmas">["rota"]>,
+  today: string,
+): Promise<boolean> {
+  return (
+    rota.firstDate < today || (await lastRotaDay(ctx, khatma._id)) !== null
+  );
+}
+
+/** The rota settings behind the organizer's settings sheet. Organizer only. */
+export const settings = sessionQuery({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<SettingsView | null> => {
+    const found = await organizerOf(ctx, args.inviteCode, ctx.person);
+    if (!found || found.khatma.kind !== "rota") return null;
+    const { khatma } = found;
+    const rota = khatma.rota;
+    if (!rota) return null;
+    const today = localDate(Date.now(), rota.timeZone);
+    const from = earliestOpenDate(
+      rota,
+      await lastRotaDay(ctx, khatma._id),
+      today,
+    );
+    const quiet = await quietHours(ctx);
+    return {
+      name: khatma.name,
+      days: rota.days,
+      firstDate: rota.firstDate,
+      firstDatePassed: await firstDatePassed(ctx, khatma, rota, today),
+      endDate: rota.endDate,
+      timeZone: rota.timeZone,
+      messages: rota.messages,
+      pausedAt: rota.pausedAt,
+      pauseDates: rota.pauseDates,
+      upcoming: nextReadingDates(
+        rota.days,
+        rota.firstDate,
+        from,
+        UPCOMING_DATES,
+        new Set(),
+      ).filter((date) => rota.endDate === null || date <= rota.endDate),
+      quiet: { startHour: quiet.startHour, endHour: quiet.endHour },
+    };
+  },
+});
+
+export const update = sessionMutation({
+  args: {
+    inviteCode: v.string(),
+    name: v.optional(v.union(v.string(), v.null())),
+    days: v.optional(readingDaysValidator),
+    firstDate: v.optional(v.string()),
+    endDate: v.optional(v.union(v.string(), v.null())),
+    timeZone: v.optional(v.string()),
+    messages: v.optional(rotaMessagesValidator),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    | { ok: true }
+    | {
+        error:
+          | "invalid_days"
+          | "invalid_dates"
+          | "first_date_passed"
+          | "invalid_times"
+          | "invalid_zone";
+      }
+  > => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const rota = khatma.rota;
+    if (!rota) throw new ConvexError({ code: "forbidden" });
+
+    if (args.days !== undefined && !isValidReadingDays(args.days)) {
+      return { error: "invalid_days" };
+    }
+    if (
+      args.timeZone !== undefined &&
+      safeTimeZone(args.timeZone) !== args.timeZone
+    ) {
+      return { error: "invalid_zone" };
+    }
+
+    const days = args.days ?? rota.days;
+    const timeZone = args.timeZone ?? rota.timeZone;
+    const firstDate = args.firstDate ?? rota.firstDate;
+    const endDate = args.endDate === undefined ? rota.endDate : args.endDate;
+    const today = localDate(Date.now(), timeZone);
+    if (
+      !isDate(firstDate) ||
+      (endDate !== null && (!isDate(endDate) || endDate < firstDate))
+    ) {
+      return { error: "invalid_dates" };
+    }
+    const passed = await firstDatePassed(ctx, khatma, rota, today);
+    if (passed && firstDate !== rota.firstDate) {
+      return { error: "first_date_passed" };
+    }
+    // A first date still ahead must be a reading date; one behind us is what it is.
+    if (
+      !passed &&
+      (firstDate < today || !isReadingDate(days, firstDate, firstDate))
+    ) {
+      return { error: "invalid_dates" };
+    }
+
+    if (args.messages !== undefined) {
+      const quiet = await quietHours(ctx);
+      if (messageTimesError(args.messages, quiet.startHour, quiet.endHour)) {
+        return { error: "invalid_times" };
+      }
+    }
+
+    await ctx.db.patch(khatma._id, {
+      ...(args.name !== undefined ? { name: cleanKhatmaName(args.name) } : {}),
+      rota: {
+        ...rota,
+        days,
+        firstDate,
+        endDate,
+        timeZone,
+        messages: args.messages ?? rota.messages,
+      },
+    });
+    return { ok: true };
+  },
+});
+
+export const setPaused = sessionMutation({
+  args: { inviteCode: v.string(), paused: v.boolean() },
+  handler: async (ctx, args): Promise<{ ok: true }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const rota = khatma.rota;
+    if (!rota) throw new ConvexError({ code: "forbidden" });
+    const pausedAt = args.paused ? (rota.pausedAt ?? Date.now()) : null;
+    await ctx.db.patch(khatma._id, { rota: { ...rota, pausedAt } });
+    return { ok: true };
+  },
+});
+
+export const addPauseDate = sessionMutation({
+  args: { inviteCode: v.string(), date: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_reading_date" | "past" }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const rota = khatma.rota;
+    if (!rota) throw new ConvexError({ code: "forbidden" });
+    if (
+      !isDate(args.date) ||
+      !isReadingDate(rota.days, rota.firstDate, args.date) ||
+      (rota.endDate !== null && args.date > rota.endDate)
+    ) {
+      return { error: "not_reading_date" };
+    }
+    const started = await ctx.db
+      .query("rotaDays")
+      .withIndex("by_khatma_date", (q) =>
+        q.eq("khatmaId", khatma._id).eq("date", args.date),
+      )
+      .first();
+    if (started || args.date < localDate(Date.now(), rota.timeZone)) {
+      return { error: "past" };
+    }
+    if (!rota.pauseDates.includes(args.date)) {
+      await ctx.db.patch(khatma._id, {
+        rota: { ...rota, pauseDates: [...rota.pauseDates, args.date].sort() },
+      });
+    }
+    return { ok: true };
+  },
+});
+
+export const removePauseDate = sessionMutation({
+  args: { inviteCode: v.string(), date: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_reading_date" | "past" }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const rota = khatma.rota;
+    if (!rota) throw new ConvexError({ code: "forbidden" });
+    if (!isDate(args.date)) return { error: "not_reading_date" };
+    if (args.date < localDate(Date.now(), rota.timeZone)) {
+      return { error: "past" };
+    }
+    if (rota.pauseDates.includes(args.date)) {
+      await ctx.db.patch(khatma._id, {
+        rota: {
+          ...rota,
+          pauseDates: rota.pauseDates.filter((d) => d !== args.date),
+        },
+      });
     }
     return { ok: true };
   },

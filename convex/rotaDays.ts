@@ -46,15 +46,20 @@ function lastDay(
     .first();
 }
 
-/** Whether a day should start now: its date is a reading date that has no day yet. */
+/**
+ * Whether a day should start now: today is a reading date after the last
+ * started day (days only go forward, even if the time zone moved west).
+ */
 async function shouldStart(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
   rota: RotaConfig,
+  last: Doc<"rotaDays"> | null,
   today: string,
   now: number,
 ): Promise<boolean> {
   if (rota.pausedAt !== null) return false;
+  if (last && today <= last.date) return false;
   if (rota.endDate !== null && today > rota.endDate) return false;
   if (!isReadingDate(rota.days, rota.firstDate, today)) return false;
   if (rota.pauseDates.includes(today)) return false;
@@ -181,14 +186,20 @@ export const tick = internalMutation({
       last = { ...last, closedAt: now };
     }
 
-    if (await shouldStart(ctx, khatma, rota, today, now)) {
+    if (await shouldStart(ctx, khatma, rota, last, today, now)) {
       if (last && last.closedAt === null) {
         await ctx.db.patch(last._id, { closedAt: now });
       }
       last = await startDay(ctx, khatma, rota, last, today, now);
     }
 
-    if (last && last.closedAt === null && last.date === today) {
+    // A paused khatma sends the organizer nothing.
+    if (
+      last &&
+      last.closedAt === null &&
+      last.date === today &&
+      rota.pausedAt === null
+    ) {
       await sendOrganizerNotes(ctx, khatma, rota, last, now);
     }
 

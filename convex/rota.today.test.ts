@@ -331,3 +331,21 @@ test("a non-organizer gets null and forbidden", async () => {
     );
   }
 });
+
+test("a read of another khatma is not_found for this khatma's organizer", async () => {
+  const t = convexTest(schema, modules);
+  const a = await setup(t);
+  const b = await setup(t);
+  await startDay(t, a);
+  await startDay(t, b);
+  const mine = await add(t, a, 8);
+  const theirs = await tile(t, b, 8);
+  for (const [name, args] of [
+    ["reassign", { readId: theirs.readId, participantId: mine }],
+    ["markDone", { readId: theirs.readId }],
+    ["markNotDone", { readId: theirs.readId }],
+  ] as const) {
+    expect(await act(t, a, name, args)).toEqual({ error: "not_found" });
+  }
+  expect((await tile(t, b, 8)).state).toBe("unread");
+});
