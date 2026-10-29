@@ -105,6 +105,62 @@ describe("Toast swipe", () => {
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
 
+  it("a flick after a pause still counts", () => {
+    const el = setup();
+    fireEvent.pointerDown(el, { pointerId: 1, clientX: 0, clientY: 0 });
+    vi.advanceTimersByTime(600);
+    fireEvent.pointerMove(el, { pointerId: 1, clientX: 0, clientY: 12 });
+    vi.advanceTimersByTime(10);
+    fireEvent.pointerMove(el, { pointerId: 1, clientX: 0, clientY: 30 });
+    fireEvent.pointerUp(el, { pointerId: 1, clientX: 0, clientY: 30 });
+    act(() => void vi.advanceTimersByTime(250));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("a fast move that stops before lifting is not a flick", () => {
+    const el = setup();
+    fireEvent.pointerDown(el, { pointerId: 1, clientX: 0, clientY: 0 });
+    vi.advanceTimersByTime(10);
+    fireEvent.pointerMove(el, { pointerId: 1, clientX: 0, clientY: 30 });
+    vi.advanceTimersByTime(400);
+    fireEvent.pointerUp(el, { pointerId: 1, clientX: 0, clientY: 30 });
+    act(() => void vi.advanceTimersByTime(250));
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("a second finger does not take over a drag", () => {
+    const el = setup();
+    fireEvent.pointerDown(el, { pointerId: 1, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(el, { pointerId: 1, clientX: -30, clientY: 0 });
+    fireEvent.pointerDown(el, { pointerId: 2, clientX: 100, clientY: 0 });
+    fireEvent.pointerUp(el, { pointerId: 2, clientX: 100, clientY: 0 });
+    vi.advanceTimersByTime(300);
+    fireEvent.pointerMove(el, { pointerId: 1, clientX: -40, clientY: 0 });
+    expect(el.style.translate).toBe("-40px 0px");
+    vi.advanceTimersByTime(300);
+    fireEvent.pointerUp(el, { pointerId: 1, clientX: -40, clientY: 0 });
+    expect(el.style.translate).toBe("0px 0px");
+  });
+
+  it("after a drag that ends with no click, the next click on undo counts", () => {
+    setup(10_000);
+    const undo = screen.getByRole("button", { name: t.toast.undo });
+    swipe(undo, -30, 0, 4, 250);
+    act(() => void vi.advanceTimersByTime(0));
+    fireEvent.click(undo);
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it("time running out mid-drag waits for the finger to lift", () => {
+    const el = setup();
+    fireEvent.pointerDown(el, { pointerId: 1, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(el, { pointerId: 1, clientX: -30, clientY: 0 });
+    act(() => void vi.advanceTimersByTime(6_000));
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.pointerUp(el, { pointerId: 1, clientX: -30, clientY: 0 });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
   it("a cancelled drag springs back", () => {
     const el = setup();
     fireEvent.pointerDown(el, { pointerId: 1, clientX: 0, clientY: 0 });

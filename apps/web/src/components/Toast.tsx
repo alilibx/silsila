@@ -13,8 +13,25 @@ const SWIPE_PX = 56;
 const FLICK_SPEED = 0.5;
 const FLICK_PX = 24;
 const EXIT_MS = 200;
+/** A release this soon after the last move keeps that move's speed; later, the finger had stopped. */
+const FLICK_WINDOW_MS = 100;
 
-type Drag = { id: number; x: number; y: number; at: number; axis?: "x" | "y" };
+type Axis = "x" | "y";
+type Drag = {
+  id: number;
+  x: number;
+  y: number;
+  axis?: Axis;
+  /** Distance, time and speed of the latest move, for telling a flick from a slow drag. */
+  distance: number;
+  at: number;
+  speed: number;
+};
+
+/** How far the toast has moved toward dismissal: only left (negative x) and down (positive y) count. */
+function along(axis: Axis, dx: number, dy: number): number {
+  return axis === "x" ? Math.max(0, -dx) : Math.max(0, dy);
+}
 
 export type ToastData = {
   /** A new id replaces the toast on screen and restarts its timers. */
@@ -41,24 +58,29 @@ type Props = {
 export function Toast({ toast, busy, onUndo, onDismiss }: Props) {
   const remaining = toast.undoMs ?? null;
   const [expired, setExpired] = useState(false);
+  const drag = useRef<Drag | null>(null);
+  // Set once a press became a drag, so the click that ends it does not reach the undo button.
+  const dragged = useRef(false);
+  // The toast's time ran out mid-drag: it goes once the finger lifts, not from under it.
+  const due = useRef(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [leaving, setLeaving] = useState<Axis | null>(null);
 
   useEffect(() => {
+    const expire = () => {
+      if (drag.current?.axis) due.current = true;
+      else onDismiss();
+    };
     const timers: ReturnType<typeof setTimeout>[] = [];
     if (remaining === null) {
-      timers.push(setTimeout(onDismiss, MESSAGE_MS));
+      timers.push(setTimeout(expire, MESSAGE_MS));
     } else {
       timers.push(setTimeout(() => setExpired(true), remaining));
-      timers.push(setTimeout(onDismiss, remaining + LINGER_MS));
+      timers.push(setTimeout(expire, remaining + LINGER_MS));
     }
     return () => timers.forEach(clearTimeout);
     // Timers start once per toast; the parent remounts this component for a new one.
   }, []);
-
-  const drag = useRef<Drag | null>(null);
-  // Set once a press became a drag, so the click that ends it does not reach the undo button.
-  const dragged = useRef(false);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [leaving, setLeaving] = useState<"x" | "y" | null>(null);
 
   useEffect(() => {
     if (!leaving) return;
@@ -66,17 +88,23 @@ export function Toast({ toast, busy, onUndo, onDismiss }: Props) {
     return () => clearTimeout(timer);
   }, [leaving]);
 
-  // Only left (negative x) and down (positive y) move the toast.
-  const along = (axis: "x" | "y", dx: number, dy: number) =>
-    axis === "x" ? Math.max(0, -dx) : Math.max(0, dy);
+  const springBack = () => {
+    drag.current = null;
+    setOffset({ x: 0, y: 0 });
+    if (due.current) onDismiss();
+  };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (leaving || (e.pointerType === "mouse" && e.button !== 0)) return;
+    // A second finger never takes over a drag already under way.
+    if (drag.current?.axis) return;
     drag.current = {
       id: e.pointerId,
       x: e.clientX,
       y: e.clientY,
+      distance: 0,
       at: Date.now(),
+      speed: 0,
     };
     dragged.current = false;
   };
@@ -92,8 +120,14 @@ export function Toast({ toast, busy, onUndo, onDismiss }: Props) {
       dragged.current = true;
       e.currentTarget.setPointerCapture?.(e.pointerId);
     }
+    const now = Date.now();
     const distance = along(d.axis, dx, dy);
-    setOffset(d.axis === "x" ? { x: -distance, y: 0 } : { x: 0, y: distance });
+    d.speed = (distance - d.distance) / Math.max(1, now - d.at);
+    d.distance = distance;
+    d.at = now;
+    const next =
+      d.axis === "x" ? { x: -distance, y: 0 } : { x: 0, y: distance };
+    setOffset((prev) => (prev.x === next.x && prev.y === next.y ? prev : next));
   };
 
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
@@ -101,21 +135,21 @@ export function Toast({ toast, busy, onUndo, onDismiss }: Props) {
     if (!d || d.id !== e.pointerId) return;
     drag.current = null;
     if (!d.axis) return;
+    // The click that follows this release (if any) arrives before the timer; after it, clicks count.
+    setTimeout(() => (dragged.current = false), 0);
     const distance = along(d.axis, e.clientX - d.x, e.clientY - d.y);
-    const speed = distance / Math.max(1, Date.now() - d.at);
-    if (
-      distance >= SWIPE_PX ||
-      (distance >= FLICK_PX && speed >= FLICK_SPEED)
-    ) {
-      setLeaving(d.axis);
-    } else {
-      setOffset({ x: 0, y: 0 });
-    }
+    const flicked =
+      distance >= FLICK_PX &&
+      d.speed >= FLICK_SPEED &&
+      Date.now() - d.at <= FLICK_WINDOW_MS;
+    if (distance >= SWIPE_PX || flicked) setLeaving(d.axis);
+    else springBack();
   };
 
-  const onPointerCancel = () => {
-    drag.current = null;
-    setOffset({ x: 0, y: 0 });
+  const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
+    if (drag.current?.id !== e.pointerId) return;
+    dragged.current = false;
+    springBack();
   };
 
   const canUndo = remaining !== null && !expired;
