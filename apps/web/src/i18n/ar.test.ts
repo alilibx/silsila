@@ -1,3 +1,4 @@
+import { DUAS } from "@convex/lib/duas";
 import { SCHEDULES } from "@convex/lib/schedule";
 import { describe, expect, it } from "vitest";
 import { t } from "./ar";
@@ -22,5 +23,11 @@ describe("separators next to numbers", () => {
     expect(t.celebration.subtitle("ختمة العائلة", "١٢")).toBe(
       "الحمد لله، ختمة العائلة، الختمة ١٢",
     );
+  });
+});
+
+describe("celebration duas", () => {
+  it("are the same ones the WhatsApp dua text sends", () => {
+    expect(t.celebration.duas).toBe(DUAS);
   });
 });

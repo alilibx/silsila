@@ -57,6 +57,13 @@ export function juzList(juz: readonly number[]): string {
   return `${digits.slice(0, -1).join("، ")} و${digits[digits.length - 1]}`;
 }
 
+/** `الجزء ٢٦`, `الجزآن ٥ و٦`, `الأجزاء ٣، ٥ و٦`: the word agreeing with the list. */
+export function juzPhrase(juz: readonly number[]): string {
+  const word =
+    juz.length === 1 ? "الجزء" : juz.length === 2 ? "الجزآن" : "الأجزاء";
+  return `${word} ${juzList(juz)}`;
+}
+
 /** The count with the noun agreeing: جزءاً واحداً, جزأين, ٣ أجزاء, ١١ جزءاً. */
 function ajzaa(n: number): string {
   if (n === 1) return "جزءاً واحداً";

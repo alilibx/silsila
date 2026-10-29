@@ -1,4 +1,5 @@
 import { toArabicDigits } from "@convex/lib/digits";
+import { DUAS } from "@convex/lib/duas";
 import { noteText } from "@convex/lib/noteText";
 import type { Schedule } from "@convex/lib/schedule";
 
@@ -761,17 +762,7 @@ export const ar = {
     shareMessage: (round: string) =>
       `الحمد لله، ختمنا القرآن معاً للمرة ${round} 🤍\nتقبّل الله منا ومنكم.`,
     continue: "تابع إلى الختمة",
-    // Tanzil Quran Text (Uthmani, Version 1.1), https://tanzil.net — copied verbatim, do not edit
-    duas: [
-      {
-        text: "رَبَّنَا تَقَبَّلْ مِنَّآ ۖ إِنَّكَ أَنتَ ٱلسَّمِيعُ ٱلْعَلِيمُ",
-        ref: "البقرة ١٢٧",
-      },
-      {
-        text: "رَبَّنَآ ءَاتِنَا فِى ٱلدُّنْيَا حَسَنَةً وَفِى ٱلْـَٔاخِرَةِ حَسَنَةً وَقِنَا عَذَابَ ٱلنَّارِ",
-        ref: "البقرة ٢٠١",
-      },
-    ],
+    duas: DUAS,
   },
 } as const;
 

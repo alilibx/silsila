@@ -2,6 +2,7 @@ import { toArabicDigits } from "./digits";
 import {
   behindPhrase,
   juzList,
+  juzPhrase,
   type NoteKind,
   type NoteTextInput,
 } from "./noteText";
@@ -45,11 +46,11 @@ export const NOTE_TEMPLATES: Record<NoteKind, string | null> = {
   completed: "wirdak_completed_v2",
   nowOrganizer: "wirdak_now_organizer_v2",
   organizerMoved: "wirdak_organizer_moved_v2",
-  // The organizer's rota day notes: in-app and push only.
-  rotaUnread: null,
-  rotaSummary: null,
+  // The organizer's rota notes, as updates on the khatma they run.
+  rotaUnread: "wirdak_rota_unread",
+  rotaSummary: "wirdak_rota_summary",
+  rotaJoinRequest: "wirdak_rota_join_request",
   // Notes about a participant's own messages: in-app and push only.
-  rotaJoinRequest: null,
   rotaSilent: null,
   rotaSilenced: null,
   rotaStopped: null,
@@ -118,13 +119,17 @@ function noteParams(note: NoteTextInput, now: number): string[] {
       return [juzList(note.juz)];
     case "behind":
       return [behindPhrase(note.count ?? 0, note.until, now)];
-    // the two rota kinds never reach WhatsApp (`NOTE_TEMPLATES` is null for both)
+    case "rotaUnread":
+      return [juzPhrase(note.juz)];
+    case "rotaSummary":
+      return [toArabicDigits(note.count ?? 0)];
+    case "rotaJoinRequest":
+      return [note.name ?? ""];
+    // no body values (`rotaSilent`, `rotaSilenced` and `rotaStopped` never
+    // reach WhatsApp: `NOTE_TEMPLATES` is null for them)
     case "completed":
     case "nowOrganizer":
     case "organizerMoved":
-    case "rotaUnread":
-    case "rotaSummary":
-    case "rotaJoinRequest":
     case "rotaSilent":
     case "rotaSilenced":
     case "rotaStopped":
