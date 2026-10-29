@@ -21,8 +21,8 @@ function today(): string {
 
 // A rotating khatma from start to a first day: A signs in, an admin-style switch lets A create one,
 // A makes it daily from today, adds two people, reassigns an unread juz' to themselves, records it
-// as read, and then pauses the khatma. Before 08:00 the first day has not started yet, so the
-// test stops at the line saying when it will.
+// as read, and then pauses the khatma. The run moves the default day time to one that has passed
+// (e2e/global-setup.ts), so the first day starts as soon as A taps «تمّ», at any hour.
 test("rota: create, place people, run a day", async ({ page }) => {
   const aName = `علي ${Math.floor(Math.random() * 1e6)}`;
   const aPhone = randomPhone();
@@ -60,19 +60,15 @@ test("rota: create, place people, run a day", async ({ page }) => {
     await expect(people.getByText(name)).toBeVisible();
   }
   await expect(people.getByRole("listitem")).toHaveCount(3);
-  await page.getByRole("link", { name: t.rota.done }).click();
+  await page.getByRole("button", { name: t.rota.done, exact: true }).click();
 
   // --- Today ---------------------------------------------------------------------------------
   await expect(
     page.getByRole("heading", { level: 1, name: KHATMA_NAME }),
   ).toBeVisible();
+  // «تمّ» finished setup, and the day's time has passed: day 1 starts at once.
   const grid = page.getByRole("region", { name: t.rota.gridLabel });
-  const notStarted = page.getByText(/^تبدأ الختمة ١ /);
-  await expect(grid.or(notStarted)).toBeVisible();
-  if (await notStarted.isVisible()) {
-    // Before the day's message time: the first day is still ahead, so there is nothing to run.
-    return;
-  }
+  await expect(grid).toBeVisible();
 
   const unread = (juz: number) =>
     page.getByRole("button", {
