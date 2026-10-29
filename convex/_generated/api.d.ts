@@ -57,6 +57,7 @@ import type * as preview from "../preview.js";
 import type * as publicSettings from "../publicSettings.js";
 import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
+import type * as rota from "../rota.js";
 import type * as rounds from "../rounds.js";
 import type * as sessions from "../sessions.js";
 import type * as stats from "../stats.js";
@@ -120,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   publicSettings: typeof publicSettings;
   push: typeof push;
   pushNode: typeof pushNode;
+  rota: typeof rota;
   rounds: typeof rounds;
   sessions: typeof sessions;
   stats: typeof stats;

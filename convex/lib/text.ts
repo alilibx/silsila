@@ -1,4 +1,5 @@
 import { parsePhoneNumberFromString } from "libphonenumber-js/min";
+import { normalizeDigits } from "./digits";
 
 // Re-exported so existing Convex imports keep working; the web app imports ./digits directly.
 export { normalizeDigits, toArabicDigits } from "./digits";
@@ -71,4 +72,19 @@ export function maskPhone(e164: string): string {
   }
   const digits = e164.replace(/\D/g, "");
   return digits.length >= 4 ? `••• ${digits.slice(-4)}` : "•••";
+}
+
+const E164_RE = /^\+\d{8,15}$/;
+
+/**
+ * A typed phone number as `+` and 8 to 15 digits, or `null`. Reads Arabic and
+ * Persian digits, drops spaces, dashes, dots and brackets, and turns a leading
+ * `00` into `+`. A number without a country code is not guessed.
+ */
+export function normalizePhone(raw: string): string | null {
+  const compact = normalizeDigits(raw).replace(/[\s\-.()[\]]/g, "");
+  const international = compact.startsWith("00")
+    ? `+${compact.slice(2)}`
+    : compact;
+  return E164_RE.test(international) ? international : null;
 }

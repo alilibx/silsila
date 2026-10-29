@@ -70,7 +70,7 @@ export function juzFor(slot: number, number: number): number {
 
 /** The slot that reads `juz` in khatma `number` (inverse of `juzFor`). */
 export function slotFor(juz: number, number: number): number {
-  return ((juz - 1 - (number - 1) + ROTA_SIZE * 2) % ROTA_SIZE) + 1;
+  return ((((juz - number) % ROTA_SIZE) + ROTA_SIZE) % ROTA_SIZE) + 1;
 }
 
 function dayNumber(date: string): number {

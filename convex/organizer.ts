@@ -45,7 +45,7 @@ export type OrganizerSettings = {
  * The khatma behind `inviteCode` when `person` is its organizer and still an
  * active member of it; otherwise `null`. A removed organizer holds no controls.
  */
-async function organizerOf(
+export async function organizerOf(
   ctx: QueryCtx,
   inviteCode: string,
   person: Doc<"people"> | null,
