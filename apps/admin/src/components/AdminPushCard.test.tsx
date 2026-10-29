@@ -17,7 +17,7 @@ vi.mock("convex/react", async () => {
   return {
     useQuery: () => m.mine,
     useMutation: (ref: never) =>
-      getFunctionName(ref) === "adminPush:setNotifyHelp"
+      getFunctionName(ref) === "adminPush:setNotify"
         ? m.setNotifyHelp
         : vi.fn(),
   };
@@ -56,6 +56,7 @@ describe("AdminPushCard", () => {
     await userEvent.click(toggle);
     expect(m.setNotifyHelp).toHaveBeenCalledWith({
       adminToken: "tok",
+      kind: "help",
       on: false,
     });
     await userEvent.click(
@@ -79,5 +80,33 @@ describe("AdminPushCard", () => {
     m.support = "ios_install";
     render(<AdminPushCard />);
     expect(await screen.findByText(t.adminPush.iosInstall)).toBeInTheDocument();
+  });
+});
+
+describe("AdminPushCard alert kinds", () => {
+  it("shows a switch per kind, each saving its own preference", async () => {
+    m.mine = {
+      thisDevice: true,
+      notifyHelp: true,
+      notifySummary: true,
+      notifyMilestones: false,
+    };
+    render(<AdminPushCard />);
+    await userEvent.click(
+      await screen.findByRole("switch", { name: t.adminPush.summary }),
+    );
+    expect(m.setNotifyHelp).toHaveBeenCalledWith({
+      adminToken: "tok",
+      kind: "summary",
+      on: false,
+    });
+    await userEvent.click(
+      screen.getByRole("switch", { name: t.adminPush.milestones }),
+    );
+    expect(m.setNotifyHelp).toHaveBeenCalledWith({
+      adminToken: "tok",
+      kind: "milestones",
+      on: true,
+    });
   });
 });

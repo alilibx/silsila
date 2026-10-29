@@ -63,52 +63,89 @@ export const mine = adminQuery({
     return {
       thisDevice: rows.some((r) => r.adminId === ctx.admin._id),
       notifyHelp: ctx.admin.notifyHelp !== false,
+      notifySummary: ctx.admin.notifySummary !== false,
+      notifyMilestones: ctx.admin.notifyMilestones !== false,
     };
   },
 });
 
+const notifyKindValidator = v.union(
+  v.literal("help"),
+  v.literal("summary"),
+  v.literal("milestones"),
+);
+const FIELD = {
+  help: "notifyHelp",
+  summary: "notifySummary",
+  milestones: "notifyMilestones",
+} as const;
+
 /** A personal preference, not a change to Wirdak, so not audited. */
-export const setNotifyHelp = adminMutation({
-  args: { on: v.boolean() },
+export const setNotify = adminMutation({
+  args: { kind: notifyKindValidator, on: v.boolean() },
   handler: async (ctx, args): Promise<null> => {
-    await ctx.db.patch(ctx.admin._id, { notifyHelp: args.on });
+    await ctx.db.patch(ctx.admin._id, { [FIELD[args.kind]]: args.on });
     return null;
   },
 });
 
+const pushKindValidator = v.union(
+  v.literal("request"),
+  v.literal("message"),
+  v.literal("summary"),
+  v.literal("milestone"),
+);
+
 /**
- * Who gets a help push and what it says (spec 7). The text never carries the
- * person's words or name: a lock screen is public.
+ * Who gets an admin push and what it says (spec 7). Help pushes never carry
+ * the person's words or name: a lock screen is public. Summary and milestone
+ * bodies are totals only, written by `stats.ts`.
  */
 export const deliveryPlan = internalQuery({
   args: {
-    requestId: v.id("helpRequests"),
-    kind: v.union(v.literal("request"), v.literal("message")),
+    kind: pushKindValidator,
+    requestId: v.optional(v.id("helpRequests")),
+    body: v.optional(v.string()),
+    tag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const field =
+      args.kind === "summary"
+        ? FIELD.summary
+        : args.kind === "milestone"
+          ? FIELD.milestones
+          : FIELD.help;
     const admins = await ctx.db.query("admins").collect();
     const listening = new Set<Id<"admins">>(
-      admins.filter((a) => a.notifyHelp !== false).map((a) => a._id),
+      admins.filter((a) => a[field] !== false).map((a) => a._id),
     );
     const rows = (
       await ctx.db.query("adminPushSubscriptions").collect()
     ).filter((r) => listening.has(r.adminId));
     if (rows.length === 0) return null;
+    const help = args.kind === "request" || args.kind === "message";
     return {
       subscriptions: rows.map((r) => ({
         endpoint: r.endpoint,
         p256dh: r.p256dh,
         auth: r.auth,
       })),
-      payload: {
-        title: "وِردك · الإدارة",
-        body:
-          args.kind === "request"
-            ? "طلب مساعدة جديد"
-            : "رسالة جديدة في طلب مساعدة",
-        url: `/help/${args.requestId}`,
-        tag: `help-${args.requestId}`,
-      },
+      payload: help
+        ? {
+            title: "وِردك · الإدارة",
+            body:
+              args.kind === "request"
+                ? "طلب مساعدة جديد"
+                : "رسالة جديدة في طلب مساعدة",
+            url: `/help/${args.requestId}`,
+            tag: `help-${args.requestId}`,
+          }
+        : {
+            title: "وِردك · الإدارة",
+            body: args.body ?? "",
+            url: "/",
+            tag: args.tag ?? args.kind,
+          },
     };
   },
 });

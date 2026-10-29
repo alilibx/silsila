@@ -25,7 +25,9 @@ import {
   shardedBucket,
   type RateLimitBucket,
 } from "./lib/rateLimit";
+import { isBlocked } from "./lib/blocked";
 import { getSetting } from "./lib/settings";
+import { bumpCounter, dubaiDay, signInKey } from "./lib/stats";
 import { insertSession } from "./sessions";
 import { cleanDisplayName, maskPhone, normalizeDigits } from "./lib/text";
 import {
@@ -383,6 +385,8 @@ export const createPending = internalMutation({
     await ctx.scheduler.runAt(expiresAt, internal.verification.expire, {
       verificationId,
     });
+    // Member sign-ins only: spec 6.1's success rate is about members.
+    if (!admin) await bumpCounter(ctx, signInKey(dubaiDay(now), "started"));
     return { verificationId, code };
   },
 });
@@ -503,6 +507,10 @@ export const matchIncoming = internalMutation({
       HOUR_MS,
     );
     if (!allowed) return { kind: "rate_limited" };
+    // A blocked number gets "no code found" and never touches a pending code (spec 8).
+    if (await isBlocked(ctx, args.phone)) {
+      return { kind: "no_match", codeShaped: false };
+    }
 
     const windows = codeWindows(args.text);
     const doc = await findPendingByText(ctx, windows);
@@ -584,6 +592,7 @@ export const claimInternal = internalMutation({
     }
     const personId = await insertPerson(ctx, doc, doc.phone, args.timeZone);
     await completeSignIn(ctx, doc, personId, args);
+    await bumpCounter(ctx, signInKey(dubaiDay(Date.now()), "completed"));
     return { kind: "ok", phone: doc.phone, created: true, otherSessions: 0 };
   },
 });
@@ -615,6 +624,7 @@ export const confirmPinInternal = internalMutation({
     const personId =
       existing?._id ?? (await insertPerson(ctx, doc, doc.phone, args.timeZone));
     const sessionId = await completeSignIn(ctx, doc, personId, args);
+    await bumpCounter(ctx, signInKey(dubaiDay(Date.now()), "completed"));
     const sessions = await ctx.db
       .query("sessions")
       .withIndex("by_person", (q) => q.eq("personId", personId))

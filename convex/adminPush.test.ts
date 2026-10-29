@@ -74,7 +74,7 @@ test("an endpoint belongs to the admin who subscribed it last", async () => {
   });
   expect(
     await t.query(api.adminPush.mine, { adminToken: "ali", endpoint }),
-  ).toEqual({ thisDevice: true, notifyHelp: true });
+  ).toMatchObject({ thisDevice: true, notifyHelp: true });
 
   await t.mutation(api.adminPush.subscribe, {
     adminToken: "sara",
@@ -110,8 +110,9 @@ test("the plan skips admins who turned help alerts off, and never carries the wo
     endpoint: "https://push.example/sara",
     ...keys,
   });
-  await t.mutation(api.adminPush.setNotifyHelp, {
+  await t.mutation(api.adminPush.setNotify, {
     adminToken: "sara",
+    kind: "help",
     on: false,
   });
 
@@ -156,4 +157,62 @@ test("only admins can manage admin push", async () => {
       ...keys,
     }),
   ).rejects.toThrow(/not_admin/);
+});
+
+test("summary and milestone pushes follow their own switches", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t, "ali", "+971500000001");
+  await admin(t, "sara", "+971500000002");
+  for (const [token, endpoint] of [
+    ["ali", "https://push.example/ali"],
+    ["sara", "https://push.example/sara"],
+  ]) {
+    await t.mutation(api.adminPush.subscribe, {
+      adminToken: token!,
+      endpoint: endpoint!,
+      ...keys,
+    });
+  }
+  await t.mutation(api.adminPush.setNotify, {
+    adminToken: "sara",
+    kind: "summary",
+    on: false,
+  });
+  await t.mutation(api.adminPush.setNotify, {
+    adminToken: "ali",
+    kind: "milestones",
+    on: false,
+  });
+
+  const summary = await t.query(internal.adminPush.deliveryPlan, {
+    kind: "summary",
+    body: "أمس: …",
+    tag: "summary-1",
+  });
+  expect(summary?.subscriptions.map((s) => s.endpoint)).toEqual([
+    "https://push.example/ali",
+  ]);
+  expect(summary?.payload).toEqual({
+    title: "وِردك · الإدارة",
+    body: "أمس: …",
+    url: "/",
+    tag: "summary-1",
+  });
+
+  const milestone = await t.query(internal.adminPush.deliveryPlan, {
+    kind: "milestone",
+    body: "🎉",
+    tag: "milestone-khatmas-100",
+  });
+  expect(milestone?.subscriptions.map((s) => s.endpoint)).toEqual([
+    "https://push.example/sara",
+  ]);
+
+  expect(
+    await t.query(api.adminPush.mine, { adminToken: "sara" }),
+  ).toMatchObject({
+    notifyHelp: true,
+    notifySummary: false,
+    notifyMilestones: true,
+  });
 });

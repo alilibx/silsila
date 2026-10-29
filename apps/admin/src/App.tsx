@@ -12,6 +12,9 @@ import { AuditPage } from "./pages/AuditPage";
 import { HelpInboxPage } from "./pages/HelpInboxPage";
 import { HelpRequestPage } from "./pages/HelpRequestPage";
 import { HomePage } from "./pages/HomePage";
+import { KhatmaAdminPage } from "./pages/KhatmaAdminPage";
+import { PersonAdminPage } from "./pages/PersonAdminPage";
+import { SearchPage } from "./pages/SearchPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SignInPage } from "./pages/SignInPage";
 
@@ -95,6 +98,9 @@ function SignedIn({
           <Route path="/" element={<HomePage />} />
           <Route path="/help" element={<HelpInboxPage />} />
           <Route path="/help/:requestId" element={<HelpRequestPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/khatmas/:khatmaId" element={<KhatmaAdminPage />} />
+          <Route path="/people/:personId" element={<PersonAdminPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/admins" element={<AdminsPage />} />

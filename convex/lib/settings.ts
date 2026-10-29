@@ -67,6 +67,11 @@ export const SETTING_DEFAULTS = {
   helpAttachmentRetentionMs: 30 * DAY,
   /** the whole conversation is deleted this long after it closes */
   helpRetentionMs: 180 * DAY,
+  // Admin pushes (plan 3 spec 7)
+  /** the morning summary's hour, Dubai time */
+  summaryHour: 8,
+  /** at most one milestone push per this window */
+  milestonePushSpacingMs: MINUTE,
 };
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

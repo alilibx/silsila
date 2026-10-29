@@ -42,4 +42,28 @@ crons.daily(
   {},
 );
 
+// Daily at 00:10 Dubai (20:10 UTC): roll up yesterday's stats, catching up any missed day.
+crons.daily(
+  "roll up yesterday's stats",
+  { hourUTC: 20, minuteUTC: 10 },
+  internal.stats.rollupYesterday,
+  {},
+);
+
+// Hourly: the morning summary goes out when the Dubai hour is `summaryHour`.
+crons.hourly(
+  "send the admins' morning summary",
+  { minuteUTC: 5 },
+  internal.stats.morningSummary,
+  {},
+);
+
+// Every 10 minutes: push a milestone when a total passes one.
+crons.interval(
+  "push milestones",
+  { minutes: 10 },
+  internal.stats.checkMilestones,
+  {},
+);
+
 export default crons;

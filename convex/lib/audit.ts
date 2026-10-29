@@ -11,9 +11,25 @@ export const auditActionValidator = v.union(
   v.literal("setting.reset"),
   v.literal("help.close"),
   v.literal("help.reopen"),
+  v.literal("person.signOutAll"),
+  v.literal("phone.block"),
+  v.literal("phone.unblock"),
+  v.literal("khatma.resetInvite"),
+  v.literal("khatma.handOver"),
 );
 
 export type AuditAction = Infer<typeof auditActionValidator>;
+
+export const auditTargetKindValidator = v.union(
+  v.literal("admin"),
+  v.literal("setting"),
+  v.literal("help"),
+  v.literal("person"),
+  v.literal("khatma"),
+  v.literal("phone"),
+);
+
+export type AuditTargetKind = Infer<typeof auditTargetKindValidator>;
 
 /**
  * Records one admin change. Call it in the same mutation as the change, so the
@@ -25,7 +41,7 @@ export async function writeAudit(
     /** The admin who made the change; null for the command line. */
     actor: Doc<"admins"> | null;
     action: AuditAction;
-    targetKind: "admin" | "setting" | "help";
+    targetKind: AuditTargetKind;
     targetId: string;
     before: unknown;
     after: unknown;

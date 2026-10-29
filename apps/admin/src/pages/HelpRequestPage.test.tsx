@@ -55,7 +55,11 @@ beforeEach(() => {
       timeZone: "Asia/Dubai",
     },
     person: { personId: "p1", displayName: "سارة", phone: "+971500000001" },
-    khatma: { name: "ختمة العائلة", inviteCode: "abcdefghijkl" },
+    khatma: {
+      khatmaId: "k1",
+      name: "ختمة العائلة",
+      inviteCode: "abcdefghijkl",
+    },
     messages: [
       {
         _id: "m1",
