@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/alilibx/wirdak/compare/v0.4.0...v0.5.0) (2026-10-29)
+
+
+### Features
+
+* **web:** swipe a toast left or down to dismiss it ([#35](https://github.com/alilibx/wirdak/issues/35)) ([d0a7d9d](https://github.com/alilibx/wirdak/commit/d0a7d9d440041735ca34a85e910413f8bb40fc2c))
+* **web:** track the WhatsApp sign-in and the notification prompt in PostHog ([#38](https://github.com/alilibx/wirdak/issues/38)) ([15e6ed4](https://github.com/alilibx/wirdak/commit/15e6ed4e4055f6c2dae6fca44a98f9fee22148e9))
+
 ## [0.4.0](https://github.com/alilibx/wirdak/compare/v0.3.0...v0.4.0) (2026-10-29)
 
 
