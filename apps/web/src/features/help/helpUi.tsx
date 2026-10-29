@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { RetryBoundary } from "../../components/RetryBoundary";
 import { HelpSheet } from "./HelpSheet";
 
 type OpenOptions = { requestId?: string; screenshot?: Blob | null };
@@ -46,11 +47,14 @@ export function HelpProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       {sheet && (
-        <HelpSheet
-          requestId={sheet.requestId}
-          screenshot={sheet.screenshot}
-          onClose={() => setSheet(null)}
-        />
+        // Outside the page's boundary: a failed help query retries here, not app-wide.
+        <RetryBoundary resetKey={sheet.requestId ?? "new"} quiet>
+          <HelpSheet
+            requestId={sheet.requestId}
+            screenshot={sheet.screenshot}
+            onClose={() => setSheet(null)}
+          />
+        </RetryBoundary>
       )}
     </Ctx.Provider>
   );
