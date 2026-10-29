@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   addWakingMs,
+  instantAt,
   isQuiet,
+  localDate,
+  localMinutes,
   nextAwake,
   safeTimeZone,
   wakingDayMs,
@@ -100,6 +103,18 @@ describe("wakingTime", () => {
     expect(() => addWakingMs(0, H, "Not/AZone", Q)).not.toThrow();
     expect(addWakingMs(dubai("2026-11-02T10:00:00"), H, "Not/AZone", Q)).toBe(
       dubai("2026-11-02T11:00:00"),
+    );
+  });
+
+  it("local date, minutes and the instant of a wall-clock minute", () => {
+    const at = Date.UTC(2026, 9, 29, 20, 30); // 00:30 on 30 Oct in Dubai
+    expect(localDate(at, "Asia/Dubai")).toBe("2026-10-30");
+    expect(localMinutes(at, "Asia/Dubai")).toBe(30);
+    expect(instantAt("2026-10-30", 480, "Asia/Dubai")).toBe(
+      Date.UTC(2026, 9, 30, 4, 0),
+    );
+    expect(instantAt("2027-03-14", 480, "America/New_York")).toBe(
+      Date.UTC(2027, 2, 14, 12, 0),
     );
   });
 });
