@@ -1,0 +1,27 @@
+name: Suggest an idea
+description: A new feature or a change to how Wirdak works.
+title: "<the idea>"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Wirdak stays simple enough for a 10-year-old and an 80-year-old. Ideas that add steps between an invite link and taking a juz' are a hard sell.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What's hard or missing today, and for whom (a reader, an organizer, the admin).
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like Wirdak to do instead.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything else you considered

@@ -12,7 +12,10 @@ const m = vi.hoisted(() => ({
   confirmPin: vi.fn(),
   reject: vi.fn(),
   signOutOthers: vi.fn(),
+  capture: vi.fn(),
 }));
+
+vi.mock("posthog-js", () => ({ default: { capture: m.capture } }));
 
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
@@ -64,7 +67,7 @@ beforeEach(() => {
   clearSessionToken();
   m.status = undefined;
   m.sessions = undefined;
-  for (const f of [m.claim, m.confirmPin, m.reject, m.signOutOthers])
+  for (const f of [m.claim, m.confirmPin, m.reject, m.signOutOthers, m.capture])
     f.mockReset();
   fetchMock.mockReset();
   fetchMock.mockImplementation(async () => new Response(JSON.stringify(START)));
@@ -465,6 +468,97 @@ describe("VerifySheet", () => {
         name: t.verify.devicesTitle,
       });
       await waitFor(() => expect(devices).toHaveFocus());
+    });
+  });
+
+  describe("analytics", () => {
+    const events = (name: string) =>
+      m.capture.mock.calls
+        .filter(([event]) => event === name)
+        .map(([, props]) => props as Record<string, unknown>);
+
+    it("records each step reached, with why the person is signing in", async () => {
+      m.status = { status: "pending", maskedPhone: null };
+      const user = userEvent.setup();
+      ui();
+      await signInStart(user);
+      await screen.findByRole("status");
+      expect(events("verification_step")).toEqual([
+        { step: "name", intent: "signin" },
+        { step: "waiting", intent: "signin" },
+      ]);
+    });
+
+    it("records an error by its code, never the name typed", async () => {
+      const user = userEvent.setup();
+      ui();
+      await user.click(screen.getByRole("button", { name: t.verify.start }));
+      expect(events("verification_error")).toEqual([
+        { code: "nameRequired", step: "name", intent: "signin" },
+      ]);
+    });
+
+    it("records an error once, even when the step moves on before it clears", async () => {
+      m.status = { status: "matched", maskedPhone: "+971 50 ••• 1234" };
+      m.claim.mockRejectedValue(new Error("offline"));
+      const user = userEvent.setup();
+      const view = ui();
+      await signInStart(user);
+      await user.click(
+        await screen.findByRole("button", { name: t.verify.yes }),
+      );
+      await screen.findByText(t.verify.errors.network);
+      m.status = { status: "needs_pin", maskedPhone: "+971 50 ••• 1234" };
+      view.rerender(
+        <VerifySheet
+          title={t.verify.beforeTake}
+          onVerified={onVerified}
+          onClose={onClose}
+        />,
+      );
+      await screen.findByText(t.verify.pinTitle);
+      expect(events("verification_error")).toEqual([
+        { code: "network", step: "confirm", intent: "signin" },
+      ]);
+    });
+
+    it("records closing early with the step it stopped at", async () => {
+      m.status = { status: "pending", maskedPhone: null };
+      const user = userEvent.setup();
+      ui();
+      await signInStart(user);
+      await screen.findByRole("status");
+      await user.click(screen.getByRole("button", { name: t.sheet.close }));
+      expect(events("verification_closed")).toEqual([
+        { step: "waiting", intent: "signin" },
+      ]);
+    });
+
+    it("records a tap on the WhatsApp link, and whether it opened by itself", async () => {
+      m.status = { status: "pending", maskedPhone: null };
+      const user = userEvent.setup();
+      ui();
+      await signInStart(user);
+      await user.click(
+        await screen.findByRole("link", { name: t.verify.openWhatsApp }),
+      );
+      expect(events("verification_whatsapp_tapped")).toEqual([
+        { reopen: false },
+      ]);
+    });
+
+    it("names a take or create sign-in by its kind only", () => {
+      render(
+        <VerifySheet
+          title={t.verify.beforeTake}
+          intent={{ kind: "take", inviteCode: "SECRET", juz: 3 }}
+          onVerified={onVerified}
+          onClose={onClose}
+        />,
+      );
+      expect(events("verification_step")).toEqual([
+        { step: "name", intent: "take" },
+      ]);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { normalizeDigits, toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
+import posthog from "posthog-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, buttonClass } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
@@ -28,6 +29,25 @@ const errorText = "mt-2 font-medium text-[#8A2B1E]";
 
 export function VerifySheet({ title, intent, onVerified, onClose }: Props) {
   const v = useVerification(intent);
+  // Why the person is signing in, never what they typed: the funnel splits on it.
+  const reason = intent?.kind ?? "signin";
+
+  // One event per step reached and per error shown, so PostHog shows where a sign-in stops.
+  useEffect(() => {
+    posthog.capture("verification_step", { step: v.step, intent: reason });
+  }, [v.step, reason]);
+  // Only a new code counts: an error still shown when the step moves on is the same error.
+  const shownError = useRef<string | null>(null);
+  useEffect(() => {
+    if (v.errorCode === shownError.current) return;
+    shownError.current = v.errorCode;
+    if (v.errorCode === null) return;
+    posthog.capture("verification_error", {
+      code: v.errorCode,
+      step: v.step,
+      intent: reason,
+    });
+  }, [v.errorCode, v.step, reason]);
 
   // Fire once, when the flow reaches its end; the page decides what comes next.
   const onVerifiedRef = useRef(onVerified);
@@ -49,6 +69,7 @@ export function VerifySheet({ title, intent, onVerified, onClose }: Props) {
   // Leaving at confirm or pin drops the attempt, so the next person on a shared phone
   // cannot continue it. Leaving while waiting keeps it: the user may be in WhatsApp.
   const close = () => {
+    posthog.capture("verification_closed", { step: v.step, intent: reason });
     if (v.step === "confirm" || v.step === "pin") v.discard();
     onClose();
   };
@@ -141,6 +162,12 @@ function WaitingStep({ v }: StepProps) {
             target="_blank"
             rel="noopener"
             className={buttonClass("whatsapp", "no-underline")}
+            // A tap here means WhatsApp didn't open by itself, or the person lost the message.
+            onClick={() =>
+              posthog.capture("verification_whatsapp_tapped", {
+                reopen: v.opened,
+              })
+            }
           >
             {v.opened ? t.verify.reopenWhatsApp : t.verify.openWhatsApp}
           </a>
