@@ -8,8 +8,9 @@ import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
-import { thrownMessage } from "./errors";
+import { ErrorLine } from "./ErrorLine";
 import { StepBar } from "./StepBar";
+import { useRotaCall } from "./useRotaCall";
 
 const giveErrors: Record<string, string> = t.rota.giveErrors;
 
@@ -26,32 +27,20 @@ function GiveJuzSheet({
   onClose: () => void;
 }) {
   const give = useMutation(api.rota.giveJuz);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useRotaCall(giveErrors);
   const juz = view.freeJuz[0];
   // Everyone has a reader now, so there is nothing left to ask.
   if (juz === undefined) return null;
 
-  async function choose(participantId: View["participants"][number]["id"]) {
-    if (busy || juz === undefined) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await give({
+  const choose = (participantId: View["participants"][number]["id"]) =>
+    run(() =>
+      give({
         sessionToken: getSessionToken() ?? undefined,
         inviteCode,
         participantId,
         juz,
-      });
-      if ("error" in result) {
-        setError(giveErrors[result.error] ?? t.errors.generic);
-      }
-    } catch (caught) {
-      setError(thrownMessage(caught, giveErrors));
-    } finally {
-      setBusy(false);
-    }
-  }
+      }),
+    );
 
   return (
     <Sheet title={t.rota.giveTitle(juz)} onClose={onClose}>
@@ -77,11 +66,7 @@ function GiveJuzSheet({
           </li>
         ))}
       </ul>
-      {error && (
-        <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
-          {error}
-        </p>
-      )}
+      <ErrorLine error={error} />
     </Sheet>
   );
 }

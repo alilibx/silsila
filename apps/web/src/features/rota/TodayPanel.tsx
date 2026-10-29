@@ -3,13 +3,14 @@ import type { Id } from "@convex/_generated/dataModel";
 import { addDays } from "@convex/lib/rota";
 import { localDate } from "@convex/lib/wakingTime";
 import { useMutation, type useQuery } from "convex/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { getSessionToken } from "../../lib/session";
 import { toArabicDigits } from "@convex/lib/digits";
-import { thrownMessage } from "./errors";
+import { ErrorLine } from "./ErrorLine";
+import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate, formatTime } from "./format";
 
 export type TodayView = NonNullable<
@@ -86,43 +87,15 @@ function TileSheet({
   const markDone = useMutation(api.rota.markDone);
   const markNotDone = useMutation(api.rota.markNotDone);
   const [picking, setPicking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useRotaCall(todayErrors);
   const me = view.participants.find((p) => p.isMe);
   const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
 
-  /** One call at a time; a refusal shows in the sheet, a success closes it. */
-  async function run(
-    call: () => Promise<{ ok: true } | { error: string }>,
-  ): Promise<void> {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await call();
-      if ("error" in result) {
-        setError(todayErrors[result.error] ?? t.errors.generic);
-      } else {
-        onClose();
-      }
-    } catch (caught) {
-      setError(thrownMessage(caught));
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }
-
   const give = (participantId: Id<"rotaParticipants">) =>
-    run(() => reassign({ ...args, readId: tile.readId, participantId }));
-
-  const errorLine = error && (
-    <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
-      {error}
-    </p>
-  );
+    run(
+      () => reassign({ ...args, readId: tile.readId, participantId }),
+      onClose,
+    );
 
   if (tile.state === "done") {
     return (
@@ -135,13 +108,16 @@ function TileSheet({
             variant="ghost"
             disabled={busy}
             onClick={() =>
-              void run(() => markNotDone({ ...args, readId: tile.readId }))
+              void run(
+                () => markNotDone({ ...args, readId: tile.readId }),
+                onClose,
+              )
             }
           >
             {t.rota.undoDone}
           </Button>
         </div>
-        {errorLine}
+        <ErrorLine error={error} />
       </Sheet>
     );
   }
@@ -172,7 +148,7 @@ function TileSheet({
             </li>
           ))}
         </ul>
-        {errorLine}
+        <ErrorLine error={error} />
         <div className="mt-4">
           <Button variant="ghost" onClick={() => setPicking(false)}>
             {t.rota.back}
@@ -209,13 +185,13 @@ function TileSheet({
           variant="ghost"
           disabled={busy}
           onClick={() =>
-            void run(() => markDone({ ...args, readId: tile.readId }))
+            void run(() => markDone({ ...args, readId: tile.readId }), onClose)
           }
         >
           {t.rota.markDone}
         </Button>
       </div>
-      {errorLine}
+      <ErrorLine error={error} />
     </Sheet>
   );
 }

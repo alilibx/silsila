@@ -574,13 +574,13 @@ test("view of a rota khatma says so, before looking for a round", async () => {
   await createRotaKhatma(t, ali, "rotaKhatma01");
   expect(
     await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
-  ).toEqual({ rota: true });
+  ).toEqual({ rota: true, name: "ختمة التناوب" });
   expect(
     await t.query(api.khatmas.view, {
       inviteCode: "rotaKhatma01",
       sessionToken: ali.token,
     }),
-  ).toEqual({ rota: true });
+  ).toEqual({ rota: true, name: "ختمة التناوب" });
 });
 
 test("mine lists a rota khatma with the open day's done count and no holding", async () => {

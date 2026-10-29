@@ -4,10 +4,10 @@ import { useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { KhatmaTabs } from "../components/KhatmaTabs";
 import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { PeoplePanel } from "../features/rota/PeoplePanel";
 import { TodayPanel } from "../features/rota/TodayPanel";
 import { t } from "../i18n/ar";
-import { formatDate } from "../lib/format";
 import { useSessionToken } from "../lib/session";
 
 type RotaTab = "today" | "people";
@@ -30,8 +30,17 @@ function Loading() {
   );
 }
 
-/** Everyone but the organizer: members are on WhatsApp, and have no page to run. */
-function WhatsAppPage({ title }: { title: string }) {
+/**
+ * Everyone but the organizer: members are on WhatsApp, and have no page to run. A visitor who is
+ * signed out may be the organizer on a new phone, so they can sign in from here.
+ */
+function WhatsAppPage({
+  title,
+  onSignIn,
+}: {
+  title: string;
+  onSignIn: (() => void) | null;
+}) {
   return (
     <main className="mx-auto max-w-xl p-5">
       <header className="mb-3.5">
@@ -46,12 +55,28 @@ function WhatsAppPage({ title }: { title: string }) {
         {title}
       </h1>
       <p className="mt-4 text-xl leading-relaxed">{t.rota.whatsappOnly}</p>
+      {onSignIn && (
+        <button
+          type="button"
+          onClick={onSignIn}
+          className="mt-4 min-h-14 font-semibold text-green underline underline-offset-4"
+        >
+          {t.rota.imOrganizer}
+        </button>
+      )}
     </main>
   );
 }
 
 /** A rotating khatma's page: the organizer's Today and People tabs, or the short WhatsApp page for anyone else. */
-export function RotaKhatmaPage({ inviteCode }: { inviteCode: string }) {
+export function RotaKhatmaPage({
+  inviteCode,
+  name,
+}: {
+  inviteCode: string;
+  /** The khatma's name, which anyone can see. */
+  name: string | null;
+}) {
   const sessionToken = useSessionToken();
   const [search, setSearch] = useSearchParams();
   const tab: RotaTab = search.get("tab") === "people" ? "people" : "today";
@@ -62,6 +87,8 @@ export function RotaKhatmaPage({ inviteCode }: { inviteCode: string }) {
     today ? { sessionToken, inviteCode } : "skip",
   );
   const mine = useQuery(api.khatmas.mine, { sessionToken });
+  const me = useQuery(api.sessions.me, { sessionToken });
+  const signIn = useSignInSheet();
   const [switching, setSwitching] = useState(false);
 
   // Tabs replace the entry, so the phone's back leaves the khatma instead of stepping through tabs.
@@ -78,11 +105,16 @@ export function RotaKhatmaPage({ inviteCode }: { inviteCode: string }) {
 
   if (today === undefined) return <Loading />;
   if (today === null) {
-    const card = mine?.find((khatma) => khatma.inviteCode === inviteCode);
-    const title = card
-      ? (card.name ?? t.khatma.untitled(formatDate(card.createdAt)))
-      : t.app.name;
-    return <WhatsAppPage title={title} />;
+    // The sheet sits outside the page body so it survives the reload a new session token triggers.
+    return (
+      <>
+        <WhatsAppPage
+          title={name ?? t.app.name}
+          onSignIn={me === null ? signIn.open : null}
+        />
+        {signIn.sheet}
+      </>
+    );
   }
   if (settings === undefined || settings === null) return <Loading />;
 
@@ -151,6 +183,7 @@ export function RotaKhatmaPage({ inviteCode }: { inviteCode: string }) {
           )}
         </section>
       </main>
+      {signIn.sheet}
       {switching && mine && (
         <SwitchKhatmaSheet
           khatmas={mine}

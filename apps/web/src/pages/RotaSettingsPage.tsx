@@ -1,17 +1,17 @@
 import { api } from "@convex/_generated/api";
 import type { ReadingDays, RotaMessages } from "@convex/lib/rota";
 import { useMutation, useQuery } from "convex/react";
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { Button } from "../components/Button";
 import { Sheet } from "../components/Sheet";
 import { SwitchRow } from "../components/SwitchRow";
 import { DateLine } from "../features/rota/DateLine";
-import { thrownMessage } from "../features/rota/errors";
 import { firstReadingDay } from "../features/rota/dates";
 import { formatIsoDate, formatTime } from "../features/rota/format";
 import { ReadingDaysField } from "../features/rota/ReadingDaysField";
 import { TimeField } from "../features/rota/TimeField";
+import { useRotaCall } from "../features/rota/useRotaCall";
 import { t } from "../i18n/ar";
 import { getSessionToken, useSessionToken } from "../lib/session";
 
@@ -108,9 +108,12 @@ function SettingsContent({
   const [endDate, setEndDate] = useState<string | null>(settings.endDate);
   const [timeZone, setTimeZone] = useState(settings.timeZone);
   const [addingDate, setAddingDate] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const { busy, error, run: call } = useRotaCall(rotaErrors);
+  // Which section the last call was for, and the word of thanks once it went through.
+  const [scope, setScope] = useState<{
+    section: SectionId;
+    saved: string | null;
+  } | null>(null);
   const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
 
   const paused = settings.pausedAt !== null;
@@ -135,50 +138,35 @@ function SettingsContent({
   };
   const changed = Object.keys(changes).length > 0;
 
-  /**
-   * One call at a time. `work` returns the copy of a refusal, or null when it went through;
-   * the result shows under `section`.
-   */
-  async function run(
+  const feedback: Feedback | null =
+    scope === null
+      ? null
+      : error !== null
+        ? { section: scope.section, kind: "error", text: error }
+        : scope.saved !== null
+          ? { section: scope.section, kind: "saved", text: scope.saved }
+          : null;
+
+  /** One call at a time; its result shows under `section`. */
+  function run(
     section: SectionId,
-    work: () => Promise<string | null>,
+    work: () => Promise<{ ok: true } | { error: string }>,
     saved: string | null = null,
   ): Promise<void> {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setFeedback(null);
-    try {
-      const refusal = await work();
-      if (refusal !== null) {
-        setFeedback({ section, kind: "error", text: refusal });
-      } else if (saved !== null) {
-        setFeedback({ section, kind: "saved", text: saved });
-      }
-    } catch (caught) {
-      setFeedback({ section, kind: "error", text: thrownMessage(caught) });
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
+    setScope({ section, saved: null });
+    return call(work, () => setScope({ section, saved }));
   }
-
-  /** The result of a call that answers `{ ok }` or `{ error }`, as the refusal to show or null. */
-  const refusal = (result: { ok: true } | { error: string }) =>
-    "error" in result ? (rotaErrors[result.error] ?? t.errors.generic) : null;
 
   const saveMessages = (next: RotaMessages) =>
     run(
       "messages",
-      async () => refusal(await update({ ...args, messages: next })),
+      () => update({ ...args, messages: next }),
       t.organizer.saved,
     );
 
   const pickPauseDate = (date: string) => {
     setAddingDate(false);
-    return run("pause", async () =>
-      refusal(await addPauseDate({ ...args, date })),
-    );
+    return run("pause", () => addPauseDate({ ...args, date }));
   };
 
   const offeredDates = settings.upcoming.filter(
@@ -206,10 +194,7 @@ function SettingsContent({
             on={paused}
             disabled={busy}
             onChange={(next) =>
-              void run("pause", async () => {
-                await setPaused({ ...args, paused: next });
-                return null;
-              })
+              void run("pause", () => setPaused({ ...args, paused: next }))
             }
           />
           <p className="mt-2 text-ink-soft">{t.rota.pauseHint}</p>
@@ -223,9 +208,7 @@ function SettingsContent({
                   disabled={busy}
                   aria-label={t.rota.removeDate(formatIsoDate(date))}
                   onClick={() =>
-                    void run("pause", async () =>
-                      refusal(await removePauseDate({ ...args, date })),
-                    )
+                    void run("pause", () => removePauseDate({ ...args, date }))
                   }
                   className="min-h-12 rounded-full border-2 border-saffron bg-saffron-soft px-4 font-medium text-saffron-ink disabled:opacity-50"
                 >
@@ -284,20 +267,18 @@ function SettingsContent({
                   })
                 }
               />
-              {messages[key].on && (
-                <TimeField
-                  value={messages[key].at}
-                  min={earliest}
-                  max={latest}
-                  disabled={busy}
-                  onChange={(at) =>
-                    void saveMessages({
-                      ...messages,
-                      [key]: { ...messages[key], at },
-                    })
-                  }
-                />
-              )}
+              <TimeField
+                value={messages[key].at}
+                min={earliest}
+                max={latest}
+                disabled={busy}
+                onChange={(at) =>
+                  void saveMessages({
+                    ...messages,
+                    [key]: { ...messages[key], at },
+                  })
+                }
+              />
             </div>
           ))}
         </Section>
@@ -368,7 +349,7 @@ function SettingsContent({
               onClick={() =>
                 void run(
                   "details",
-                  async () => refusal(await update({ ...args, ...changes })),
+                  () => update({ ...args, ...changes }),
                   t.organizer.saved,
                 )
               }

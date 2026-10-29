@@ -2,13 +2,14 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useMutation, useQuery } from "convex/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
-import { thrownMessage } from "./errors";
+import { ErrorLine } from "./ErrorLine";
+import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate } from "./format";
 
 type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
@@ -39,41 +40,12 @@ function PersonSheet({
   const free = others.find((row) => row.participant === null);
   const [target, setTarget] = useState(free?.juz ?? others[0]?.juz ?? juz);
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useRotaCall(peopleErrors);
   const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
   const nextFree = view.freeJuz[0];
   const canGive = nextFree !== undefined && person.juz.length < view.maxSlots;
   const swapWith = holderOf(target);
 
-  async function run(
-    call: () => Promise<{ ok: true } | { error: string }>,
-  ): Promise<void> {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await call();
-      if ("error" in result) {
-        setError(peopleErrors[result.error] ?? t.errors.generic);
-      } else {
-        onClose();
-      }
-    } catch (caught) {
-      setError(thrownMessage(caught));
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }
-
-  const errorLine = error && (
-    <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
-      {error}
-    </p>
-  );
   const name = person.isMe ? t.rota.me : person.name;
 
   if (confirming) {
@@ -84,8 +56,9 @@ function PersonSheet({
           <Button
             disabled={busy}
             onClick={() =>
-              void run(() =>
-                removeParticipant({ ...args, participantId: person.id }),
+              void run(
+                () => removeParticipant({ ...args, participantId: person.id }),
+                onClose,
               )
             }
           >
@@ -95,7 +68,7 @@ function PersonSheet({
             {t.rota.cancel}
           </Button>
         </div>
-        {errorLine}
+        <ErrorLine error={error} />
       </Sheet>
     );
   }
@@ -124,20 +97,22 @@ function PersonSheet({
       </select>
       {swapWith && (
         <p className="mt-1.5 text-base text-ink-soft">
-          {t.rota.swapsWith(swapWith.isMe ? t.rota.me : swapWith.name)}
+          {swapWith.isMe ? t.rota.swapsWithMe : t.rota.swapsWith(swapWith.name)}
         </p>
       )}
       <div className="mt-3">
         <Button
           disabled={busy}
           onClick={() =>
-            void run(() =>
-              moveJuz({
-                ...args,
-                participantId: person.id,
-                fromJuz: juz,
-                toJuz: target,
-              }),
+            void run(
+              () =>
+                moveJuz({
+                  ...args,
+                  participantId: person.id,
+                  fromJuz: juz,
+                  toJuz: target,
+                }),
+              onClose,
             )
           }
         >
@@ -151,8 +126,10 @@ function PersonSheet({
             variant="ghost"
             disabled={busy}
             onClick={() =>
-              void run(() =>
-                giveJuz({ ...args, participantId: person.id, juz: nextFree }),
+              void run(
+                () =>
+                  giveJuz({ ...args, participantId: person.id, juz: nextFree }),
+                onClose,
               )
             }
           >
@@ -174,7 +151,7 @@ function PersonSheet({
           </Button>
         )}
       </div>
-      {errorLine}
+      <ErrorLine error={error} />
     </Sheet>
   );
 }

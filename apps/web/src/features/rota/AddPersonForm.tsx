@@ -4,7 +4,8 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "../../components/Button";
 import { t } from "../../i18n/ar";
 import { getSessionToken } from "../../lib/session";
-import { thrownMessage } from "./errors";
+import { ErrorLine } from "./ErrorLine";
+import { useRotaCall } from "./useRotaCall";
 
 const addErrors: Record<string, string> = t.rota.addErrors;
 const fieldClass =
@@ -30,43 +31,31 @@ export function AddPersonForm({
   const ids = useId();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy: adding, error, run } = useRotaCall(addErrors);
   const nameField = useRef<HTMLInputElement>(null);
-  const addingRef = useRef(false);
 
-  async function onAdd(event: FormEvent) {
+  function onAdd(event: FormEvent) {
     event.preventDefault();
-    if (addingRef.current) return;
-    addingRef.current = true;
-    setAdding(true);
-    setError(null);
-    try {
-      const result = await addParticipant({
-        sessionToken: getSessionToken() ?? undefined,
-        inviteCode,
-        name: name.trim(),
-        phone: phone.trim(),
-        ...(juz === undefined ? {} : { juz }),
-      });
-      if ("error" in result) {
-        setError(addErrors[result.error] ?? t.errors.generic);
-      } else {
+    void run(
+      () =>
+        addParticipant({
+          sessionToken: getSessionToken() ?? undefined,
+          inviteCode,
+          name: name.trim(),
+          phone: phone.trim(),
+          ...(juz === undefined ? {} : { juz }),
+        }),
+      () => {
         setName("");
         setPhone("");
         nameField.current?.focus();
         onAdded?.();
-      }
-    } catch (caught) {
-      setError(thrownMessage(caught));
-    } finally {
-      addingRef.current = false;
-      setAdding(false);
-    }
+      },
+    );
   }
 
   return (
-    <form onSubmit={(event) => void onAdd(event)} noValidate>
+    <form onSubmit={onAdd} noValidate>
       <label htmlFor={`${ids}-name`} className="block font-medium">
         {t.rota.personName}
       </label>
@@ -96,11 +85,7 @@ export function AddPersonForm({
       <p id={`${ids}-hint`} className="mt-1 text-base text-ink-soft">
         {t.rota.phoneHint}
       </p>
-      {error && (
-        <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
-          {error}
-        </p>
-      )}
+      <ErrorLine error={error} />
       <div className="mt-4">
         <Button type="submit" variant={variant} disabled={adding}>
           {adding ? t.rota.adding : t.rota.add}

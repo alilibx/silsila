@@ -176,11 +176,12 @@ describe("RotaSettingsPage", () => {
       renderPage();
       const messages = section(t.rota.messagesHeading);
       const times = within(messages).getAllByLabelText(t.rota.timeLabel);
-      // The summary is off, so it has no time.
+      // The summary is off, and still shows its time.
       expect(times.map((el) => (el as HTMLSelectElement).value)).toEqual([
         "480",
         "960",
         "1140",
+        "1260",
       ]);
       expect(
         within(messages)
@@ -239,6 +240,24 @@ describe("RotaSettingsPage", () => {
         messages: {
           ...baseSettings.messages,
           reminder: { at: 960, on: false },
+        },
+      });
+    });
+
+    it("an off message still lets its time be changed", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.selectOptions(
+        within(section(t.rota.messagesHeading)).getAllByLabelText(
+          t.rota.timeLabel,
+        )[3] as HTMLSelectElement,
+        "1230",
+      );
+      expect(m.fns.update).toHaveBeenCalledWith({
+        ...args,
+        messages: {
+          ...baseSettings.messages,
+          summary: { at: 1230, on: false },
         },
       });
     });

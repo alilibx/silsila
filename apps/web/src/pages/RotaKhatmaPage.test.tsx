@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   settings: undefined as unknown,
   people: undefined as unknown,
   mine: [] as unknown,
+  me: null as unknown,
   fns: {
     reassign: vi.fn(),
     markDone: vi.fn(),
@@ -29,6 +30,13 @@ vi.mock("../lib/session", () => ({
   getSessionToken: () => "tok",
   clearSessionToken: () => {},
 }));
+vi.mock("../features/verify/VerifySheet", () => ({
+  VerifySheet: (props: { title: string; intent?: unknown }) => (
+    <div role="dialog" aria-label={props.title}>
+      {JSON.stringify(props.intent)}
+    </div>
+  ),
+}));
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
@@ -39,6 +47,7 @@ vi.mock("convex/react", async () => {
       if (name === "rota:settings") return m.settings;
       if (name === "rota:people") return m.people;
       if (name === "khatmas:mine") return m.mine;
+      if (name === "sessions:me") return m.me;
       throw new Error(`unexpected query ${name}`);
     },
     useMutation: (ref: never) =>
@@ -143,7 +152,7 @@ function renderAt(url = "/j/CODE") {
   );
 }
 function Page() {
-  return <RotaKhatmaPage inviteCode="CODE" />;
+  return <RotaKhatmaPage inviteCode="CODE" name="ختمة العائلة" />;
 }
 
 const grid = () => screen.getByRole("region", { name: t.rota.gridLabel });
@@ -160,6 +169,7 @@ beforeEach(() => {
   m.settings = settings;
   m.people = peopleView(roster);
   m.mine = [];
+  m.me = { displayName: "علي" };
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -380,15 +390,30 @@ describe("Today", () => {
 });
 
 describe("page", () => {
-  it("shows only the short WhatsApp page to anyone but the organizer", () => {
+  it("shows only the short WhatsApp page to anyone but the organizer, titled with the khatma's name", () => {
     m.today = null;
-    m.mine = [{ inviteCode: "CODE", name: "ختمة العائلة", createdAt: 0 }];
     renderAt();
     expect(
       screen.getByRole("heading", { name: "ختمة العائلة" }),
     ).toBeInTheDocument();
     expect(screen.getByText(t.rota.whatsappOnly)).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).toBeNull();
+    // Signed in, so there is nothing to sign in to.
+    expect(
+      screen.queryByRole("button", { name: t.rota.imOrganizer }),
+    ).toBeNull();
+  });
+
+  it("offers a signed-out visitor the sign-in sheet, to come back here as the organizer", async () => {
+    m.today = null;
+    m.me = null;
+    const user = userEvent.setup();
+    renderAt();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(screen.getByRole("button", { name: t.rota.imOrganizer }));
+    expect(
+      screen.getByRole("dialog", { name: t.signIn.title }),
+    ).toHaveTextContent('{"kind":"signin"}');
   });
 
   it("waits for the answer", () => {
@@ -561,11 +586,23 @@ describe("People", () => {
       within(sheet).getByLabelText(t.rota.moveLabel),
       "1",
     );
-    expect(within(sheet).getByText("سيتبادل مع أنا")).toBeInTheDocument();
+    expect(within(sheet).getByText(t.rota.swapsWithMe)).toBeInTheDocument();
     await user.click(within(sheet).getByRole("button", { name: t.rota.move }));
     expect(m.fns.moveJuz).toHaveBeenCalledWith(
       expect.objectContaining({ fromJuz: 4, toJuz: 1 }),
     );
+  });
+
+  it("names the person a juz' swaps with when it is not the organizer", async () => {
+    const user = userEvent.setup();
+    renderAt("/j/CODE?tab=people");
+    await user.click(rows()[3]?.querySelector("button") as HTMLElement);
+    await user.selectOptions(screen.getByLabelText(t.rota.moveLabel), "2");
+    expect(
+      within(screen.getByRole("dialog")).getByText("سيتبادل مع مريم", {
+        selector: "p",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("gives the person the next free juz' as a second one", async () => {

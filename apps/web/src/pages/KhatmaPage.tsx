@@ -124,7 +124,7 @@ export function KhatmaPage() {
     .map((tile) => tile.juz);
 
   if (found !== undefined && "rota" in found) {
-    return <RotaKhatmaPage inviteCode={inviteCode} />;
+    return <RotaKhatmaPage inviteCode={inviteCode} name={found.name} />;
   }
 
   // The sheets sit outside the page body so they survive the reload the new session token triggers.

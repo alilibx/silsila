@@ -540,6 +540,7 @@ export const ar = {
     done: "تمّ",
     tabs: { today: "اليوم", people: "المشاركون" },
     whatsappOnly: "هذه الختمة تعمل على واتساب. يصلك جزؤك كل يوم مع زرّين.",
+    imOrganizer: "أنت المنظّم؟ سجّل الدخول",
     cardLine: (done: string, total: string) =>
       `ختمة بالتناوب · ${done} من ${total} اليوم`,
     // Today
@@ -604,6 +605,7 @@ export const ar = {
     moveOption: (juz: number, other: string | null) =>
       `الجزء ${toArabicDigits(juz)}${other ? ` · سيتبادل مع ${other}` : ""}`,
     swapsWith: (name: string) => `سيتبادل مع ${name}`,
+    swapsWithMe: "سيتبادل معي",
     move: "انقله",
     giveMore: "أعطه جزءاً آخر",
     giveMoreHint: (juz: number) =>
@@ -636,7 +638,7 @@ export const ar = {
       dayAt: "رسالة الجزء مع الأزرار",
       reminder: "تذكير لمن لم يُتمّ",
       unread: "الأجزاء غير المقروءة (لي)",
-      summary: "ملخّص الختمة (لي)",
+      summary: "ملخّص اليوم (لي)",
     },
     timeLabel: "الوقت",
     locked: "هذه الرسالة لا يمكن إيقافها.",

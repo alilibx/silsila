@@ -265,9 +265,11 @@ export const view = sessionQuery({
   handler: async (
     ctx,
     args,
-  ): Promise<KhatmaView | { notFound: true } | { rota: true }> => {
+  ): Promise<
+    KhatmaView | { notFound: true } | { rota: true; name: string | null }
+  > => {
     const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
-    if (khatma?.kind === "rota") return { rota: true };
+    if (khatma?.kind === "rota") return { rota: true, name: khatma.name };
     if (!khatma || !khatma.currentRoundId) return { notFound: true };
     const round = await ctx.db.get(khatma.currentRoundId);
     if (!round) return { notFound: true };
