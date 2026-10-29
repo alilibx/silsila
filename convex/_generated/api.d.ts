@@ -10,8 +10,11 @@
 
 import type * as adminAuth from "../adminAuth.js";
 import type * as adminHelp from "../adminHelp.js";
+import type * as adminLookup from "../adminLookup.js";
+import type * as adminOps from "../adminOps.js";
 import type * as adminPush from "../adminPush.js";
 import type * as adminSettings from "../adminSettings.js";
+import type * as adminStats from "../adminStats.js";
 import type * as admins from "../admins.js";
 import type * as audit from "../audit.js";
 import type * as crons from "../crons.js";
@@ -24,6 +27,7 @@ import type * as http from "../http.js";
 import type * as khatmas from "../khatmas.js";
 import type * as lib_adminSession from "../lib/adminSession.js";
 import type * as lib_audit from "../lib/audit.js";
+import type * as lib_blocked from "../lib/blocked.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_digits from "../lib/digits.js";
 import type * as lib_grace from "../lib/grace.js";
@@ -31,6 +35,7 @@ import type * as lib_help from "../lib/help.js";
 import type * as lib_helpFiles from "../lib/helpFiles.js";
 import type * as lib_juz from "../lib/juz.js";
 import type * as lib_khatma from "../lib/khatma.js";
+import type * as lib_milestones from "../lib/milestones.js";
 import type * as lib_noteText from "../lib/noteText.js";
 import type * as lib_pace from "../lib/pace.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
@@ -38,8 +43,10 @@ import type * as lib_schedule from "../lib/schedule.js";
 import type * as lib_session from "../lib/session.js";
 import type * as lib_settingSpecs from "../lib/settingSpecs.js";
 import type * as lib_settings from "../lib/settings.js";
+import type * as lib_stats from "../lib/stats.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_wakingTime from "../lib/wakingTime.js";
+import type * as lib_whatsappTemplates from "../lib/whatsappTemplates.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notes from "../notes.js";
 import type * as nudges from "../nudges.js";
@@ -52,8 +59,10 @@ import type * as push from "../push.js";
 import type * as pushNode from "../pushNode.js";
 import type * as rounds from "../rounds.js";
 import type * as sessions from "../sessions.js";
+import type * as stats from "../stats.js";
 import type * as verification from "../verification.js";
 import type * as whatsapp from "../whatsapp.js";
+import type * as whatsappNotes from "../whatsappNotes.js";
 
 import type {
   ApiFromModules,
@@ -64,8 +73,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   adminAuth: typeof adminAuth;
   adminHelp: typeof adminHelp;
+  adminLookup: typeof adminLookup;
+  adminOps: typeof adminOps;
   adminPush: typeof adminPush;
   adminSettings: typeof adminSettings;
+  adminStats: typeof adminStats;
   admins: typeof admins;
   audit: typeof audit;
   crons: typeof crons;
@@ -78,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   khatmas: typeof khatmas;
   "lib/adminSession": typeof lib_adminSession;
   "lib/audit": typeof lib_audit;
+  "lib/blocked": typeof lib_blocked;
   "lib/crypto": typeof lib_crypto;
   "lib/digits": typeof lib_digits;
   "lib/grace": typeof lib_grace;
@@ -85,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   "lib/helpFiles": typeof lib_helpFiles;
   "lib/juz": typeof lib_juz;
   "lib/khatma": typeof lib_khatma;
+  "lib/milestones": typeof lib_milestones;
   "lib/noteText": typeof lib_noteText;
   "lib/pace": typeof lib_pace;
   "lib/rateLimit": typeof lib_rateLimit;
@@ -92,8 +106,10 @@ declare const fullApi: ApiFromModules<{
   "lib/session": typeof lib_session;
   "lib/settingSpecs": typeof lib_settingSpecs;
   "lib/settings": typeof lib_settings;
+  "lib/stats": typeof lib_stats;
   "lib/text": typeof lib_text;
   "lib/wakingTime": typeof lib_wakingTime;
+  "lib/whatsappTemplates": typeof lib_whatsappTemplates;
   maintenance: typeof maintenance;
   notes: typeof notes;
   nudges: typeof nudges;
@@ -106,8 +122,10 @@ declare const fullApi: ApiFromModules<{
   pushNode: typeof pushNode;
   rounds: typeof rounds;
   sessions: typeof sessions;
+  stats: typeof stats;
   verification: typeof verification;
   whatsapp: typeof whatsapp;
+  whatsappNotes: typeof whatsappNotes;
 }>;
 
 /**

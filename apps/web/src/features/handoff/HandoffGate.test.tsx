@@ -23,6 +23,11 @@ vi.mock("../../lib/push", () => ({
   enablePush: vi.fn(),
 }));
 
+// The WhatsApp offer inside the push sheet has its own tests.
+vi.mock("../../components/WhatsAppOffer", () => ({
+  WhatsAppOffer: () => null,
+}));
+
 // The router's own location, which is what the app's pages read.
 function Where() {
   const { pathname, search } = useLocation();

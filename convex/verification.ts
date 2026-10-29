@@ -25,17 +25,17 @@ import {
   shardedBucket,
   type RateLimitBucket,
 } from "./lib/rateLimit";
+import { isBlocked } from "./lib/blocked";
 import { getSetting } from "./lib/settings";
+import { bumpCounter, dubaiDay, signInKey } from "./lib/stats";
 import { insertSession } from "./sessions";
 import { cleanDisplayName, maskPhone, normalizeDigits } from "./lib/text";
 import {
-  accountCreatedAlert,
   env,
   isDev,
   MAX_SCANNED_TEXT,
-  pinReply,
-  sendWhatsAppText,
-  signInAlert,
+  sendPin,
+  sendSignInAlert,
   verificationMessage,
   whatsappConfigured,
 } from "./whatsapp";
@@ -196,13 +196,6 @@ async function completeSignIn(
   });
   await ctx.db.patch(doc._id, { status: "claimed", pinHash: undefined });
   return sessionId;
-}
-
-/** New-account alert when this sign-in created the person, else the normal one. */
-function alertFor(created: boolean, deviceLabel: string, alertToken: string) {
-  return created
-    ? accountCreatedAlert(deviceLabel, alertToken)
-    : signInAlert(deviceLabel, alertToken);
 }
 
 /** Fresh session + alert tokens; raw values stay in the action. */
@@ -392,6 +385,8 @@ export const createPending = internalMutation({
     await ctx.scheduler.runAt(expiresAt, internal.verification.expire, {
       verificationId,
     });
+    // Member sign-ins only: spec 6.1's success rate is about members.
+    if (!admin) await bumpCounter(ctx, signInKey(dubaiDay(now), "started"));
     return { verificationId, code };
   },
 });
@@ -512,6 +507,10 @@ export const matchIncoming = internalMutation({
       HOUR_MS,
     );
     if (!allowed) return { kind: "rate_limited" };
+    // A blocked number gets "no code found" and never touches a pending code (spec 8).
+    if (await isBlocked(ctx, args.phone)) {
+      return { kind: "no_match", codeShaped: false };
+    }
 
     const windows = codeWindows(args.text);
     const doc = await findPendingByText(ctx, windows);
@@ -593,6 +592,7 @@ export const claimInternal = internalMutation({
     }
     const personId = await insertPerson(ctx, doc, doc.phone, args.timeZone);
     await completeSignIn(ctx, doc, personId, args);
+    await bumpCounter(ctx, signInKey(dubaiDay(Date.now()), "completed"));
     return { kind: "ok", phone: doc.phone, created: true, otherSessions: 0 };
   },
 });
@@ -624,6 +624,7 @@ export const confirmPinInternal = internalMutation({
     const personId =
       existing?._id ?? (await insertPerson(ctx, doc, doc.phone, args.timeZone));
     const sessionId = await completeSignIn(ctx, doc, personId, args);
+    await bumpCounter(ctx, signInKey(dubaiDay(Date.now()), "completed"));
     const sessions = await ctx.db
       .query("sessions")
       .withIndex("by_person", (q) => q.eq("personId", personId))
@@ -662,13 +663,15 @@ export const claim = action({
     });
     switch (res.kind) {
       case "ok":
-        await sendWhatsAppText(
+        await sendSignInAlert(
           res.phone,
-          alertFor(res.created, deviceLabel, tokens.alertToken),
+          res.created,
+          deviceLabel,
+          tokens.alertToken,
         );
         return { sessionToken: tokens.sessionToken };
       case "needs_pin":
-        if (res.phone) await sendWhatsAppText(res.phone, pinReply(pin));
+        if (res.phone) await sendPin(res.phone, pin);
         return { error: "needs_pin" };
       default:
         return { error: "expired" };
@@ -709,9 +712,11 @@ export const confirmPin = action({
     );
     switch (res.kind) {
       case "ok":
-        await sendWhatsAppText(
+        await sendSignInAlert(
           res.phone,
-          alertFor(res.created, deviceLabel, tokens.alertToken),
+          res.created,
+          deviceLabel,
+          tokens.alertToken,
         );
         return {
           sessionToken: tokens.sessionToken,

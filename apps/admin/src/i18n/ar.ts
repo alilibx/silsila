@@ -1,4 +1,6 @@
+import { counted } from "@convex/lib/arabicCount";
 import { toArabicDigits } from "@convex/lib/digits";
+import { formatCount, formatDecimal } from "../lib/formatNumber";
 import type { AuditAction } from "@convex/lib/audit";
 import type { SettingGroup } from "@convex/lib/settingSpecs";
 import type { SettingKey } from "@convex/lib/settings";
@@ -49,6 +51,8 @@ const labels: Record<SettingKey, string> = {
   helpAutoCloseMs: "إغلاق تلقائي بعد الرد بلا جواب",
   helpAttachmentRetentionMs: "الاحتفاظ بالصور والتسجيلات بعد الإغلاق",
   helpRetentionMs: "الاحتفاظ بالمحادثة بعد الإغلاق",
+  summaryHour: "ساعة الملخص الصباحي (بتوقيت دبي)",
+  milestonePushSpacingMs: "أقل مدة بين تنبيهي إنجاز",
 };
 
 const groups: Record<SettingGroup, string> = {
@@ -68,6 +72,11 @@ const actions: Record<AuditAction, string> = {
   "setting.reset": "أعاد إعدادًا للافتراضي",
   "help.close": "أغلق طلب مساعدة",
   "help.reopen": "أعاد فتح طلب مساعدة",
+  "person.signOutAll": "أنهى كل جلسات شخص",
+  "phone.block": "حظر رقماً",
+  "phone.unblock": "ألغى حظر رقم",
+  "khatma.resetInvite": "أعاد ضبط رابط دعوة",
+  "khatma.handOver": "سلّم دور المنظّم",
 };
 
 /** Every admin panel string lives here. Components never contain Arabic literals. */
@@ -77,6 +86,7 @@ export const ar = {
   nav: {
     home: "الرئيسية",
     help: "المساعدة",
+    search: "بحث",
     settings: "الإعدادات",
     audit: "السجل",
     admins: "المشرفون",
@@ -88,6 +98,9 @@ export const ar = {
     waiting: "بانتظار رسالتك…",
     openAgain: "افتح واتساب مرة أخرى",
     pinLabel: "الرمز المكوّن من ٦ أرقام",
+    pinPaste: "الصق الرمز",
+    pinPasteEmpty:
+      "لم نجد رمزاً من ستة أرقام. اضغط «نسخ الرمز» في رسالة واتساب، ثم عُد إلى هنا.",
     confirm: "دخول",
     again: "ابدأ من جديد",
     errors: {
@@ -216,11 +229,112 @@ export const ar = {
     on: "شغّل التنبيهات على هذا الجهاز",
     off: "أوقف التنبيهات على هذا الجهاز",
     help: "تنبيه بطلبات المساعدة",
+    summary: "الملخص الصباحي",
+    milestones: "تنبيهات الإنجازات",
     iosInstall:
       "أضف لوحة الإدارة إلى الشاشة الرئيسية أولاً، ثم شغّل التنبيهات.",
     unsupported: "هذا المتصفح لا يدعم التنبيهات.",
     denied: "التنبيهات ممنوعة لهذا الموقع في إعدادات المتصفح.",
     failed: "تعذّر تشغيل التنبيهات. حاول مرة أخرى.",
+  },
+  stats: {
+    activeKhatmas: "ختمات نشطة",
+    members: "أعضاء",
+    ajzaToday: "أجزاء قُرئت اليوم",
+    completedThisWeek: "ختمات مكتملة هذا الأسبوع",
+    stalled: "ختمات متوقفة",
+    daysPerRound: "مدة الختمة (الوسيط)",
+    changeWeek: (n: string) => `${n} عن الأسبوع الماضي`,
+    newThisWeek: (n: string) => `+${n} هذا الأسبوع`,
+    avg7: (n: string) => `معدل ٧ أيام: ${n}`,
+    stalledHint: "١٤ يوماً بلا جزء مقروء",
+    capped: (n: string) => `${n}+`,
+    medianHint: "آخر ٣٠ يوماً",
+    signIn: "نجاح التحقق عبر واتساب",
+    signInHint: "من بدأ التحقق في آخر ٧ أيام وأكمله",
+    none: "—",
+    days: (n: number) =>
+      counted(
+        n,
+        { few: "أيام", many: "يوماً", other: "يوم" },
+        formatDecimal(n),
+      ),
+    percent: (n: string) => `${n}٪`,
+    periods: { 7: "٧ أيام", 30: "٣٠ يوماً", 365: "سنة" },
+    period: "المدة",
+    metric: "المقياس",
+    metrics: {
+      ajzaFinished: "أجزاء قُرئت يومياً",
+      newMembers: "أعضاء جدد",
+      newKhatmas: "ختمات جديدة",
+      roundsCompleted: "ختمات مكتملة",
+      signInRate: "نجاح التحقق",
+    },
+    chartSummary: (label: string, last: string, days: string) =>
+      `${label}: آخر قيمة ${last}، على ${days}`,
+    noData: "لا بيانات بعد",
+    tooltip: (date: string, value: string) => `${date}: ${value}`,
+  },
+  lookup: {
+    title: "بحث",
+    khatmaLabel: "ختمة: رمز الدعوة أو الاسم",
+    personLabel: "شخص: رقم الهاتف مع رمز الدولة",
+    find: "بحث",
+    noResults: "لا نتائج.",
+    noAccount: "لا يوجد حساب بهذا الرقم.",
+    invalidPhone: "اكتب الرقم مع رمز الدولة، مثل +971501234567.",
+    blocked: "هذا الرقم محظور.",
+    members: (n: number) =>
+      counted(n, { few: "أعضاء", many: "عضواً", other: "عضو" }, formatCount(n)),
+    unnamed: "ختمة بلا اسم",
+    organizer: "المنظّم",
+    schedule: "الجدول",
+    member: "عضو",
+    organizerBadge: "منظّم",
+    membersTitle: "الأعضاء",
+    roundTitle: (n: string) => `الجولة ${n}`,
+    free: "متاح",
+    taken: "قيد القراءة",
+    finished: "مقروء",
+    openHelp: "طلبات مساعدة مفتوحة",
+    khatmasTitle: "ختماته",
+    devicesTitle: "أجهزته",
+    helpTitle: "طلبات المساعدة",
+    lastSeen: "آخر ظهور",
+    joined: "انضم",
+    statuses: { active: "عضو", blocked: "محظور", former: "سابق" },
+    helpStatuses: { open: "مفتوح", answered: "تم الرد", closed: "مغلق" },
+    notFound: "غير موجود.",
+  },
+  ops: {
+    signOutAll: "إنهاء كل الجلسات",
+    signOutAllBody:
+      "يخرج هذا الشخص من كل أجهزته الآن، ويتوقف وصول التنبيهات إليها.",
+    block: "حظر الرقم",
+    blockBody:
+      "لن يستطيع هذا الرقم الدخول، وتنتهي كل جلساته الآن. تبقى ختماته كما هي.",
+    unblock: "إلغاء الحظر",
+    unblockBody: "يستطيع هذا الرقم الدخول من جديد.",
+    resetInvite: "إعادة ضبط رابط الدعوة",
+    resetInviteBody:
+      "يتوقف الرابط الحالي وروابط المشاركة القديمة، ويصبح للختمة رابط جديد.",
+    handOver: "تسليم دور المنظّم",
+    handOverBody:
+      "يصبح العضو المختار منظّم الختمة، ويصل تنبيه له وللمنظّم الحالي.",
+    pickMember: "العضو الجديد",
+    noteLabel: "ملاحظة (اختياري)",
+    cancel: "إلغاء",
+    done: "تمّ.",
+    errors: {
+      invalid_phone: "رقم غير صالح.",
+      already_blocked: "الرقم محظور بالفعل.",
+      is_admin: "هذا رقم مشرف. احذفه من المشرفين أولاً.",
+      not_blocked: "الرقم غير محظور.",
+      not_found: "غير موجود.",
+      not_member: "اختر عضواً نشطاً.",
+      self: "هذا العضو هو المنظّم الآن.",
+      generic: "تعذّر التنفيذ. حاول مرة أخرى.",
+    },
   },
   signOut: {
     button: "تسجيل الخروج",

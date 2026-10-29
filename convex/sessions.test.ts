@@ -73,6 +73,7 @@ test("me returns null without a session and the person with one", async () => {
   expect(await t.query(api.sessions.me, { sessionToken: token })).toEqual({
     displayName: "علي",
     maskedPhone: "+971 50 ••• 4567",
+    whatsappNotes: false,
   });
   expect(await t.query(api.sessions.me, { sessionToken: "wrong" })).toBeNull();
 });

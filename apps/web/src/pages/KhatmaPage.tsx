@@ -17,6 +17,7 @@ import {
 } from "../components/KhatmaTabs";
 import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
 import { SwitchRow } from "../components/SwitchRow";
+import { WhatsAppSheet } from "../components/WhatsAppSheet";
 import { PoolGrid } from "../components/PoolGrid";
 import { PushPromptSheet } from "../components/PushPromptSheet";
 import { ReleaseSheet } from "../components/ReleaseSheet";
@@ -204,6 +205,9 @@ export function KhatmaPage() {
       )}
       {sheet?.kind === "install" && (
         <InstallStepsSheet onClose={actions.closeSheet} />
+      )}
+      {sheet?.kind === "whatsapp" && (
+        <WhatsAppSheet onClose={actions.closeSheet} />
       )}
       {actions.pendingJuz !== null && (
         <VerifySheet

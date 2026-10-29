@@ -130,6 +130,8 @@ beforeEach(() => {
   });
   vi.setSystemTime(NOW);
   localStorage.clear();
+  // The offer after a first take (push or WhatsApp) has its own tests in KhatmaPage.push.
+  localStorage.setItem("wirdak.pushAsked", "1");
   m.token = "tok";
   for (const fn of [
     m.query,

@@ -50,7 +50,11 @@ function SettingsContent({
   me,
   onSignIn,
 }: {
-  me: { displayName: string; maskedPhone: string } | null;
+  me: {
+    displayName: string;
+    maskedPhone: string;
+    whatsappNotes: boolean;
+  } | null;
   onSignIn: () => void;
 }) {
   return (
@@ -84,6 +88,7 @@ function SettingsContent({
         <SignedInSettings
           displayName={me.displayName}
           maskedPhone={me.maskedPhone}
+          whatsappNotes={me.whatsappNotes}
         />
       )}
     </main>
@@ -93,9 +98,11 @@ function SettingsContent({
 function SignedInSettings({
   displayName,
   maskedPhone,
+  whatsappNotes,
 }: {
   displayName: string;
   maskedPhone: string;
+  whatsappNotes: boolean;
 }) {
   return (
     <>
@@ -106,6 +113,7 @@ function SignedInSettings({
       </p>
       <MyNumbers />
       <DevicePush />
+      <WhatsAppNotes on={whatsappNotes} />
       <Devices />
     </>
   );
@@ -151,6 +159,50 @@ function DevicePush() {
         <IosInstall />
       ) : (
         <PushSwitch />
+      )}
+    </section>
+  );
+}
+
+/** WhatsApp notifications for every khatma: off until the person turns them on. */
+function WhatsAppNotes({ on }: { on: boolean }) {
+  const sessionToken = useSessionToken();
+  const setWhatsappNotes = useMutation(api.people.setWhatsappNotes);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function change(next: boolean) {
+    if (busyRef.current || !sessionToken) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await setWhatsappNotes({ sessionToken, on: next });
+    } catch {
+      setError(t.errors.network);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="whatsapp-heading">
+      <h2 id="whatsapp-heading" className={headingClass}>
+        {t.whatsappNotes.heading}
+      </h2>
+      <p className="leading-relaxed text-ink-soft">{t.whatsappNotes.explain}</p>
+      <SwitchRow
+        label={t.whatsappNotes.label}
+        on={on}
+        disabled={busy}
+        onChange={(next) => void change(next)}
+      />
+      {error && (
+        <p role="alert" className="mt-3 font-medium text-[#8A2B1E]">
+          {error}
+        </p>
       )}
     </section>
   );

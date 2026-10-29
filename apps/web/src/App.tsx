@@ -6,6 +6,7 @@ import { HelpProvider } from "./features/help/helpUi";
 import { useClaimVisitorHelp } from "./features/help/useClaimVisitorHelp";
 import { BottomBarProvider } from "./features/nav/bottomBarUi";
 import { useHelpDeepLink } from "./features/help/useHelpDeepLink";
+import { OpenInBrowser } from "./features/status/OpenInBrowser";
 import { StatusBanners } from "./features/status/StatusBanners";
 import { BottomBar } from "./components/BottomBar";
 import { useTouch } from "./lib/useTouch";
@@ -32,6 +33,7 @@ export function App() {
       <HelpProvider>
         <BottomBarProvider>
           <StatusBanners />
+          <OpenInBrowser />
           <HelpButton />
           <HelpDeepLink />
           <Routes>

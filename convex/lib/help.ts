@@ -124,8 +124,8 @@ export async function notifyAdmins(
   kind: "request" | "message",
 ): Promise<void> {
   await ctx.scheduler.runAfter(0, internal.pushNode.deliverToAdmins, {
-    requestId,
     kind,
+    requestId,
   });
 }
 

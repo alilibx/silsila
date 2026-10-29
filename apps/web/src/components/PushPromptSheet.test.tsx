@@ -9,6 +9,15 @@ vi.mock("../lib/push", () => ({
   enablePush: (...args: unknown[]) => m.enable(...args),
 }));
 
+const wa = vi.hoisted(() => ({
+  me: { whatsappNotes: false } as { whatsappNotes: boolean } | null,
+  set: vi.fn(),
+}));
+vi.mock("convex/react", () => ({
+  useQuery: () => wa.me,
+  useMutation: () => wa.set,
+}));
+
 const onClose = vi.fn();
 const ui = () => render(<PushPromptSheet onClose={onClose} />);
 
@@ -17,6 +26,8 @@ beforeEach(() => {
   setSessionToken("tok");
   m.enable.mockReset();
   onClose.mockReset();
+  wa.me = { whatsappNotes: false };
+  wa.set.mockReset();
 });
 
 describe("PushPromptSheet", () => {
@@ -47,5 +58,23 @@ describe("PushPromptSheet", () => {
     await userEvent.click(screen.getByRole("button", { name: "ليس الآن" }));
     expect(m.enable).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers WhatsApp instead, turning it on and closing", async () => {
+    wa.set.mockResolvedValue({ ok: true });
+    ui();
+    await userEvent.click(
+      screen.getByRole("button", { name: "أرسلها لي على واتساب" }),
+    );
+    expect(wa.set).toHaveBeenCalledWith({ sessionToken: "tok", on: true });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't offer WhatsApp to someone who has it on", () => {
+    wa.me = { whatsappNotes: true };
+    ui();
+    expect(
+      screen.queryByRole("button", { name: "أرسلها لي على واتساب" }),
+    ).not.toBeInTheDocument();
   });
 });

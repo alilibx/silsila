@@ -5,6 +5,7 @@ import type { DataModel, Id } from "./_generated/dataModel";
 import { ADMIN_SESSION_TTL_MS } from "./lib/adminSession";
 import { sha256Hex } from "./lib/crypto";
 import schema from "./schema";
+import { describeMessage } from "./whatsapp";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -13,9 +14,10 @@ const ADMIN_SITE = "https://admin.wirdak.example";
 const ADMIN_PHONE = "971500000001";
 const SECRET = "known-secret";
 
-const ADMIN_PIN_RE = /^رمز الدخول إلى لوحة إدارة وِردك: (\d{6})\n/;
+/** Admin and member PINs both go out as the PIN template. */
+const ADMIN_PIN_RE = /^\[wirdak_pin\] (\d{6}) \| \1$/;
 const ALERT_RE = new RegExp(
-  `^تسجيل دخول إلى لوحة إدارة وِردك من iPhone Safari\\. إن لم تكن أنت، اضغط هنا لإنهاء كل جلسات الإدارة: ${ADMIN_SITE.replace(/\./g, "\\.")}/signout\\?t=([A-Za-z0-9_-]+)$`,
+  `^تسجيل دخول إلى لوحة إدارة وِردك من iPhone Safari\\. إن لم تكن أنت، اضغط «لستُ أنا» لإنهاء كل جلسات الإدارة\\.\\n\\[لستُ أنا\\] ${ADMIN_SITE.replace(/\./g, "\\.")}/signout\\?t=([A-Za-z0-9_-]+)$`,
 );
 
 type T = TestConvexForDataModel<DataModel>;
@@ -39,11 +41,8 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init: RequestInit) => {
-      const payload = JSON.parse(String(init.body)) as {
-        to: string;
-        text: { body: string };
-      };
-      sent.push({ to: payload.to, body: payload.text.body });
+      const payload = JSON.parse(String(init.body)) as { to: string };
+      sent.push({ to: payload.to, body: describeMessage(payload) });
       return new Response("{}", { status: 200 });
     }),
   );
@@ -87,7 +86,7 @@ async function adminAtPin(t: T, from = ADMIN_PHONE, admin = true) {
     text: code,
   });
   const body = sent[before]?.body ?? "";
-  const pin = (ADMIN_PIN_RE.exec(body) ?? /: (\d{6})\n/.exec(body))?.[1] ?? "";
+  const pin = ADMIN_PIN_RE.exec(body)?.[1] ?? "";
   return { verificationId, pin };
 }
 

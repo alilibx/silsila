@@ -67,7 +67,7 @@ export async function requireOrganizer(
   return found;
 }
 
-async function membersByJoin(
+export async function membersByJoin(
   ctx: QueryCtx,
   khatmaId: Id<"khatmas">,
 ): Promise<Doc<"members">[]> {
@@ -188,22 +188,70 @@ export const applyInviteReset = internalMutation({
     if (!found) throw new ConvexError({ code: "forbidden" });
     const { khatma } = found;
 
-    const taken = await ctx.db
-      .query("khatmas")
-      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.newInviteCode))
-      .first();
-    if (taken) return null;
-
-    await ctx.db.patch(khatma._id, { inviteCode: args.newInviteCode });
-    let next = 0;
-    for (const member of await membersByJoin(ctx, khatma._id)) {
-      const shareToken =
-        member.status === "active" ? args.shareTokens[next++] : undefined;
-      await ctx.db.patch(member._id, { shareToken });
+    if (
+      !(await resetInviteCode(
+        ctx,
+        khatma,
+        args.newInviteCode,
+        args.shareTokens,
+      ))
+    ) {
+      return null;
     }
     return { inviteCode: args.newInviteCode };
   },
 });
+
+/**
+ * Gives a khatma a new invite code and each active member a new share link,
+ * so every old link dies. False when the code is taken (draw another one).
+ * Shared by the organizer and the admin panel.
+ */
+export async function resetInviteCode(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  newInviteCode: string,
+  shareTokens: string[],
+): Promise<boolean> {
+  const taken = await ctx.db
+    .query("khatmas")
+    .withIndex("by_inviteCode", (q) => q.eq("inviteCode", newInviteCode))
+    .first();
+  if (taken) return false;
+  await ctx.db.patch(khatma._id, { inviteCode: newInviteCode });
+  let next = 0;
+  for (const member of await membersByJoin(ctx, khatma._id)) {
+    const shareToken =
+      member.status === "active" ? shareTokens[next++] : undefined;
+    await ctx.db.patch(member._id, { shareToken });
+  }
+  return true;
+}
+
+/**
+ * Makes `member` the organizer and tells them; with `previous`, tells the
+ * old organizer too. Shared by the organizer, the 30-day sweep and admins.
+ */
+export async function handOverTo(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  member: Doc<"members">,
+  previous: Doc<"people"> | null,
+): Promise<void> {
+  await ctx.db.patch(khatma._id, { creatorPersonId: member.personId });
+  await notify(ctx, {
+    personId: member.personId,
+    khatmaId: khatma._id,
+    kind: "nowOrganizer",
+  });
+  if (previous) {
+    await notify(ctx, {
+      personId: previous._id,
+      khatmaId: khatma._id,
+      kind: "organizerMoved",
+    });
+  }
+}
 
 export const resetInvite = action({
   args: { sessionToken: v.optional(v.string()), inviteCode: v.string() },
@@ -233,7 +281,7 @@ export const resetInvite = action({
 // Members
 
 /** A member of this khatma who is not the organizer, or the reason they aren't one. */
-async function otherMember(
+export async function otherMember(
   ctx: QueryCtx,
   khatma: Doc<"khatmas">,
   memberId: Id<"members">,
@@ -334,12 +382,8 @@ export const handOver = sessionMutation({
     const { khatma } = await requireOrganizer(ctx, args.inviteCode);
     const member = await otherMember(ctx, khatma, args.memberId, "active");
     if (typeof member === "string") return { ok: false, reason: member };
-    await ctx.db.patch(khatma._id, { creatorPersonId: member.personId });
-    await notify(ctx, {
-      personId: member.personId,
-      khatmaId: khatma._id,
-      kind: "nowOrganizer",
-    });
+    // The organizer chose this, so they get no "moved" note.
+    await handOverTo(ctx, khatma, member, null);
     return { ok: true };
   },
 });
@@ -398,19 +442,7 @@ export const autoHandover = internalMutation({
       const person = await ctx.db.get(member.personId);
       if (!person || person.lastSeenAt < activeSince) continue;
 
-      await ctx.db.patch(khatma._id, { creatorPersonId: member.personId });
-      await notify(ctx, {
-        personId: member.personId,
-        khatmaId: khatma._id,
-        kind: "nowOrganizer",
-      });
-      if (organizer) {
-        await notify(ctx, {
-          personId: organizer._id,
-          khatmaId: khatma._id,
-          kind: "organizerMoved",
-        });
-      }
+      await handOverTo(ctx, khatma, member, organizer);
       return;
     }
   },
