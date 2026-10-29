@@ -1,16 +1,18 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { t } from "../apps/web/src/i18n/ar";
 import {
   blockExternal,
   dismissPushPrompt,
+  newPerson,
   randomPhone,
+  test,
   verifyInSheet,
 } from "./support";
 
 const KHATMA_NAME = "ختمة الأسرة";
 const SECOND_NAME = "ختمة الأصدقاء";
 
-// The core loop at phone size: A starts a khatma, takes and finishes a juz', takes another;
+// The core loop on every project's device: A starts a khatma, takes and finishes a juz', takes another;
 // B follows A's invite, verifies (surviving a tab reload mid-way), and takes one. B must see
 // A's name on a "reading" tile only. Then A starts a second khatma from the bottom bar and
 // switches back to the first with the switch-khatma sheet.
@@ -84,11 +86,10 @@ test("core loop: create, take, finish, invite, join, switch", async ({
   await expect(page.getByText(t.card.held)).toBeVisible();
 
   // --- Person B: a second, clean browser context ---------------------------------------------
-  const bContext = await browser.newContext();
+  const { context: bContext, page: b } = await newPerson(browser);
   try {
-    await blockExternal(bContext);
-    const b = await bContext.newPage();
-    expect(b.viewportSize()).toEqual({ width: 390, height: 844 });
+    // B is on the same kind of device as A.
+    expect(b.viewportSize()).toEqual(page.viewportSize());
     await b.goto(inviteUrl ?? "");
 
     // "دعاك <A's name>": the invitation names its sender.
@@ -165,8 +166,20 @@ test("core loop: create, take, finish, invite, join, switch", async ({
   ).toBeVisible();
 
   // At a very large phone text size nothing runs off the screen: the page never scrolls
-  // sideways, and no tab, bar label or the switch button is cut off.
+  // sideways, and no tab, bar label or the switch button is cut off. Measured in the real
+  // font: a system fallback has other widths, so first make sure Readex Pro is in use.
   await page.addStyleTag({ content: "html { font-size: 225% !important; }" });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        await document.fonts.ready;
+        return [...document.fonts].some(
+          (face) =>
+            face.family.includes("Readex Pro") && face.status === "loaded",
+        );
+      }),
+    )
+    .toBe(true);
   const overflow = await page.evaluate(() => {
     const root = document.documentElement;
     const clipped = [
@@ -187,10 +200,8 @@ test("core loop: create, take, finish, invite, join, switch", async ({
   await page.addStyleTag({ content: "html { font-size: 112.5% !important; }" });
 
   // Signed out, there is no bottom bar.
-  const visitor = await browser.newContext();
+  const { context: visitor, page: v } = await newPerson(browser);
   try {
-    await blockExternal(visitor);
-    const v = await visitor.newPage();
     await v.goto("/");
     await expect(
       v.getByRole("link", { name: t.home.startNewPlain }),

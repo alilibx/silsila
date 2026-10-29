@@ -149,11 +149,18 @@ Design specs and implementation plans live in [`docs/superpowers/`](docs/superpo
 
 - **Unit and integration tests** run with Vitest: `convex/**` in the `edge-runtime` environment (required by
   `convex-test`), and `apps/web/**` in `jsdom`.
-- **End to end:** `bun run e2e` runs the Playwright smoke test (Chromium, 390×844) against a local backend and Vite
-  server that it starts and stops itself, with no cloud project and no real WhatsApp. It plays two people through
-  verifying, creating a khatma, taking, finishing, and joining by invite, and covers a grace period ending and a
-  release from the organizer's side. Stop `bun run dev` first (the ports must be free), and run
-  `bun run playwright install chromium` once. State lives in `.convex/local`, shared with `bun run dev`.
+- **End to end:** `bun run e2e` runs the Playwright suite against a local backend and a production build of the
+  website (`vite build`, then `vite preview`), which it starts and stops itself, with no cloud project and no real
+  WhatsApp. It plays two people through verifying, creating a khatma, taking, finishing, and joining by invite, and
+  covers a grace period ending and a release from the organizer's side. Every spec runs on nine projects: two iPhones,
+  two Android phones, an iPad, desktop Chrome, Firefox and Safari, and `slow-android`, a cheap Android phone on a slow
+  mobile network that also checks the first load against a time budget. `bun run e2e --project=iphone-se` runs one
+  project. Stop `bun run dev` first (the ports must be free), and run
+  `bun run playwright install chromium webkit firefox` once. State lives in `.convex/local`, shared with
+  `bun run dev`. The `E2E` workflow runs the same suite on every pull request.
+- **Real phones:** Playwright's WebKit is close to Safari but not the same. Safe-area insets, the on-screen keyboard,
+  and the collapsing toolbar only show on a real iPhone or in the iOS Simulator, and WhatsApp's in-app browser and
+  Samsung Internet only on a real phone. Check those by hand before a release.
 
 ## Deploy and releases
 
