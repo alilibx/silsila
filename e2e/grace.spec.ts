@@ -53,9 +53,12 @@ async function joinAndTake(browser: Browser, inviteUrl: string, juz: string) {
     .click();
   await expect(b.getByText(t.card.held)).toBeVisible();
   await dismissPushPrompt(b);
+  // B is a member now: the grid has its own tab. Come back to "my juz'" afterwards.
+  await b.getByRole("tab", { name: t.nav.tabs.pool }).click();
   await expect(
     b.getByRole("button", { name: new RegExp(t.tile.mine) }),
   ).toHaveCount(1);
+  await b.getByRole("tab", { name: t.nav.tabs.mine }).click();
   return { b, context };
 }
 
@@ -74,9 +77,11 @@ test("grace end: juz opens, organizer is told and takes it, reader is thanked", 
 
     // A: tile 5 reads "open" with no name, and the note offers it.
     await page.reload();
+    await page.getByRole("tab", { name: t.nav.tabs.pool }).click();
     const tile = juzTile(page, "٥");
     await expect(tile).toContainText(t.tile.open);
     await expect(tile).not.toContainText(t.tile.reading);
+    await page.getByRole("tab", { name: t.nav.tabs.mine }).click();
     await expect(page.getByText(openNote("٥"))).toBeVisible();
 
     // A takes it from the note.
@@ -87,6 +92,7 @@ test("grace end: juz opens, organizer is told and takes it, reader is thanked", 
       .click();
     await expect(page.getByText(t.card.held)).toBeVisible();
     await dismissPushPrompt(page);
+    await page.getByRole("tab", { name: t.nav.tabs.pool }).click();
     await expect(
       page.getByRole("button", { name: new RegExp(t.tile.mine) }),
     ).toHaveCount(1);
@@ -126,6 +132,7 @@ test("release: the organizer's note reads the same as for a timeout", async ({
 
     await page.reload();
     await expect(page.getByText(openNote("٦"))).toBeVisible();
+    await page.getByRole("tab", { name: t.nav.tabs.pool }).click();
     await expect(juzTile(page, "٦")).toContainText(t.tile.open);
   } finally {
     await context.close();

@@ -8,11 +8,13 @@ import {
 } from "./support";
 
 const KHATMA_NAME = "ختمة الأسرة";
+const SECOND_NAME = "ختمة الأصدقاء";
 
 // The core loop at phone size: A starts a khatma, takes and finishes a juz', takes another;
 // B follows A's invite, verifies (surviving a tab reload mid-way), and takes one. B must see
-// A's name on a "reading" tile only.
-test("core loop: create, take, finish, invite, join", async ({
+// A's name on a "reading" tile only. Then A starts a second khatma from the bottom bar and
+// switches back to the first with the switch-khatma sheet.
+test("core loop: create, take, finish, invite, join, switch", async ({
   page,
   browser,
 }) => {
@@ -57,14 +59,18 @@ test("core loop: create, take, finish, invite, join", async ({
   await expect(page.getByText(t.card.held)).toBeVisible();
   // The first juz' in a browser offers push once; the answer is "not now".
   await dismissPushPrompt(page);
+  // The grid lives on its own tab.
+  await page.getByRole("tab", { name: t.nav.tabs.pool }).click();
   const mine = page.getByRole("button", { name: new RegExp(t.tile.mine) });
   await expect(mine).toHaveCount(1);
   const firstJuzLabel = (await mine.getAttribute("aria-label")) ?? "";
 
+  await page.getByRole("tab", { name: t.nav.tabs.mine }).click();
   await page.getByRole("button", { name: t.card.finish }).click();
   await expect(page.getByText(t.toast.finished)).toBeVisible();
   await expect(page.getByText(t.card.held)).toBeHidden();
   const doneName = firstJuzLabel.replace(t.tile.mine, t.tile.doneWord);
+  await page.getByRole("tab", { name: t.nav.tabs.pool }).click();
   await expect(
     page.getByRole("button", { name: doneName, exact: true }),
   ).toBeDisabled();
@@ -72,6 +78,7 @@ test("core loop: create, take, finish, invite, join", async ({
   expect(doneName).not.toContain(aName);
 
   // Take a second juz' so a "reading" tile with A's name exists when B looks.
+  await page.getByRole("tab", { name: t.nav.tabs.mine }).click();
   await page.getByRole("button", { name: t.card.take }).click();
   await takeSheet.getByRole("button", { name: t.take.confirm }).click();
   await expect(page.getByText(t.card.held)).toBeVisible();
@@ -106,6 +113,8 @@ test("core loop: create, take, finish, invite, join", async ({
       .click();
     await expect(b.getByText(t.card.held)).toBeVisible();
     await dismissPushPrompt(b);
+    // B is a member now: the page has tabs, and the grid is on its own.
+    await b.getByRole("tab", { name: t.nav.tabs.pool }).click();
 
     // B sees A's name on exactly one tile: the one A is reading. Never on a done tile.
     const tiles = b.getByRole("button", {
@@ -130,5 +139,66 @@ test("core loop: create, take, finish, invite, join", async ({
     ).toHaveCount(1);
   } finally {
     await bContext.close();
+  }
+
+  // --- Person A: the bottom bar, a second khatma, and switching back -------------------------
+  const bar = page.getByRole("navigation", { name: t.nav.label });
+  await expect(bar).toBeVisible();
+  await bar.getByRole("link", { name: t.nav.create }).click();
+  await page.getByLabel(new RegExp(t.create.nameLabel)).fill(SECOND_NAME);
+  await page.getByRole("button", { name: t.create.submit }).click();
+  await page
+    .getByRole("dialog", { name: t.share.createdTitle })
+    .getByRole("button", { name: t.share.done })
+    .click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: SECOND_NAME }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: t.nav.switchKhatma }).click();
+  await page
+    .getByRole("dialog", { name: t.nav.switchTitle })
+    .getByRole("link", { name: new RegExp(KHATMA_NAME) })
+    .click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: KHATMA_NAME }),
+  ).toBeVisible();
+
+  // At a very large phone text size nothing runs off the screen: the page never scrolls
+  // sideways, and no tab, bar label or the switch button is cut off.
+  await page.addStyleTag({ content: "html { font-size: 225% !important; }" });
+  const overflow = await page.evaluate(() => {
+    const root = document.documentElement;
+    const clipped = [
+      ...document.querySelectorAll('[role="tab"], nav a, main h1 + button'),
+    ]
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        return (
+          box.left < -1 ||
+          box.right > root.clientWidth + 1 ||
+          el.scrollWidth > el.clientWidth + 1
+        );
+      })
+      .map((el) => el.textContent);
+    return { page: root.scrollWidth - root.clientWidth, clipped };
+  });
+  expect(overflow).toEqual({ page: 0, clipped: [] });
+  await page.addStyleTag({ content: "html { font-size: 112.5% !important; }" });
+
+  // Signed out, there is no bottom bar.
+  const visitor = await browser.newContext();
+  try {
+    await blockExternal(visitor);
+    const v = await visitor.newPage();
+    await v.goto("/");
+    await expect(
+      v.getByRole("link", { name: t.home.startNewPlain }),
+    ).toBeVisible();
+    await expect(v.getByRole("navigation", { name: t.nav.label })).toHaveCount(
+      0,
+    );
+  } finally {
+    await visitor.close();
   }
 });

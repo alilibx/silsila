@@ -3,11 +3,19 @@ import type { KhatmaView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
 import { toArabicDigits } from "@convex/lib/digits";
 import { useQuery } from "convex/react";
+import { useEffect, useId, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "../components/Button";
 import { NoteCard, takeTarget } from "../components/NoteCard";
 import { MainCard } from "../components/MainCard";
 import { InstallStepsSheet } from "../components/InstallStepsSheet";
+import {
+  KhatmaTabs,
+  parseTab,
+  tabParam,
+  type KhatmaTab,
+} from "../components/KhatmaTabs";
+import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
 import { SwitchRow } from "../components/SwitchRow";
 import { WhatsAppSheet } from "../components/WhatsAppSheet";
 import { PoolGrid } from "../components/PoolGrid";
@@ -36,15 +44,52 @@ function khatmaTitle(view: KhatmaView): string {
 
 export function KhatmaPage() {
   const { inviteCode = "" } = useParams();
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
   const from = search.get("from");
+  const tab = parseTab(search.get("tab"));
+  // Tabs replace the entry, so the phone's back leaves the khatma instead of stepping through tabs.
+  const setTab = (next: KhatmaTab) =>
+    setSearch(
+      (current) => {
+        const params = new URLSearchParams(current);
+        const value = tabParam(next);
+        if (value === null) params.delete("tab");
+        else params.set("tab", value);
+        return params;
+      },
+      { replace: true },
+    );
   const sessionToken = useSessionToken();
   const view = useQuery(api.khatmas.view, {
     sessionToken,
     inviteCode,
     ...(from ? { from } : {}),
   });
-  const actions = useKhatmaActions(view, inviteCode);
+  // Tab ids live here so a tab change the page makes can move focus to the new tab.
+  const tabIds = useId();
+  const [focusTab, setFocusTab] = useState<KhatmaTab | null>(null);
+  // A tab change from inside a panel unmounts the control that had focus. Put focus on the newly
+  // selected tab, unless something else (a sheet that just opened) has already taken it.
+  useEffect(() => {
+    // The tab comes from the URL, which can update a render after this request.
+    if (focusTab === null || focusTab !== tab) return;
+    const el = document.getElementById(`${tabIds}-tab-${focusTab}`);
+    if (!el) return;
+    setFocusTab(null);
+    if (
+      document.activeElement === null ||
+      document.activeElement === document.body
+    )
+      el.focus();
+  });
+  const showTab = (next: KhatmaTab) => {
+    setTab(next);
+    setFocusTab(next);
+  };
+  // A confirmed take shows the person their juz' card, which lives on the mine tab.
+  const actions = useKhatmaActions(view, inviteCode, {
+    onTaken: () => showTab("mine"),
+  });
   const { sheet, busy } = actions;
   const share = useShareSheet();
   const isMember =
@@ -54,6 +99,9 @@ export function KhatmaPage() {
     api.notes.forKhatma,
     isMember ? { sessionToken, inviteCode } : "skip",
   );
+  // The switch button needs the member's other khatmas; nobody else sees it.
+  const mine = useQuery(api.khatmas.mine, isMember ? { sessionToken } : "skip");
+  const [switching, setSwitching] = useState(false);
 
   // The server decides who is signed in; a stored token alone proves nothing.
   const tokenIsDead =
@@ -96,6 +144,15 @@ export function KhatmaPage() {
           view={view}
           notes={notes ?? []}
           inviteCode={inviteCode}
+          tab={tab}
+          tabIds={tabIds}
+          onTab={setTab}
+          onShowTab={showTab}
+          onSwitch={
+            mine !== undefined && mine.length >= 2
+              ? () => setSwitching(true)
+              : null
+          }
           busy={busy}
           onTake={actions.take}
           onFinish={() => void actions.finish()}
@@ -136,6 +193,13 @@ export function KhatmaPage() {
           onClose={actions.closeSheet}
         />
       )}
+      {switching && mine && (
+        <SwitchKhatmaSheet
+          khatmas={mine}
+          currentCode={inviteCode}
+          onClose={() => setSwitching(false)}
+        />
+      )}
       {sheet?.kind === "push" && (
         <PushPromptSheet onClose={actions.closeSheet} />
       )}
@@ -169,24 +233,18 @@ export function KhatmaPage() {
   );
 }
 
-function KhatmaContent({
-  view,
-  notes,
-  inviteCode,
-  busy,
-  onTake,
-  onFinish,
-  onRelease,
-  onStillReading,
-  onDismissNote,
-  onSetNotifications,
-  onInvite,
-  onRemind,
-  hasOpen,
-}: {
+type ContentProps = {
   view: KhatmaView;
   notes: NoteView[];
   inviteCode: string;
+  tab: KhatmaTab;
+  /** The prefix of the tab and panel ids. */
+  tabIds: string;
+  onTab: (tab: KhatmaTab) => void;
+  /** Selects a tab from inside a panel and moves focus to it. */
+  onShowTab: (tab: KhatmaTab) => void;
+  /** Opens the switch-khatma sheet; `null` hides the button (fewer than two khatmas). */
+  onSwitch: (() => void) | null;
   busy: boolean;
   onTake: (juz: number) => void;
   onFinish: () => void;
@@ -197,9 +255,50 @@ function KhatmaContent({
   onInvite: () => void;
   onRemind: () => void;
   hasOpen: boolean;
-}) {
-  const title = khatmaTitle(view);
+};
 
+/** Members get the tabbed page; visitors and non-members keep the single page (spec 5.4). */
+function KhatmaContent(props: ContentProps) {
+  return props.view.me.isMember ? (
+    <MemberContent {...props} />
+  ) : (
+    <VisitorContent {...props} />
+  );
+}
+
+function Chips({ view }: { view: KhatmaView }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <span className={chip}>
+        {t.khatma.round(toArabicDigits(view.roundNumber))}
+      </span>
+      <span className={chip}>{t.schedules[view.schedule]}</span>
+      {view.targetEndAt !== null && (
+        <span className={chip}>
+          {t.khatma.target(formatDate(view.targetEndAt))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function GroupTotal({ view }: { view: KhatmaView }) {
+  if (view.completedRounds === 0) return null;
+  return (
+    <p className="mt-5 text-center text-ink-soft">
+      {t.khatma.groupTotal(toArabicDigits(view.completedRounds))}
+    </p>
+  );
+}
+
+function VisitorContent({
+  view,
+  busy,
+  onTake,
+  onFinish,
+  onRelease,
+  onStillReading,
+}: ContentProps) {
   return (
     <main className="mx-auto max-w-xl p-5">
       <header className="mb-3.5">
@@ -211,57 +310,20 @@ function KhatmaContent({
         </Link>
       </header>
 
-      {!view.me.isMember && (
-        <p
-          role="note"
-          className="mb-3.5 rounded-ui border border-[#BFE0CB] bg-[#E7F5EC] p-3 text-ink"
-        >
-          {view.inviterName
-            ? t.khatma.invited(view.inviterName)
-            : t.khatma.invitedAnon}
-          {!view.me.signedIn && ` ${t.khatma.verifyHint}`}
-        </p>
-      )}
+      <p
+        role="note"
+        className="mb-3.5 rounded-ui border border-[#BFE0CB] bg-[#E7F5EC] p-3 text-ink"
+      >
+        {view.inviterName
+          ? t.khatma.invited(view.inviterName)
+          : t.khatma.invitedAnon}
+        {!view.me.signedIn && ` ${t.khatma.verifyHint}`}
+      </p>
 
       <h1 className="font-display text-4xl leading-tight text-green-deep">
-        {title}
+        {khatmaTitle(view)}
       </h1>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <span className={chip}>
-          {t.khatma.round(toArabicDigits(view.roundNumber))}
-        </span>
-        <span className={chip}>{t.schedules[view.schedule]}</span>
-        {view.targetEndAt !== null && (
-          <span className={chip}>
-            {t.khatma.target(formatDate(view.targetEndAt))}
-          </span>
-        )}
-      </div>
-
-      {view.me.isMember && notes.length > 0 && (
-        <section aria-label={t.notes.heading} className="mt-4 grid gap-3">
-          {notes.map((note) => (
-            <NoteCard
-              key={note.noteId}
-              note={note}
-              takeJuz={takeTarget(
-                note,
-                view.tiles,
-                view.me.holding,
-                view.me.suggestion,
-              )}
-              onStillReading={onStillReading}
-              onFinish={onFinish}
-              onRelease={onRelease}
-              onTake={onTake}
-              onInvite={onInvite}
-              onDismiss={() => onDismissNote(note.noteId)}
-              busy={busy}
-            />
-          ))}
-        </section>
-      )}
-
+      <Chips view={view} />
       <Ring tiles={view.tiles} />
       <MainCard
         view={view}
@@ -271,41 +333,156 @@ function KhatmaContent({
         onStillReading={onStillReading}
         busy={busy}
       />
-      {view.me.isMember && (
-        <div className="mt-4 grid gap-3">
-          <Button variant="whatsapp" onClick={onInvite}>
-            {t.share.inviteButton}
-          </Button>
-          {hasOpen && (
-            <Button variant="ghost" onClick={onRemind}>
-              {t.share.remindButton}
-            </Button>
-          )}
-        </div>
-      )}
-      {view.me.isMember && (
-        <SwitchRow
-          label={t.khatmaSettings.notifications}
-          on={view.me.notificationsOn !== false}
-          disabled={busy}
-          onChange={onSetNotifications}
-        />
-      )}
-      {view.isOrganizer && (
-        <Link
-          to={`/j/${encodeURIComponent(inviteCode)}/settings`}
-          className="mt-3 inline-flex min-h-14 items-center font-semibold text-green underline underline-offset-4"
-        >
-          {t.khatmaSettings.link}
-        </Link>
-      )}
       <PoolGrid tiles={view.tiles} onTake={onTake} />
-
-      {view.completedRounds > 0 && (
-        <p className="mt-5 text-center text-ink-soft">
-          {t.khatma.groupTotal(toArabicDigits(view.completedRounds))}
-        </p>
-      )}
+      <GroupTotal view={view} />
     </main>
   );
+}
+
+function MemberContent({
+  view,
+  notes,
+  inviteCode,
+  tab,
+  tabIds: ids,
+  onTab,
+  onShowTab,
+  onSwitch,
+  busy,
+  onTake,
+  onFinish,
+  onRelease,
+  onStillReading,
+  onDismissNote,
+  onSetNotifications,
+  onInvite,
+  onRemind,
+  hasOpen,
+}: ContentProps) {
+  return (
+    <main className="mx-auto max-w-xl p-5">
+      <header className="mb-3.5">
+        <Link
+          to="/"
+          className="inline-flex min-h-11 items-center gap-1 font-medium text-green"
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="rtl:-scale-x-100"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          {t.nav.back}
+        </Link>
+      </header>
+
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <h1 className="min-w-0 font-display text-4xl leading-tight break-words text-green-deep">
+          {khatmaTitle(view)}
+        </h1>
+        {onSwitch && (
+          <button
+            type="button"
+            onClick={onSwitch}
+            className="mt-1 inline-flex min-h-11 max-w-full items-center rounded-full border-2 border-green px-3.5 text-base font-semibold text-green"
+          >
+            {t.nav.switchKhatma}
+          </button>
+        )}
+      </div>
+      <Chips view={view} />
+      <KhatmaTabs tab={tab} onChange={onTab} idPrefix={ids} />
+
+      <section
+        role="tabpanel"
+        id={`${ids}-panel`}
+        aria-labelledby={`${ids}-tab-${tab}`}
+      >
+        {tab === "mine" && (
+          <>
+            {notes.length > 0 && (
+              <section aria-label={t.notes.heading} className="mt-4 grid gap-3">
+                {notes.map((note) => (
+                  <NoteCard
+                    key={note.noteId}
+                    note={note}
+                    takeJuz={takeTarget(
+                      note,
+                      view.tiles,
+                      view.me.holding,
+                      view.me.suggestion,
+                    )}
+                    onStillReading={onStillReading}
+                    onFinish={onFinish}
+                    onRelease={onRelease}
+                    onTake={onTake}
+                    onInvite={onInvite}
+                    onDismiss={() => onDismissNote(note.noteId)}
+                    busy={busy}
+                  />
+                ))}
+              </section>
+            )}
+            <Ring tiles={view.tiles} />
+            <MainCard
+              view={view}
+              onTake={onTake}
+              onFinish={onFinish}
+              onRelease={onRelease}
+              onStillReading={onStillReading}
+              onPickYourself={() => onShowTab("pool")}
+              busy={busy}
+            />
+          </>
+        )}
+        {tab === "pool" && <PoolGrid tiles={view.tiles} onTake={onTake} />}
+        {tab === "group" && (
+          <>
+            <div className="mt-4 grid gap-3">
+              <Button variant="whatsapp" onClick={onInvite}>
+                {t.share.inviteButton}
+              </Button>
+              {hasOpen && (
+                <Button variant="ghost" onClick={onRemind}>
+                  {t.share.remindButton}
+                </Button>
+              )}
+            </div>
+            <SwitchRow
+              label={t.khatmaSettings.notifications}
+              on={view.me.notificationsOn !== false}
+              disabled={busy}
+              onChange={onSetNotifications}
+            />
+            {view.isOrganizer && (
+              <Link
+                to={`/j/${encodeURIComponent(inviteCode)}/settings`}
+                className="mt-3 inline-flex min-h-14 items-center font-semibold text-green underline underline-offset-4"
+              >
+                {t.khatmaSettings.link}
+              </Link>
+            )}
+            <GroupTotal view={view} />
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+/**
+ * The khatma route. Keyed by invite code so switching khatmas starts fresh: an undo toast, a
+ * lost-race wait or an open sheet belongs to the khatma it came from.
+ */
+export function KhatmaRoute() {
+  const { inviteCode = "" } = useParams();
+  return <KhatmaPage key={inviteCode} />;
 }

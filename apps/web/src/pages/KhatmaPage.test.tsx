@@ -1,13 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigationType,
+} from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KhatmaView } from "@convex/khatmas";
+import { t } from "../i18n/ar";
 import { makeTiles, makeView } from "../test/fixtures";
 import { KhatmaPage } from "./KhatmaPage";
 import { NotFoundPage } from "./NotFoundPage";
 
 const useQuery = vi.fn();
+const useMine = vi.fn<(...args: unknown[]) => unknown>();
 const useSessionToken = vi.fn<() => string | undefined>();
 const getSessionToken = vi.fn<() => string | null>();
 const clearSessionToken = vi.fn();
@@ -32,7 +40,11 @@ vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
     useQuery: (ref: never, ...rest: unknown[]) =>
-      getFunctionName(ref) === "notes:forKhatma" ? [] : useQuery(ref, ...rest),
+      getFunctionName(ref) === "notes:forKhatma"
+        ? []
+        : getFunctionName(ref) === "khatmas:mine"
+          ? useMine(...rest)
+          : useQuery(ref, ...rest),
     useMutation: () => vi.fn(),
   };
 });
@@ -51,6 +63,8 @@ function renderAt(url: string) {
 describe("KhatmaPage", () => {
   beforeEach(() => {
     useQuery.mockReset();
+    useMine.mockReset();
+    useMine.mockReturnValue([]);
     useSessionToken.mockReset();
     useSessionToken.mockReturnValue(undefined);
     getSessionToken.mockReset();
@@ -94,7 +108,7 @@ describe("KhatmaPage", () => {
     expect("from" in args).toBe(false);
   });
 
-  it("renders the khatma: title, chips, ring, pool, group total", () => {
+  it("renders the khatma: title, chips, ring, pool, group total", async () => {
     useQuery.mockReturnValue(
       makeView({
         completedRounds: 11,
@@ -113,17 +127,21 @@ describe("KhatmaPage", () => {
       "aria-label",
       "تمّ ١ من ٣٠ جزءاً",
     );
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: t.nav.tabs.pool }));
     expect(screen.getAllByRole("button", { name: /^الجزء / })).toHaveLength(30);
+
+    await userEvent.click(screen.getByRole("tab", { name: t.nav.tabs.group }));
     expect(
       screen.getByText("ختمتم معاً ١١ ختمة، الحمد لله"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
-    expect(screen.queryByText(/^الهدف:/)).toBeInTheDocument();
   });
 
   it("falls back to a dated title and hides the total when none finished", () => {
     useQuery.mockReturnValue(makeView({ name: null, completedRounds: 0 }));
-    renderAt("/j/CODE");
+    // The total lives on the group tab, so look there.
+    renderAt("/j/CODE?tab=group");
     expect(
       screen.getByRole("heading", { level: 1, name: /^ختمة .*أكتوبر/ }),
     ).toBeInTheDocument();
@@ -310,6 +328,231 @@ describe("KhatmaPage", () => {
         screen.queryByRole("dialog", { name: "قبل أن تأخذ جزءاً" }),
       ).not.toBeInTheDocument();
       expect(clearSessionToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("tabs", () => {
+    function Where() {
+      const { search } = useLocation();
+      return (
+        <output data-testid="where">{`${search}|${useNavigationType()}`}</output>
+      );
+    }
+    function renderTabs(url: string) {
+      return render(
+        <MemoryRouter initialEntries={[url]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+          <Where />
+        </MemoryRouter>,
+      );
+    }
+    const member = (over: Partial<KhatmaView["me"]> = {}) =>
+      makeView({ me: { ...makeView().me, suggestion: 3, ...over } });
+    const tab = (name: string) => screen.getByRole("tab", { name });
+    const grid = () =>
+      screen.queryByRole("heading", { name: t.khatma.poolHeading });
+
+    beforeEach(() => {
+      useSessionToken.mockReturnValue("tok");
+    });
+
+    it("a member lands on جزئي with the main card and no grid", () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE");
+      expect(tab(t.nav.tabs.mine)).toHaveAttribute("aria-selected", "true");
+      const panel = screen.getByRole("tabpanel");
+      expect(panel).toHaveAttribute("aria-labelledby", tab(t.nav.tabs.mine).id);
+      expect(tab(t.nav.tabs.mine)).toHaveAttribute("aria-controls", panel.id);
+      expect(
+        screen.getByRole("button", { name: t.card.take }),
+      ).toBeInTheDocument();
+      expect(grid()).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: t.share.inviteButton }),
+      ).toBeNull();
+    });
+
+    it("?tab=pool shows the grid and not the main card", () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE?tab=pool");
+      expect(tab(t.nav.tabs.pool)).toHaveAttribute("aria-selected", "true");
+      expect(grid()).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: t.card.take })).toBeNull();
+    });
+
+    it("?tab=group shows invite, remind, the notifications switch and the group total", () => {
+      useQuery.mockReturnValue(
+        makeView({ completedRounds: 3, me: makeView().me }),
+      );
+      renderTabs("/j/CODE?tab=group");
+      expect(
+        screen.getByRole("button", { name: t.share.inviteButton }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: t.share.remindButton }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("switch", { name: t.khatmaSettings.notifications }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(t.khatma.groupTotal("٣"))).toBeInTheDocument();
+      expect(grid()).toBeNull();
+    });
+
+    it("shows the organizer's settings link on المجموعة only for the organizer", () => {
+      useQuery.mockReturnValue(makeView({ isOrganizer: true }));
+      const { unmount } = renderTabs("/j/CODE?tab=group");
+      expect(
+        screen.getByRole("link", { name: t.khatmaSettings.link }),
+      ).toHaveAttribute("href", "/j/CODE/settings");
+      unmount();
+      useQuery.mockReturnValue(makeView({ isOrganizer: true }));
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("link", { name: t.khatmaSettings.link }),
+      ).toBeNull();
+    });
+
+    it("an unknown ?tab value opens جزئي", () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE?tab=nope");
+      expect(tab(t.nav.tabs.mine)).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("switching tabs replaces the URL and keeps from", async () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE?from=AB12");
+      await userEvent.click(tab(t.nav.tabs.pool));
+      expect(screen.getByTestId("where")).toHaveTextContent(
+        "?from=AB12&tab=pool|REPLACE",
+      );
+      expect(grid()).toBeInTheDocument();
+      await userEvent.click(tab(t.nav.tabs.mine));
+      expect(screen.getByTestId("where")).toHaveTextContent(
+        "?from=AB12|REPLACE",
+      );
+    });
+
+    it("the back link says ختماتي and goes home", () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE");
+      expect(screen.getByRole("link", { name: t.nav.back })).toHaveAttribute(
+        "href",
+        "/",
+      );
+      expect(screen.queryByRole("link", { name: t.app.name })).toBeNull();
+    });
+
+    it("اختر بنفسك opens الأجزاء", async () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE");
+      await userEvent.click(
+        screen.getByRole("button", { name: t.card.pickYourself }),
+      );
+      expect(tab(t.nav.tabs.pool)).toHaveAttribute("aria-selected", "true");
+      expect(grid()).toBeInTheDocument();
+    });
+
+    it("اختر بنفسك puts focus on the الأجزاء tab, not the top of the page", async () => {
+      useQuery.mockReturnValue(member());
+      renderTabs("/j/CODE");
+      await userEvent.click(
+        screen.getByRole("button", { name: t.card.pickYourself }),
+      );
+      expect(tab(t.nav.tabs.pool)).toHaveFocus();
+    });
+
+    const cards = [
+      {
+        inviteCode: "CODE",
+        name: "ختمة العائلة",
+        createdAt: 0,
+        schedule: "weekly",
+        done: 0,
+        holding: null,
+        hasNote: false,
+      },
+      {
+        inviteCode: "OTHER",
+        name: "ختمة الزملاء",
+        createdAt: 0,
+        schedule: "monthly",
+        done: 7,
+        holding: null,
+        hasNote: false,
+      },
+    ];
+
+    it("shows تبديل الختمة with two or more khatmas, and opens the sheet", async () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue(cards);
+      renderTabs("/j/CODE");
+      expect(useMine).toHaveBeenCalledWith({ sessionToken: "tok" });
+      await userEvent.click(
+        screen.getByRole("button", { name: t.nav.switchKhatma }),
+      );
+      const sheet = screen.getByRole("dialog", { name: t.nav.switchTitle });
+      expect(
+        within(sheet).getByRole("link", { name: /ختمة الزملاء/ }),
+      ).toHaveAttribute("href", "/j/OTHER");
+      expect(
+        within(sheet).getByRole("link", { name: /ختمة العائلة/ }),
+      ).toHaveAttribute("aria-current", "page");
+    });
+
+    it("hides the switch button with one khatma", () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue(cards.slice(0, 1));
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
+    });
+
+    it("hides the switch button while mine loads", () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue(undefined);
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
+    });
+
+    it("a non-member gets no switch button, even with khatmas of their own", () => {
+      useQuery.mockReturnValue(member({ isMember: false }));
+      useMine.mockReturnValue(cards);
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
+    });
+
+    it("ignores ?tab for a non-member", () => {
+      useQuery.mockReturnValue(member({ isMember: false }));
+      renderTabs("/j/CODE?tab=group");
+      expect(screen.queryByRole("tablist")).toBeNull();
+      expect(grid()).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: t.card.take }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: t.app.name })).toHaveAttribute(
+        "href",
+        "/",
+      );
+      expect(
+        screen.getByRole("link", { name: t.card.pickYourself }),
+      ).toHaveAttribute("href", "#pool");
+    });
+
+    it("a signed-out visitor gets the single page", () => {
+      useSessionToken.mockReturnValue(undefined);
+      useQuery.mockReturnValue(
+        member({ signedIn: false, isMember: false, displayName: "" }),
+      );
+      renderTabs("/j/CODE");
+      expect(screen.queryByRole("tablist")).toBeNull();
+      expect(grid()).toBeInTheDocument();
     });
   });
 });

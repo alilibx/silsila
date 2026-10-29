@@ -157,6 +157,11 @@ describe("SettingsPage", () => {
     ];
   });
 
+  it("signed in: no top link home, the bottom bar has it", () => {
+    renderPage();
+    expect(screen.queryByRole("link", { name: "الصفحة الرئيسية" })).toBeNull();
+  });
+
   it("turns WhatsApp messages on from their own switch, with what they'll get", async () => {
     renderPage();
     expect(screen.getByText(t.whatsappNotes.explain)).toBeInTheDocument();

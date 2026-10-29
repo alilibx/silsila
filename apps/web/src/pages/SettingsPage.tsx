@@ -59,14 +59,17 @@ function SettingsContent({
 }) {
   return (
     <main className="mx-auto max-w-xl p-5">
-      <header className="mb-3.5">
-        <Link
-          to="/"
-          className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
-        >
-          {t.common.home}
-        </Link>
-      </header>
+      {/* Signed in, the bottom bar has the way home. */}
+      {me === null && (
+        <header className="mb-3.5">
+          <Link
+            to="/"
+            className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
+          >
+            {t.common.home}
+          </Link>
+        </header>
+      )}
       <h1 className="font-display text-4xl leading-tight text-green-deep">
         {t.home.settings}
       </h1>

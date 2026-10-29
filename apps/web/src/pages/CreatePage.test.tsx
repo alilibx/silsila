@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n/ar";
 import { CreatePage } from "./CreatePage";
 
 const m = vi.hoisted(() => ({
@@ -69,6 +70,20 @@ describe("CreatePage", () => {
     m.create.mockResolvedValue({ inviteCode: "NEWCODE" });
     m.token = "tok";
     localStorage.clear();
+  });
+
+  it("signed in: no back link, the bottom bar has the way home", () => {
+    renderPage();
+    expect(screen.queryByRole("link", { name: t.create.back })).toBeNull();
+  });
+
+  it("signed out: keeps the back link home", () => {
+    m.token = undefined;
+    renderPage();
+    expect(screen.getByRole("link", { name: t.create.back })).toHaveAttribute(
+      "href",
+      "/",
+    );
   });
 
   it("offers exactly six schedules and no yearly, weekly by default", () => {

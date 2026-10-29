@@ -87,6 +87,7 @@ export function undoWindowMs(undoUntil: number, now: number): number {
 export function useKhatmaActions(
   view: KhatmaView | { notFound: true } | undefined,
   inviteCode: string,
+  options: { onTaken?: (juz: number) => void } = {},
 ) {
   const sessionToken = useSessionToken();
   const loaded = view !== undefined && !("notFound" in view) ? view : null;
@@ -107,6 +108,15 @@ export function useKhatmaActions(
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const toastId = useRef(0);
+  // A mutation can come back after the person has left the page. Nothing may act on it then:
+  // a tab change would navigate them back to this khatma.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const takeMutation = useMutation(api.pool.take);
   const finishMutation = useMutation(api.pool.finish);
   const undoMutation = useMutation(api.pool.undoFinish);
@@ -265,6 +275,8 @@ export function useKhatmaActions(
     setSheet(null);
     if (result.ok) {
       posthog.capture("juz_taken", { juz_number: juz });
+      if (!mounted.current) return;
+      options.onTaken?.(juz);
       showToast(t.toast.taken(toArabicDigits(juz)));
       return offerPush();
     }

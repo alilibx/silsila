@@ -4,13 +4,15 @@ import { useHandoffManifest } from "./features/handoff/useHandoffManifest";
 import { HelpButton } from "./features/help/HelpButton";
 import { HelpProvider } from "./features/help/helpUi";
 import { useClaimVisitorHelp } from "./features/help/useClaimVisitorHelp";
+import { BottomBarProvider } from "./features/nav/bottomBarUi";
 import { useHelpDeepLink } from "./features/help/useHelpDeepLink";
 import { OpenInBrowser } from "./features/status/OpenInBrowser";
 import { StatusBanners } from "./features/status/StatusBanners";
+import { BottomBar } from "./components/BottomBar";
 import { useTouch } from "./lib/useTouch";
 import { CreatePage } from "./pages/CreatePage";
 import { HomePage } from "./pages/HomePage";
-import { KhatmaPage } from "./pages/KhatmaPage";
+import { KhatmaRoute } from "./pages/KhatmaPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OrganizerPage } from "./pages/OrganizerPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -29,19 +31,22 @@ export function App() {
   return (
     <HandoffGate>
       <HelpProvider>
-        <StatusBanners />
-        <OpenInBrowser />
-        <HelpButton />
-        <HelpDeepLink />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/new" element={<CreatePage />} />
-          <Route path="/j/:inviteCode" element={<KhatmaPage />} />
-          <Route path="/j/:inviteCode/settings" element={<OrganizerPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/signout" element={<SignOutPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <BottomBarProvider>
+          <StatusBanners />
+          <OpenInBrowser />
+          <HelpButton />
+          <HelpDeepLink />
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/new" element={<CreatePage />} />
+            <Route path="/j/:inviteCode" element={<KhatmaRoute />} />
+            <Route path="/j/:inviteCode/settings" element={<OrganizerPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/signout" element={<SignOutPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+          <BottomBar />
+        </BottomBarProvider>
       </HelpProvider>
     </HandoffGate>
   );

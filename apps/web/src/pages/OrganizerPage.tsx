@@ -214,7 +214,7 @@ function OrganizerContent({
       <main className="mx-auto max-w-xl p-5">
         <header className="mb-3.5">
           <Link
-            to={khatmaPath(inviteCode)}
+            to={`${khatmaPath(inviteCode)}?tab=group`}
             className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
           >
             {t.organizer.back}
