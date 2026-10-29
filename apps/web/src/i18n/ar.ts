@@ -649,6 +649,7 @@ export const ar = {
     },
     timeLabel: "الوقت",
     locked: "هذه الرسالة لا يمكن إيقافها.",
+    saveTimes: "احفظ الأوقات",
     detailsHeading: "الختمة",
     nameLabel: "اسم الختمة",
     timeZoneLabel: "التوقيت",

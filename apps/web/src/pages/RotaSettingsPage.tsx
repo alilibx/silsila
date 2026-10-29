@@ -1,5 +1,9 @@
 import { api } from "@convex/_generated/api";
-import type { ReadingDays, RotaMessages } from "@convex/lib/rota";
+import {
+  messageTimesError,
+  type ReadingDays,
+  type RotaMessages,
+} from "@convex/lib/rota";
 import { localDate } from "@convex/lib/wakingTime";
 import { useMutation, useQuery } from "convex/react";
 import { useState, type ReactNode } from "react";
@@ -108,6 +112,9 @@ function SettingsContent({
   const [days, setDays] = useState<ReadingDays>(settings.days);
   const [endDate, setEndDate] = useState<string | null>(settings.endDate);
   const [timeZone, setTimeZone] = useState(settings.timeZone);
+  // The times and switches are edited here and saved together, so a move that
+  // only makes sense with another one (a later reminder and summary) can be made.
+  const [messages, setMessages] = useState<RotaMessages>(settings.messages);
   const [addingDate, setAddingDate] = useState(false);
   const { busy, error, run: call } = useRotaCall(rotaErrors);
   // Which section the last call was for, and the word of thanks once it went through.
@@ -118,7 +125,7 @@ function SettingsContent({
   const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
 
   const paused = settings.pausedAt !== null;
-  const { messages, quiet } = settings;
+  const { quiet } = settings;
   const earliest = quiet.endHour * 60;
   const latest = quiet.startHour * 60 - 15;
 
@@ -138,6 +145,8 @@ function SettingsContent({
     ...(timeZone !== settings.timeZone ? { timeZone } : {}),
   };
   const changed = Object.keys(changes).length > 0;
+  const messagesChanged =
+    JSON.stringify(messages) !== JSON.stringify(settings.messages);
   // An end date behind today would end the khatma for good.
   const today = localDate(Date.now(), settings.timeZone);
   const earliestEnd = start > today ? start : today;
@@ -161,10 +170,13 @@ function SettingsContent({
     return call(work, () => setScope({ section, saved }));
   }
 
-  const saveMessages = (next: RotaMessages) =>
+  const saveMessages = () =>
     run(
       "messages",
-      () => update({ ...args, messages: next }),
+      async () =>
+        messageTimesError(messages, quiet.startHour, quiet.endHour)
+          ? { error: "invalid_times" }
+          : update({ ...args, messages }),
       t.organizer.saved,
     );
 
@@ -263,7 +275,7 @@ function SettingsContent({
                 min={earliest}
                 max={latest}
                 disabled={busy}
-                onChange={(at) => void saveMessages({ ...messages, dayAt: at })}
+                onChange={(at) => setMessages({ ...messages, dayAt: at })}
               />
               <p className="mt-2 text-base text-ink-soft">{t.rota.locked}</p>
             </div>
@@ -277,7 +289,7 @@ function SettingsContent({
                   on={messages[key].on}
                   disabled={busy}
                   onChange={(on) =>
-                    void saveMessages({
+                    setMessages({
                       ...messages,
                       [key]: { ...messages[key], on },
                     })
@@ -289,7 +301,7 @@ function SettingsContent({
                   max={latest}
                   disabled={busy}
                   onChange={(at) =>
-                    void saveMessages({
+                    setMessages({
                       ...messages,
                       [key]: { ...messages[key], at },
                     })
@@ -297,6 +309,14 @@ function SettingsContent({
                 />
               </div>
             ))}
+            <div className="mt-4">
+              <Button
+                disabled={busy || !messagesChanged}
+                onClick={() => void saveMessages()}
+              >
+                {t.rota.saveTimes}
+              </Button>
+            </div>
           </Section>
 
           <Section

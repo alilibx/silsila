@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -207,13 +213,24 @@ describe("RotaSettingsPage", () => {
       expect(values.every((v) => v % 15 === 0)).toBe(true);
     });
 
-    it("a new time sends all four messages with the new minutes", async () => {
+    const timeFields = () =>
+      within(section(t.rota.messagesHeading)).getAllByLabelText(
+        t.rota.timeLabel,
+      ) as HTMLSelectElement[];
+    const saveTimes = () =>
+      within(section(t.rota.messagesHeading)).getByRole("button", {
+        name: t.rota.saveTimes,
+      });
+
+    it("saves nothing until the button is pressed, and the button waits for a change", async () => {
       const user = userEvent.setup();
       renderPage();
-      const reminder = within(
-        section(t.rota.messagesHeading),
-      ).getAllByLabelText(t.rota.timeLabel)[1] as HTMLSelectElement;
-      await user.selectOptions(reminder, "1020");
+      expect(saveTimes()).toBeDisabled();
+      await user.selectOptions(timeFields()[1] as HTMLSelectElement, "1020");
+      expect(m.fns.update).not.toHaveBeenCalled();
+      expect(saveTimes()).toBeEnabled();
+      await user.click(saveTimes());
+      expect(m.fns.update).toHaveBeenCalledTimes(1);
       expect(m.fns.update).toHaveBeenCalledWith({
         ...args,
         messages: {
@@ -221,26 +238,40 @@ describe("RotaSettingsPage", () => {
           reminder: { at: 1020, on: true },
         },
       });
+      await waitFor(() =>
+        expect(
+          within(section(t.rota.messagesHeading)).getByRole("status"),
+        ).toHaveTextContent(t.organizer.saved),
+      );
     });
 
-    it("a switch turns a message on or off", async () => {
+    it("changing a time back leaves nothing to save", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.selectOptions(timeFields()[1] as HTMLSelectElement, "1020");
+      await user.selectOptions(timeFields()[1] as HTMLSelectElement, "960");
+      expect(saveTimes()).toBeDisabled();
+    });
+
+    it("switches are saved with the times, all in one call", async () => {
       const user = userEvent.setup();
       renderPage();
       await user.click(
         screen.getByRole("switch", { name: t.rota.messageNames.summary }),
       );
-      expect(m.fns.update).toHaveBeenCalledWith({
-        ...args,
-        messages: { ...baseSettings.messages, summary: { at: 1260, on: true } },
-      });
       await user.click(
         screen.getByRole("switch", { name: t.rota.messageNames.reminder }),
       );
-      expect(m.fns.update).toHaveBeenLastCalledWith({
+      await user.selectOptions(timeFields()[3] as HTMLSelectElement, "1230");
+      expect(m.fns.update).not.toHaveBeenCalled();
+      await user.click(saveTimes());
+      expect(m.fns.update).toHaveBeenCalledTimes(1);
+      expect(m.fns.update).toHaveBeenCalledWith({
         ...args,
         messages: {
           ...baseSettings.messages,
           reminder: { at: 960, on: false },
+          summary: { at: 1230, on: true },
         },
       });
     });
@@ -248,12 +279,8 @@ describe("RotaSettingsPage", () => {
     it("an off message still lets its time be changed", async () => {
       const user = userEvent.setup();
       renderPage();
-      await user.selectOptions(
-        within(section(t.rota.messagesHeading)).getAllByLabelText(
-          t.rota.timeLabel,
-        )[3] as HTMLSelectElement,
-        "1230",
-      );
+      await user.selectOptions(timeFields()[3] as HTMLSelectElement, "1230");
+      await user.click(saveTimes());
       expect(m.fns.update).toHaveBeenCalledWith({
         ...args,
         messages: {
@@ -266,31 +293,57 @@ describe("RotaSettingsPage", () => {
     it("the day's message time is changed in the first row", async () => {
       const user = userEvent.setup();
       renderPage();
-      await user.selectOptions(
-        within(section(t.rota.messagesHeading)).getAllByLabelText(
-          t.rota.timeLabel,
-        )[0] as HTMLSelectElement,
-        "540",
-      );
+      await user.selectOptions(timeFields()[0] as HTMLSelectElement, "540");
+      await user.click(saveTimes());
       expect(m.fns.update).toHaveBeenCalledWith({
         ...args,
         messages: { ...baseSettings.messages, dayAt: 540 },
       });
     });
 
-    it("says when the order of the times is wrong", async () => {
-      m.fns.update.mockResolvedValue({ error: "invalid_times" });
+    it("moves that only work together can be saved together", async () => {
+      // Reminder 16:00, unread 19:00: the unread list can't move before the reminder alone.
       const user = userEvent.setup();
       renderPage();
-      await user.selectOptions(
-        within(section(t.rota.messagesHeading)).getAllByLabelText(
-          t.rota.timeLabel,
-        )[0] as HTMLSelectElement,
-        "1200",
-      );
+      await user.selectOptions(timeFields()[1] as HTMLSelectElement, "1200");
+      await user.selectOptions(timeFields()[2] as HTMLSelectElement, "1230");
+      await user.click(saveTimes());
+      expect(m.fns.update).toHaveBeenCalledWith({
+        ...args,
+        messages: {
+          ...baseSettings.messages,
+          reminder: { at: 1200, on: true },
+          unread: { at: 1230, on: true },
+        },
+      });
+    });
+
+    it("says when the order of the times is wrong, without sending anything", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.selectOptions(timeFields()[0] as HTMLSelectElement, "1200");
+      await user.click(saveTimes());
       expect(await screen.findByRole("alert")).toHaveTextContent(
         t.rota.errors.invalid_times ?? "",
       );
+      expect(m.fns.update).not.toHaveBeenCalled();
+    });
+
+    it("still shows the server's refusal", async () => {
+      m.fns.update.mockResolvedValue({ error: "invalid_times" });
+      const user = userEvent.setup();
+      renderPage();
+      await user.selectOptions(timeFields()[1] as HTMLSelectElement, "1020");
+      await user.click(saveTimes());
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        t.rota.errors.invalid_times ?? "",
+      );
+    });
+
+    it("an archived khatma's times can't be saved", () => {
+      m.settings = { ...baseSettings, archived: true };
+      renderPage();
+      expect(saveTimes()).toBeDisabled();
     });
   });
 
