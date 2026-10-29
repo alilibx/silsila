@@ -197,6 +197,12 @@ export const stopText =
   "أوقفنا رسائل الختمة لك. لتعود إليها أرسل رسالة الانضمام مرة أخرى.";
 export const helpText = "اضغط «أتممت» أو «ليس بعد» في رسالة جزئك.";
 export const whichKhatmaText = "لأي ختمة؟";
+/** A typed reply with more open khatmas than buttons fit: their titles, already formatted. */
+export function manyKhatmasText(titles: string[]): string {
+  return `لك قراءة اليوم في أكثر من ختمة: ${titles.join("، ")}. اضغط «أتممت» أو «ليس بعد» في رسالة كل ختمة.`;
+}
+/** A join message for an archived khatma. */
+export const endedText = "انتهت هذه الختمة.";
 
 /** Both duas of the khatm, each followed by its reference. */
 export function duaText(): string {

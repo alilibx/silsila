@@ -493,7 +493,8 @@ export const matchIncoming = internalMutation({
     ctx,
     args,
   ): Promise<
-    | { kind: "rate_limited" }
+    /** `codeShaped`: the text could hold a sign-in code. */
+    | { kind: "rate_limited"; codeShaped: boolean }
     /** `admin`: an admin panel sign-in, which gets the admin code text. */
     | { kind: "needs_pin"; admin: boolean }
     | { kind: "matched"; returnPath: string }
@@ -506,13 +507,14 @@ export const matchIncoming = internalMutation({
       await getSetting(ctx, "verifyPerPhonePerHour"),
       HOUR_MS,
     );
-    if (!allowed) return { kind: "rate_limited" };
+    const windows = codeWindows(args.text);
+    if (!allowed)
+      return { kind: "rate_limited", codeShaped: windows.length > 0 };
     // A blocked number gets "no code found" and never touches a pending code (spec 8).
     if (await isBlocked(ctx, args.phone)) {
       return { kind: "no_match", codeShaped: false };
     }
 
-    const windows = codeWindows(args.text);
     const doc = await findPendingByText(ctx, windows);
     if (!doc) return { kind: "no_match", codeShaped: windows.length > 0 };
 

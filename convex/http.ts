@@ -466,8 +466,9 @@ http.route({
 
 // ---------------------------------------------------------------------------
 // POST /whatsapp/relay: production relaying a message it can't place, with
-// its button payload and profile name (`relayIncoming` in whatsapp.ts). Open only on a deployment whose messages
-// come from the relay (staging), never on one Meta calls (production).
+// its button payload and profile name (`relayIncoming` in whatsapp.ts). Open
+// only on a deployment whose messages come from the relay (staging), never on
+// one Meta calls (production).
 
 /**
  * A relayed message is at most 500 characters (each at most 6 bytes as JSON),

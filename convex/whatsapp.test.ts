@@ -875,19 +875,64 @@ test("webhook verify handshake echoes the challenge only for the right token", a
   expect(unset.status).toBe(403);
 });
 
+/** A rota khatma «ختمة» with join code JNC234 and nobody listed. */
+async function insertRotaKhatma(t: ReturnType<typeof convexTest>) {
+  return await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "المنظم",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
+    });
+    return await ctx.db.insert("khatmas", {
+      name: "ختمة",
+      schedule: "none",
+      grace: DEFAULT_GRACE.none,
+      creatorPersonId: personId,
+      inviteCode: "invite",
+      joinCode: "JNC234",
+      completedRounds: 0,
+      createdAt: 0,
+      kind: "rota",
+      rota: {
+        days: { kind: "daily" },
+        firstDate: "2027-01-16",
+        endDate: null,
+        timeZone: "Asia/Dubai",
+        messages: {
+          dayAt: 480,
+          reminder: { at: 960, on: true },
+          unread: { at: 1140, on: false },
+          summary: { at: 1260, on: false },
+        },
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+      },
+    });
+  });
+}
+
 test("simulateIncoming passes a button tap and profile name through", async () => {
   const t = convexTest(schema, modules);
+  const khatmaId = await insertRotaKhatma(t);
   await t.action(internal.dev.simulateIncoming, {
     from: "971501234567",
     text: "أتممت",
     payload: "r1|p|done|d1|p1",
-    profileName: "سعيد",
   });
   // a tap: it reaches the rota (which can't place it), never the sign-in path
   expect(sent.map((s) => s.body)).toEqual([helpText]);
+  // and the profile name arrives with a join message
+  await t.action(internal.dev.simulateIncoming, {
+    from: "971501234567",
+    text: joinText("ختمة", "JNC234"),
+    profileName: "سعيد",
+  });
   expect(
-    await t.run((ctx) => ctx.db.query("waContacts").collect()),
-  ).toHaveLength(1);
+    await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
+  ).toMatchObject([{ khatmaId, profileName: "سعيد" }]);
 });
 
 test("simulateIncoming refuses to run outside dev", async () => {
@@ -1045,41 +1090,7 @@ test("relay endpoint never matches a button tap to a sign-in code", async () => 
 test("relay endpoint takes a join for a staging khatma, with the profile name", async () => {
   asStaging();
   const t = convexTest(schema, modules);
-  const khatmaId = await t.run(async (ctx) => {
-    const personId = await ctx.db.insert("people", {
-      phone: "+971500000001",
-      displayName: "المنظم",
-      verifiedAt: 0,
-      timeZone: "Asia/Dubai",
-      lastSeenAt: 0,
-    });
-    return await ctx.db.insert("khatmas", {
-      name: "ختمة",
-      schedule: "none",
-      grace: DEFAULT_GRACE.none,
-      creatorPersonId: personId,
-      inviteCode: "invite",
-      joinCode: "JNC234",
-      completedRounds: 0,
-      createdAt: 0,
-      kind: "rota",
-      rota: {
-        days: { kind: "daily" },
-        firstDate: "2027-01-16",
-        endDate: null,
-        timeZone: "Asia/Dubai",
-        messages: {
-          dayAt: 480,
-          reminder: { at: 960, on: true },
-          unread: { at: 1140, on: false },
-          summary: { at: 1260, on: false },
-        },
-        pausedAt: null,
-        pauseDates: [],
-        archivedAt: null,
-      },
-    });
-  });
+  const khatmaId = await insertRotaKhatma(t);
   const res = await relayPost(
     t,
     JSON.stringify({

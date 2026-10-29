@@ -575,8 +575,8 @@ export async function sendWhatsAppLink(
 }
 
 /** WhatsApp shows at most three reply buttons, each titled with 20 characters or fewer. */
-const MAX_REPLY_BUTTONS = 3;
-const MAX_BUTTON_TITLE = 20;
+export const MAX_REPLY_BUTTONS = 3;
+export const MAX_BUTTON_TITLE = 20;
 
 /**
  * A text with up to three reply buttons (inside the 24-hour window, no
@@ -719,13 +719,15 @@ export const recordInbound = internalMutation({
 });
 
 /**
- * The rota's answer to a message no sign-in code took, sent at once since it
- * replies to the member's own message. Returns whether anything was sent.
+ * The rota's answer to a message, sent at once since it replies to the
+ * member's own message. Returns whether anything was sent. `mayBeSignIn`: the
+ * text could hold another deployment's sign-in code, so it gets no help reply.
  */
 async function answerRota(
   ctx: ActionCtx,
   phone: string,
   message: IncomingMessage,
+  mayBeSignIn = false,
 ): Promise<boolean> {
   const result = await ctx.runMutation(internal.rotaInbound.handle, {
     phone,
@@ -734,6 +736,7 @@ async function answerRota(
     ...(message.profileName !== undefined && {
       profileName: message.profileName,
     }),
+    mayBeSignIn,
     now: Date.now(),
   });
   if (!Array.isArray(result)) return false;
@@ -748,13 +751,15 @@ async function answerRota(
 }
 
 /**
- * Dedupes and matches one message and sends the reply for a match: a sign-in
- * code first, then the rota (a button tap, a join message, a member's typed
- * reply). Returns `"taken"` when nothing more should be sent (a match, a
- * duplicate, a bad sender, or a rate-limited phone), `"unknown_code"` when
- * another deployment may place it (a sign-in code, a join code or a button
- * tap this one doesn't have, or a rota reply from a phone that is no member
- * here), else `"no_code"`.
+ * Dedupes one message, routes it and sends the reply. A button tap, a join
+ * message, and a rota word from a phone with a rota participant go to the
+ * rota and never to sign-in matching (or its rate limit); anything else is
+ * matched against sign-in codes first, then left to the rota. Returns
+ * `"taken"` when nothing more should be sent (an answer, a duplicate, a bad
+ * sender, or a rate-limited phone), `"unknown_code"` when another deployment
+ * may place it (a sign-in code, a join code or a button tap this one doesn't
+ * have, or a rota word from a phone with no participant here), else
+ * `"no_code"`.
  */
 export async function takeIncoming(
   ctx: ActionCtx,
@@ -772,6 +777,17 @@ export async function takeIncoming(
     if (await answerRota(ctx, phone, message)) return "taken";
     return decodePayload(message.payload) !== null ? "unknown_code" : "taken";
   }
+  // A sign-in message never says «انضمام», so a join text never reaches
+  // sign-in matching, even when its title holds a code. A member's «إيقاف» or
+  // «تم» skips it too, so the sign-in rate limit never silences them.
+  const word = classifyReply(message.text);
+  if (
+    findJoinCode(message.text) !== null ||
+    (word !== null &&
+      (await ctx.runQuery(internal.rotaInbound.hasParticipant, { phone })))
+  ) {
+    return (await answerRota(ctx, phone, message)) ? "taken" : "unknown_code";
+  }
 
   // Generated here (never in a mutation); used only if the number already
   // has an account.
@@ -783,14 +799,14 @@ export async function takeIncoming(
   });
   switch (result.kind) {
     case "rate_limited":
+      // A text that can't be a sign-in still gets the rota's answer.
+      if (!result.codeShaped) await answerRota(ctx, phone, message);
       return "taken";
     case "no_match":
-      if (await answerRota(ctx, phone, message)) return "taken";
-      return result.codeShaped ||
-        findJoinCode(message.text) !== null ||
-        classifyReply(message.text) !== null
-        ? "unknown_code"
-        : "no_code";
+      if (await answerRota(ctx, phone, message, result.codeShaped)) {
+        return "taken";
+      }
+      return result.codeShaped || word !== null ? "unknown_code" : "no_code";
     case "matched":
       await sendVerified(phone, result.returnPath);
       return "taken";

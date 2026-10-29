@@ -10,7 +10,9 @@ import {
   alreadyText,
   closedText,
   duaText,
+  endedText,
   helpText,
+  manyKhatmasText,
   notOnListText,
   stopText,
   whichKhatmaText,
@@ -349,6 +351,50 @@ test("a sign-in code text still signs in and never joins; a join text never sign
   expect(await t.run((ctx) => ctx.db.query("sessions").collect())).toEqual([]);
 });
 
+test("a join text whose title holds a pending sign-in code joins and signs nobody in", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1, joinedAt: null }], {
+    name: "Family K7Q29XMB4T",
+  });
+  const verificationId = await t.run((ctx) =>
+    ctx.db.insert("verifications", {
+      codeNormalized: "K7Q29XMB4T",
+      secretHash: "hash",
+      displayName: "علي",
+      status: "pending",
+      pinAttempts: 0,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 600_000,
+    }),
+  );
+  await send(t, phoneOf(0), joinText("Family K7Q29XMB4T", "JNC234"));
+  expect((await participant(t, s.participants[0]!)).joinedAt).toBe(Date.now());
+  expect((await t.run((ctx) => ctx.db.get(verificationId)))?.status).toBe(
+    "pending",
+  );
+});
+
+test("an archived khatma's join code says it has ended and is not relayed", async () => {
+  withRelay();
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1, joinedAt: null }]);
+  await t.run(async (ctx) => {
+    const k = (await ctx.db.get(s.khatmaId))!;
+    await ctx.db.patch(s.khatmaId, { rota: { ...k.rota!, archivedAt: 1 } });
+  });
+  await send(t, phoneOf(0), joinText("ختمة", "JNC234"));
+  await send(t, STRANGER, joinText("ختمة", "JNC234"));
+  expect(sent.map((m) => [m.to, m.body])).toEqual([
+    [phoneOf(0), `*ختمة*\n${endedText}`],
+    [STRANGER, `*ختمة*\n${endedText}`],
+  ]);
+  expect(relayed).toEqual([]);
+  expect((await participant(t, s.participants[0]!)).joinedAt).toBeNull();
+  expect(
+    await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
+  ).toEqual([]);
+});
+
 test("a join text for a code this deployment lacks gets the sign-in reply", async () => {
   const t = convexTest(schema, modules);
   await setup(t, [{ slot: 1 }]);
@@ -555,6 +601,53 @@ test("typed «تم» with two open khatmas replies with two buttons and changes 
   expect(sent.at(-1)?.body).toBe(alreadyText);
 });
 
+/** The same phone joined in khatmas named `names`, each with today's day started. */
+async function openKhatmas(t: T, names: string[]) {
+  const phone = "+971500000100";
+  const codes = ["JNC234", "JNC567", "JNC789", "JNC345"];
+  const out: { s: Setup; day: Awaited<ReturnType<typeof startDay>> }[] = [];
+  let organizerId: Id<"people"> | undefined;
+  for (const [i, name] of names.entries()) {
+    const s = await setup(t, [{ slot: i + 1, phone }], {
+      name,
+      joinCode: codes[i]!,
+      ...(organizerId && { organizerId }),
+    });
+    organizerId = s.personId;
+    out.push({ s, day: await startDay(t, s) });
+  }
+  return out;
+}
+
+test("which-khatma buttons keep titles apart after the 20-character cut", async () => {
+  const t = convexTest(schema, modules);
+  // the same first 20 characters
+  const base = "ختمة العائلة الكبيرة";
+  expect(Array.from(base)).toHaveLength(20);
+  const open = await openKhatmas(t, [`${base} أ`, `${base} ب`, "ختمة"]);
+  await send(t, phoneOf(0), "تم");
+  const second = `${Array.from(base).slice(0, 18).join("").trimEnd()} ٢`;
+  const ids = open.map(({ s, day }) =>
+    tap("done", day._id, s.participants[0]!),
+  );
+  expect(sent.map((m) => m.body)).toEqual([
+    `${whichKhatmaText}\n[${base}] ${ids[0]}\n[${second}] ${ids[1]}\n[ختمة] ${ids[2]}`,
+  ]);
+});
+
+test("more open khatmas than buttons fit get their names in plain text", async () => {
+  const t = convexTest(schema, modules);
+  const names = ["ختمة أ", "ختمة ب", "ختمة ج", "ختمة د"];
+  const open = await openKhatmas(t, names);
+  await send(t, phoneOf(0), "تم");
+  expect(sent.map((m) => m.body)).toEqual([manyKhatmasText(names)]);
+  for (const { day } of open) {
+    expect((await readsOf(t, day._id)).every((r) => r.doneAt === null)).toBe(
+      true,
+    );
+  }
+});
+
 test("typed «ليس بعد» and «الدعاء» answer a joined member", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t, [{ slot: 1 }]);
@@ -571,17 +664,48 @@ test("typed «ليس بعد» and «الدعاء» answer a joined member", asyn
 });
 
 test("other text from a joined member gets the help reply, not the sign-in reply", async () => {
+  withRelay();
   const t = convexTest(schema, modules);
   await setup(t, [{ slot: 1 }, { slot: 2, joinedAt: null }]);
   await send(t, phoneOf(0), "السلام عليكم");
-  // a listed phone that never joined, and a phone that isn't listed
+  // a listed phone that never joined: production answers a rota word, and
+  // other text gets the sign-in reply; a phone that isn't listed too
   await send(t, phoneOf(1), "تم");
+  await send(t, phoneOf(1), "السلام عليكم");
   await send(t, STRANGER, "السلام عليكم");
   expect(sent.map((m) => [m.to, m.body])).toEqual([
     [phoneOf(0), helpText],
+    [phoneOf(1), helpText],
     [phoneOf(1), NO_MATCH_REPLY],
     [STRANGER, NO_MATCH_REPLY],
   ]);
+  expect(relayed).toEqual([]);
+});
+
+test("«إيقاف» works for a phone over the sign-in rate limit", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  // the sign-in limit is 10 messages an hour
+  for (let i = 0; i < 11; i++) await send(t, phoneOf(0), "السلام عليكم");
+  await send(t, phoneOf(0), "إيقاف");
+  expect((await participant(t, s.participants[0]!)).stoppedAt).toBe(Date.now());
+  // the 11th is over the limit but can't be a sign-in, so it still gets help
+  expect(sent.map((m) => m.body)).toEqual([
+    ...Array<string>(11).fill(helpText),
+    stopText,
+  ]);
+});
+
+test("a joined member's code-shaped text is left for the relay, not answered with help", async () => {
+  withRelay();
+  const t = convexTest(schema, modules);
+  await setup(t, [{ slot: 1 }]);
+  // a sign-in started on staging, sent by a production rota member
+  await send(t, phoneOf(0), "رمز التحقق في وِردك: ZZZZ-2222-ZZ");
+  expect(relayed.map((r) => r.text)).toEqual([
+    "رمز التحقق في وِردك: ZZZZ-2222-ZZ",
+  ]);
+  expect(sent.map((m) => m.body)).toEqual([NO_MATCH_REPLY]);
 });
 
 test("every message opens the window and counts as a reply", async () => {

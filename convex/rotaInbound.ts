@@ -1,9 +1,14 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
 import { notify } from "./notes";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
 import { onStaging, titled } from "./rotaOutbox";
+import { MAX_BUTTON_TITLE, MAX_REPLY_BUTTONS } from "./whatsapp";
 import { findJoinCode } from "./lib/rotaJoin";
 import { decodePayload, encodePayload } from "./lib/rotaPayload";
 import { lastRotaDay, targetDay } from "./lib/rotaPlace";
@@ -14,8 +19,10 @@ import {
   clockText,
   closedText,
   duaText,
+  endedText,
   helpText,
   juzText,
+  manyKhatmasText,
   notOnListText,
   notYetText,
   stopText,
@@ -24,7 +31,7 @@ import {
   welcomeText,
   whichKhatmaText,
 } from "./lib/rotaTemplates";
-import { maskPhone } from "./lib/text";
+import { maskPhone, toArabicDigits } from "./lib/text";
 import { localDate, localMinutes } from "./lib/wakingTime";
 import { khatmaTitle } from "./lib/whatsappTemplates";
 
@@ -231,8 +238,8 @@ async function welcome(
 }
 
 /**
- * A join message for a khatma that takes joins (rota, not archived), or null
- * when this deployment has no such khatma. A listed phone joins (or rejoins
+ * A join message for a rota khatma, or null when this deployment has no such
+ * khatma. An archived khatma only says it has ended. A listed phone joins (or rejoins
  * after «إيقاف»); any other phone files one open join request, and the
  * organizer is told once. A join never signs anyone in.
  */
@@ -246,9 +253,8 @@ async function join(
     .withIndex("by_joinCode", (q) => q.eq("joinCode", code))
     .first();
   const rota = khatma?.rota;
-  if (!khatma || khatma.kind !== "rota" || !rota || rota.archivedAt !== null) {
-    return null;
-  }
+  if (!khatma || khatma.kind !== "rota" || !rota) return null;
+  if (rota.archivedAt !== null) return [about(khatma, endedText)];
   const rows = await ctx.db
     .query("rotaParticipants")
     .withIndex("by_khatma_phone", (q) =>
@@ -325,9 +331,30 @@ async function stop(
 }
 
 /**
+ * Button titles for `titles`, cut to what WhatsApp shows and kept apart:
+ * a title equal to an earlier one ends in « ٢», « ٣».
+ */
+function distinctTitles(titles: string[]): string[] {
+  const cut = (s: string, max: number) =>
+    Array.from(s).slice(0, max).join("").trimEnd();
+  const used = new Set<string>();
+  return titles.map((full) => {
+    const base = cut(full, MAX_BUTTON_TITLE);
+    let title = base;
+    for (let n = 2; used.has(title); n++) {
+      const suffix = ` ${toArabicDigits(n)}`;
+      title = `${cut(base, MAX_BUTTON_TITLE - suffix.length)}${suffix}`;
+    }
+    used.add(title);
+    return title;
+  });
+}
+
+/**
  * A typed «تم» or «ليس بعد». It acts only when exactly one open day has
  * unread reads for the phone; with several, the reply asks which khatma,
- * with one button per khatma, and changes nothing.
+ * with one button per khatma (or, with more than buttons fit, names them),
+ * and changes nothing.
  */
 async function answerTyped(
   ctx: MutationCtx,
@@ -352,26 +379,44 @@ async function answerTyped(
     return await answerDay(ctx, khatma, participant, day, action, now);
   }
   if (open.length === 0) return [reply(anyRead ? alreadyText : helpText)];
+  const titles = open.map(({ khatma }) => khatmaTitle(khatma));
+  if (open.length > MAX_REPLY_BUTTONS) return [reply(manyKhatmasText(titles))];
+  const buttonTitles = distinctTitles(titles);
   return [
     reply(
       whichKhatmaText,
-      open.map(({ participant, khatma, day }) => ({
+      open.map(({ participant, day }, i) => ({
         id: encodePayload(
           { action, dayId: day._id, participantId: participant._id },
           onStaging(),
         ),
-        title: khatmaTitle(khatma),
+        title: buttonTitles[i]!,
       })),
     ),
   ];
 }
 
+/** Whether the phone is on any rota khatma's list (not removed). */
+export const hasParticipant = internalQuery({
+  args: { phone: v.string() },
+  handler: async (ctx, args): Promise<boolean> => {
+    const rows = await ctx.db
+      .query("rotaParticipants")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .collect();
+    return rows.some(isActive);
+  },
+});
+
 /**
  * One incoming WhatsApp message that no sign-in code took. Every message
  * first opens the phone's window and counts as a reply. Then, in order: a
- * button tap, a join message, and a typed reply from a phone with joined
- * participants. `none` means it isn't a rota message here (a phone with no
- * participant, or a join code or a tap this deployment doesn't have).
+ * button tap, a join message, and a typed reply from a phone with a rota
+ * participant (a rota word from any of them; anything else only from a
+ * joined one, and not when `mayBeSignIn`, so another deployment's sign-in
+ * code is left for the relay). `none` means it isn't a rota message here (a
+ * phone with no participant, or a join code or a tap this deployment
+ * doesn't have).
  */
 export const handle = internalMutation({
   args: {
@@ -379,6 +424,7 @@ export const handle = internalMutation({
     text: v.string(),
     payload: v.optional(v.string()),
     profileName: v.optional(v.string()),
+    mayBeSignIn: v.optional(v.boolean()),
     now: v.number(),
   },
   handler: async (ctx, args): Promise<InboundResult> => {
@@ -388,8 +434,8 @@ export const handle = internalMutation({
     }
     const code = findJoinCode(args.text);
     if (code !== null) return (await join(ctx, args, code)) ?? NONE;
+    if (active.length === 0) return NONE;
     const joined = active.filter(hasJoined);
-    if (joined.length === 0) return NONE;
     const word = classifyReply(args.text);
     switch (word) {
       case "stop":
@@ -400,7 +446,9 @@ export const handle = internalMutation({
       case "dua":
         return [reply(duaText())];
       case null:
-        return [reply(helpText)];
+        return joined.length === 0 || args.mayBeSignIn
+          ? NONE
+          : [reply(helpText)];
     }
   },
 });
