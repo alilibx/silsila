@@ -35,9 +35,10 @@ export class RetryBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    reportRenderError(error, info);
     const settled = Date.now() - this.mountedAt >= SETTLED_MS;
     const tries = settled ? 0 : this.state.tries;
+    // Once per incident: the automatic tries that follow are the same failure.
+    if (tries === 0) reportRenderError(error, info);
     if (tries !== this.state.tries) this.setState({ tries });
     this.schedule(tries);
   }
@@ -65,9 +66,9 @@ export class RetryBoundary extends Component<Props, State> {
     this.setState({ failed: false, tries });
   }
 
+  /** The children are already unmounted, so a tap can mount them again at once. */
   private readonly tryAgain = (): void => {
-    this.setState({ tries: 0 });
-    this.schedule(0);
+    this.remount(0);
   };
 
   render() {
@@ -83,7 +84,16 @@ export class RetryBoundary extends Component<Props, State> {
           {retrying ? t.retry.retrying : t.retry.failed}
         </p>
         {!retrying && (
-          <Button onClick={this.tryAgain}>{t.retry.tryAgain}</Button>
+          <>
+            <Button onClick={this.tryAgain}>{t.retry.tryAgain}</Button>
+            {/* A full load: clears whatever state a lasting failure is stuck on. */}
+            <a
+              href="/"
+              className="inline-flex min-h-14 items-center justify-center font-medium text-green underline underline-offset-4"
+            >
+              {t.common.home}
+            </a>
+          </>
         )}
       </main>
     );

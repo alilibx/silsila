@@ -91,9 +91,13 @@ describe("RetryBoundary", () => {
     await wait(60_000);
     expect(renders.count).toBe(settled);
 
+    // A way out that doesn't depend on the retry working.
+    expect(screen.getByRole("link", { name: t.common.home })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    // The button mounts the page again at once.
     fireEvent.click(screen.getByRole("button", { name: t.retry.tryAgain }));
-    expect(screen.getByText(t.retry.retrying)).toBeInTheDocument();
-    await wait(RETRY_DELAYS_MS[0]);
     expect(screen.getByText("loaded")).toBeInTheDocument();
   });
 
@@ -131,6 +135,22 @@ describe("RetryBoundary", () => {
     expect(screen.getByText(t.retry.retrying)).toBeInTheDocument();
     await wait(RETRY_DELAYS_MS[0]);
     expect(screen.getByText("loaded")).toBeInTheDocument();
+  });
+
+  it("reports an incident once, not once per automatic try", async () => {
+    const report = vi.spyOn(console, "error");
+    render(
+      <RetryBoundary resetKey="/j/abc">
+        <Flaky until={Date.now() + total + 1} />
+      </RetryBoundary>,
+    );
+    for (const delay of RETRY_DELAYS_MS) await wait(delay);
+    expect(screen.getByText(t.retry.failed)).toBeInTheDocument();
+    // reportRenderError writes the error and its component stack to the console once.
+    const reported = report.mock.calls.filter(
+      ([error]) => error instanceof Error && /timed out/.test(error.message),
+    );
+    expect(reported).toHaveLength(1);
   });
 
   it("shows nothing while retrying when it is quiet", async () => {
