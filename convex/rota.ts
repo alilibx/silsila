@@ -830,6 +830,7 @@ export const declineJoinRequest = sessionMutation({
     await ctx.db.patch(request._id, {
       resolvedAt: Date.now(),
       outcome: "declined",
+      declinedBy: "organizer",
     });
     return { ok: true };
   },
@@ -1058,7 +1059,11 @@ export const markDone = sessionMutation({
     for (const id of new Set([found.read.readerId, found.read.holderId])) {
       const own = id ? await ctx.db.get(id) : null;
       if (own?.personId === person._id) {
-        await ctx.db.patch(own._id, { lastReplyAt: now, silentDays: 0 });
+        await ctx.db.patch(own._id, {
+          lastReplyAt: now,
+          silentDays: 0,
+          silencedAt: null,
+        });
       }
     }
     const completed = await completeIfDone(ctx, found.day._id);

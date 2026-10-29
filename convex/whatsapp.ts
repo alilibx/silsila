@@ -388,6 +388,10 @@ export function parseRelayed(payload: unknown): IncomingMessage | null {
     }
     relayed = { ...relayed, payload: payload.payload };
   }
+  if (payload.media !== undefined) {
+    if (payload.media !== true) return null;
+    relayed = { ...relayed, media: true };
+  }
   const profileName = cleanProfileName(payload.profileName);
   return profileName === undefined ? relayed : { ...relayed, profileName };
 }
@@ -642,8 +646,9 @@ export const sendText = internalAction({
 // Staging shares production's number, so Meta delivers every message to
 // production. A message production can't place is relayed to staging: a
 // sign-in code it has no pending code for, a join code no khatma here has, a
-// tap on a button staging sent, or a rota reply from a phone that is no
-// member here. Staging answers whether it took it, and then
+// tap on a button staging sent, a rota reply from a phone that is no member
+// here, or media from such a phone (so staging records it; nobody answers
+// it). Staging answers whether it took it, and then
 // sends its own reply (with its own `SITE_URL`); production replies only if
 // staging didn't take it, couldn't be reached, or took too long. Staging sends
 // before it answers, so its reply is never left waiting in a queue (a PIN
@@ -797,12 +802,15 @@ export async function takeIncoming(
 
   const phone = `+${message.from}`;
   // Media has nothing to read: from a rota phone it counts as a reply, and it
-  // is never answered, relayed or matched against sign-in codes.
+  // is never answered or matched against sign-in codes. From a phone with no
+  // rota participant here it goes to the other deployment (staging shares
+  // production's number), which records it the same way and answers nothing.
   if (message.media) {
-    await ctx.runMutation(internal.rotaInbound.recordMedia, {
+    const listed = await ctx.runMutation(internal.rotaInbound.recordMedia, {
       phone,
       now: Date.now(),
     });
+    if (!listed) await relayIncoming(message);
     return "taken";
   }
   // A button tap is never a sign-in message, however its title reads.

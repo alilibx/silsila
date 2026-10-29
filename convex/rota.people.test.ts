@@ -805,6 +805,7 @@ test("declining closes the request without adding anyone", async () => {
   expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
     resolvedAt: expect.any(Number),
     outcome: "declined",
+    declinedBy: "organizer",
   });
   expect((await people(t, s))?.participants).toHaveLength(1);
   expect(await decline()).toEqual({ error: "not_found" });

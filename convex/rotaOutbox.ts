@@ -339,6 +339,7 @@ export const plan = internalQuery({
     const khatma = await ctx.db.get(row.khatmaId);
     const rota = khatma?.rota;
     if (!khatma || !rota || rota.archivedAt !== null) return null;
+    let waiting: number[] | null = null;
     if (
       row.dayId !== null &&
       (row.kind === "juz" || row.kind === "reminder" || row.kind === "assigned")
@@ -354,12 +355,14 @@ export const plan = internalQuery({
             .first(),
         ),
       );
-      // Only a read still waiting on this participant calls for the message.
-      if (
-        !reads.some((r) => r?.readerId === participant._id && r.doneAt === null)
-      ) {
-        return null;
-      }
+      // Only reads still waiting on this participant call for the message,
+      // and it names those, not the juz' as queued: one may have been
+      // reassigned or read since.
+      waiting = row.juz.filter((_, i) => {
+        const read = reads[i];
+        return read?.readerId === participant._id && read.doneAt === null;
+      });
+      if (waiting.length === 0) return null;
     }
     if (row.kind === "complete" && row.dayId !== null) {
       // A juz' marked not done since leaves the day incomplete.
@@ -384,7 +387,7 @@ export const plan = internalQuery({
       };
     }
     const message = compose(
-      row,
+      waiting === null ? row : { ...row, juz: waiting },
       { name: khatma.name, createdAt: khatma.createdAt },
       windowOpen,
       isStaging(),

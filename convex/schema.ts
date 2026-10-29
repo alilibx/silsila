@@ -263,6 +263,11 @@ export default defineSchema({
     createdAt: v.number(),
     resolvedAt: nullableNumber,
     outcome: v.union(v.literal("accepted"), v.literal("declined"), v.null()),
+    // Who declined it: the organizer, or the requester with «إيقاف». Absent
+    // on older rows, which count as the organizer's.
+    declinedBy: v.optional(
+      v.union(v.literal("organizer"), v.literal("member")),
+    ),
   })
     .index("by_khatma_open", ["khatmaId", "resolvedAt"])
     .index("by_khatma_phone", ["khatmaId", "phone"])

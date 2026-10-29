@@ -16,6 +16,7 @@ import { lastRotaDay } from "./lib/rotaPlace";
 import { classifyReply } from "./lib/rotaReplies";
 import {
   alreadyText,
+  askOrganizerText,
   clockText,
   closedText,
   duaText,
@@ -68,20 +69,17 @@ const DECLINED_COOLDOWN_MS = 7 * 86_400_000;
 
 /**
  * Opens the phone's 24-hour window, but only for a phone Wirdak may write to:
- * one on a rota khatma's list, or with a join request waiting. Every other
- * number's messages leave no trace here.
+ * one on a rota khatma's list (`active`, the phone's participants that
+ * `recordReply` loaded), or with a join request waiting. Every other number's
+ * messages leave no trace here.
  */
 async function openWindow(
   ctx: MutationCtx,
   phone: string,
   now: number,
+  active: Participant[],
 ): Promise<void> {
-  const listed = (
-    await ctx.db
-      .query("rotaParticipants")
-      .withIndex("by_phone", (q) => q.eq("phone", phone))
-      .collect()
-  ).some(isActive);
+  const listed = active.length > 0;
   const asking =
     !listed &&
     (
@@ -277,14 +275,20 @@ async function join(
       )
       .collect();
     const waiting = requests.some((r) => r.resolvedAt === null);
-    // A request declined lately isn't filed (or told) again yet.
-    const declinedLately = requests.some(
-      (r) =>
-        r.outcome === "declined" &&
-        r.resolvedAt !== null &&
-        r.resolvedAt > args.now - DECLINED_COOLDOWN_MS,
-    );
-    if (!waiting && !declinedLately) {
+    // A request the organizer declined lately isn't filed again yet. One the
+    // number withdrew itself with «إيقاف» doesn't hold it off.
+    const lastDeclined = requests
+      .filter(
+        (r) =>
+          r.outcome === "declined" &&
+          r.resolvedAt !== null &&
+          r.resolvedAt > args.now - DECLINED_COOLDOWN_MS,
+      )
+      .sort((a, b) => (b.resolvedAt ?? 0) - (a.resolvedAt ?? 0))[0];
+    const heldOff =
+      lastDeclined !== undefined && lastDeclined.declinedBy !== "member";
+    if (!waiting && heldOff) return [about(khatma, askOrganizerText)];
+    if (!waiting) {
       const profileName = args.profileName ? args.profileName : null;
       await ctx.db.insert("rotaJoinRequests", {
         khatmaId: khatma._id,
@@ -358,7 +362,11 @@ async function declineRequests(
       .collect()
   ).filter((r) => r.resolvedAt === null);
   for (const r of open) {
-    await ctx.db.patch(r._id, { resolvedAt: now, outcome: "declined" });
+    await ctx.db.patch(r._id, {
+      resolvedAt: now,
+      outcome: "declined",
+      declinedBy: "member",
+    });
   }
   return open.length > 0;
 }
@@ -463,23 +471,29 @@ export const handle = internalMutation({
     now: v.number(),
   },
   handler: async (ctx, args): Promise<InboundResult> => {
-    const result = await route(ctx, args);
+    const active = await recordReply(ctx, args.phone, args.now);
+    const result = await route(ctx, args, active);
     // After the message is handled, so a join request filed just now counts.
-    await openWindow(ctx, args.phone, args.now);
+    await openWindow(ctx, args.phone, args.now, active);
     return result;
   },
 });
 
-/** Media from a rota phone: a reply like any other, with nothing to answer. */
+/**
+ * Media from a rota phone: a reply like any other, with nothing to answer.
+ * Returns whether the phone has a participant here.
+ */
 export const recordMedia = internalMutation({
   args: { phone: v.string(), now: v.number() },
-  handler: async (ctx, args): Promise<void> => {
+  handler: async (ctx, args): Promise<boolean> => {
     const active = await recordReply(ctx, args.phone, args.now);
-    if (active.length > 0) await openWindow(ctx, args.phone, args.now);
+    if (active.length === 0) return false;
+    await openWindow(ctx, args.phone, args.now, active);
+    return true;
   },
 });
 
-/** What `handle` does with the message, before the window opens. */
+/** What `handle` does with the message, before the window opens; `active` is the phone's participants. */
 async function route(
   ctx: MutationCtx,
   args: {
@@ -490,8 +504,8 @@ async function route(
     mayBeSignIn?: boolean;
     now: number;
   },
+  active: Participant[],
 ): Promise<InboundResult> {
-  const active = await recordReply(ctx, args.phone, args.now);
   if (args.payload !== undefined) {
     return await answerTap(ctx, args.phone, args.payload, args.now);
   }

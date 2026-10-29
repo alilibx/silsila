@@ -559,6 +559,43 @@ test("a juz' still waiting on the participant is sent even when another one was 
   expect(sent).toHaveLength(1);
 });
 
+test("a message names only the ajza' still waiting on the participant, not the ones queued", async () => {
+  for (const kind of ["juz", "reminder", "assigned"] as const) {
+    sent = [];
+    const t = convexTest(schema, modules);
+    const ids = await setup(t, { windowOpen: true });
+    await queue(t, ids, kind);
+    await t.run(async (ctx) => {
+      const read = await ctx.db
+        .query("rotaReads")
+        .withIndex("by_day_juz", (q) => q.eq("dayId", ids.dayId).eq("juz", 3))
+        .unique();
+      await ctx.db.patch(read!._id, { readerId: null });
+    });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.text).toContain("الجزء ٢");
+    expect(sent[0]?.text).not.toContain("٣");
+  }
+});
+
+test("outside the window the template carries only the ajza' still waiting", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  await queue(t, ids);
+  await t.run(async (ctx) => {
+    const read = await ctx.db
+      .query("rotaReads")
+      .withIndex("by_day_juz", (q) => q.eq("dayId", ids.dayId).eq("juz", 3))
+      .unique();
+    await ctx.db.patch(read!._id, { doneAt: NOW });
+  });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.text).toContain("٢");
+  expect(sent[0]?.text).not.toContain("٣");
+});
+
 test("a stop that lands between plan and markSent stops the send", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t, { windowOpen: true });

@@ -8,6 +8,7 @@ import { joinText } from "./lib/rotaJoin";
 import { encodePayload, type RotaAction } from "./lib/rotaPayload";
 import {
   alreadyText,
+  askOrganizerText,
   closedText,
   duaText,
   endedText,
@@ -886,6 +887,7 @@ test("a join within 7 days of a declined request files nothing new; after that i
     await ctx.db.patch(r!._id, {
       resolvedAt: Date.now(),
       outcome: "declined",
+      declinedBy: "organizer",
     });
   });
   sent.length = 0;
@@ -896,7 +898,8 @@ test("a join within 7 days of a declined request files nothing new; after that i
     await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
   ).toHaveLength(1);
   expect(await notes(t)).toHaveLength(1);
-  expect(sent.map((m) => m.body)).toEqual([`*ختمة*\n${notOnListText}`]);
+  // Told to ask the organizer, not that a request was sent.
+  expect(sent.map((m) => m.body)).toEqual([`*ختمة*\n${askOrganizerText}`]);
 
   vi.setSystemTime(Date.now() + 2 * 86_400_000);
   await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
@@ -908,6 +911,29 @@ test("a join within 7 days of a declined request files nothing new; after that i
     [s.khatmaId, "rotaJoinRequest"],
     [s.khatmaId, "rotaJoinRequest"],
   ]);
+});
+
+test("a join after the phone's own «إيقاف» withdrew its request files a new one", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  await send(t, STRANGER, "إيقاف");
+  expect(
+    await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
+  ).toEqual([expect.objectContaining({ declinedBy: "member" })]);
+  sent.length = 0;
+
+  vi.setSystemTime(Date.now() + 86_400_000);
+  await send(t, STRANGER, joinText("ختمة", "JNC234"), { profileName: "خالد" });
+  const requests = await t.run((ctx) =>
+    ctx.db.query("rotaJoinRequests").collect(),
+  );
+  expect(requests.filter((r) => r.resolvedAt === null)).toHaveLength(1);
+  expect((await notes(t)).map((n) => [n.khatmaId, n.kind])).toEqual([
+    [s.khatmaId, "rotaJoinRequest"],
+    [s.khatmaId, "rotaJoinRequest"],
+  ]);
+  expect(sent.map((m) => m.body)).toEqual([`*ختمة*\n${notOnListText}`]);
 });
 
 // ---------------------------------------------------------------------------
@@ -960,13 +986,15 @@ test("media from a rota phone counts as a reply and gets no answer", async () =>
   expect(relayed).toEqual([]);
 });
 
-test("media from any other phone is ignored: no reply, no relay, no window", async () => {
+test("media from a phone with no participant here is relayed as media, never answered, and leaves no window", async () => {
   withRelay();
   const t = convexTest(schema, modules);
   await setup(t, [{ slot: 1 }]);
   await send(t, STRANGER, "", { media: true });
   expect(sent).toEqual([]);
-  expect(relayed).toEqual([]);
+  expect(relayed).toEqual([
+    expect.objectContaining({ from: STRANGER, text: "", media: true }),
+  ]);
   expect(await t.run((ctx) => ctx.db.query("waContacts").collect())).toEqual(
     [],
   );

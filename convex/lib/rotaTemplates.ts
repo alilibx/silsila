@@ -200,6 +200,8 @@ export function notYetText(reminderTime: string | null): string {
 export const alreadyText = "سجّلنا قراءتك من قبل.";
 export const closedText = "انتهى يوم هذه الختمة.";
 export const notOnListText = "أرسلنا طلبك إلى منظّم الختمة، ونخبرك حين يضيفك.";
+/** To a number whose join request the organizer declined lately, when it asks again. */
+export const askOrganizerText = "تواصل مع منظّم الختمة ليضيفك.";
 export const stopText =
   "أوقفنا رسائل الختمة لك. لتعود إليها أرسل رسالة الانضمام مرة أخرى.";
 export const helpText = "اضغط «أتممت» أو «ليس بعد» في رسالة جزئك.";

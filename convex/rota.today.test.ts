@@ -534,7 +534,9 @@ test("the organizer marking their own juz' done counts as their reply", async ()
   const other = await add(t, s, 8);
   await startDay(t, s);
   const me = (await today(t, s))!.participants.find((p) => p.isMe)!;
-  await t.run((ctx) => ctx.db.patch(me.id, { silentDays: 5, lastReplyAt: 1 }));
+  await t.run((ctx) =>
+    ctx.db.patch(me.id, { silentDays: 5, lastReplyAt: 1, silencedAt: 1 }),
+  );
   await t.run((ctx) => ctx.db.patch(other, { silentDays: 5, lastReplyAt: 1 }));
 
   // a juz' the organizer reads (2, taken from nobody), then the one they hold
@@ -545,14 +547,18 @@ test("the organizer marking their own juz' done counts as their reply", async ()
   expect(await t.run((ctx) => ctx.db.get(me.id))).toMatchObject({
     lastReplyAt: expect.toSatisfy((at: number) => at >= NOW),
     silentDays: 0,
+    silencedAt: null,
   });
-  await t.run((ctx) => ctx.db.patch(me.id, { silentDays: 5, lastReplyAt: 1 }));
+  await t.run((ctx) =>
+    ctx.db.patch(me.id, { silentDays: 5, lastReplyAt: 1, silencedAt: 1 }),
+  );
   const one = await tile(t, s, 1);
   await act(t, s, "reassign", { readId: one.readId, participantId: other });
   await act(t, s, "markDone", { readId: one.readId });
   expect(await t.run((ctx) => ctx.db.get(me.id))).toMatchObject({
     lastReplyAt: expect.toSatisfy((at: number) => at >= NOW),
     silentDays: 0,
+    silencedAt: null,
   });
 
   await act(t, s, "markDone", { readId: (await tile(t, s, 8)).readId });

@@ -345,6 +345,17 @@ test("parseRelayed carries the payload and profile name", () => {
   ).toBe("ن".repeat(60));
 });
 
+test("parseRelayed carries media, and refuses a media flag that isn't true", () => {
+  const media = { waMessageId: "wamid.m", from: "971501234567", text: "" };
+  expect(parseRelayed({ ...media, media: true })).toEqual({
+    ...media,
+    media: true,
+  });
+  expect(parseRelayed(media)).toEqual(media);
+  expect(parseRelayed({ ...media, media: "yes" })).toBeNull();
+  expect(parseRelayed({ ...media, media: false })).toBeNull();
+});
+
 test("recordInbound returns true once per message id", async () => {
   const t = convexTest(schema, modules);
   expect(
@@ -1142,6 +1153,47 @@ test("relay endpoint takes a join for a staging khatma, with the profile name", 
     { khatmaId, phone: "+971501234567", profileName: "خالد" },
   ]);
   expect(sent.map((s) => s.body)).toEqual([`*ختمة*\n${notOnListText}`]);
+});
+
+test("relay endpoint records relayed media as a reply and answers nothing", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const khatmaId = await insertRotaKhatma(t);
+  const participantId = await t.run((ctx) =>
+    ctx.db.insert("rotaParticipants", {
+      khatmaId,
+      name: "سارة",
+      phone: "+971501234567",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+      joinedAt: 0,
+      silentDays: 3,
+      silencedAt: 1,
+    }),
+  );
+  const res = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, text: "", media: true }),
+  );
+  expect(res.status).toBe(200);
+  // taken, so production stays quiet; and nothing is sent from here either
+  expect(await res.json()).toEqual({ handled: true });
+  expect(sent).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.get(participantId))).toMatchObject({
+    lastReplyAt: NOW,
+    silentDays: 0,
+    silencedAt: null,
+  });
+  expect(await t.run((ctx) => ctx.db.query("waContacts").collect())).toEqual([
+    expect.objectContaining({ phone: "+971501234567", lastInboundAt: NOW }),
+  ]);
+  // media never reaches sign-in, and a redelivery is taken the same way
+  const again = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, text: "", media: true }),
+  );
+  expect(await again.json()).toEqual({ handled: true });
 });
 
 test("relay endpoint rejects malformed messages", async () => {
