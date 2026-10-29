@@ -401,6 +401,8 @@ export const autoHandoverSweep = internalMutation({
       .paginate({ numItems: SWEEP_PAGE, cursor: args.cursor ?? null });
     const cutoff = Date.now() - (await getSetting(ctx, "organizerInactiveMs"));
     for (const khatma of page.page) {
+      // a rota khatma keeps its organizer: readers are not members to hand it to
+      if (khatma.kind === "rota") continue;
       const organizer = await ctx.db.get(khatma.creatorPersonId);
       if (organizer && organizer.lastSeenAt >= cutoff) continue;
       await ctx.scheduler.runAfter(0, internal.organizer.autoHandover, {
@@ -424,7 +426,7 @@ export const autoHandover = internalMutation({
   args: { khatmaId: v.id("khatmas") },
   handler: async (ctx, args) => {
     const khatma = await ctx.db.get(args.khatmaId);
-    if (!khatma) return;
+    if (!khatma || khatma.kind === "rota") return;
     const now = Date.now();
     const organizer = await ctx.db.get(khatma.creatorPersonId);
     if (

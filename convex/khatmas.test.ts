@@ -160,7 +160,7 @@ async function viewAs(
     sessionToken: who?.token,
     from,
   });
-  if ("notFound" in res) throw new Error("unexpected notFound");
+  if ("notFound" in res || "rota" in res) throw new Error("unexpected view");
   return res;
 }
 
@@ -513,6 +513,7 @@ test("mine lists active memberships newest first with progress", async () => {
   const mine = await t.query(api.khatmas.mine, { sessionToken: ali.token });
   expect(mine).toEqual([
     {
+      kind: "pool",
       inviteCode: second,
       name: null,
       createdAt: khatma2.createdAt,
@@ -522,6 +523,7 @@ test("mine lists active memberships newest first with progress", async () => {
       hasNote: false,
     },
     {
+      kind: "pool",
       inviteCode: first,
       name: "الأولى",
       createdAt: khatma1.createdAt,
@@ -531,6 +533,107 @@ test("mine lists active memberships newest first with progress", async () => {
       hasNote: false,
     },
   ]);
+});
+
+/** A rota khatma row with `who` as its organizer and an active member. */
+async function createRotaKhatma(t: T, who: Who, inviteCode: string) {
+  const khatmaId = await t.run((ctx) =>
+    ctx.db.insert("khatmas", {
+      name: "ختمة التناوب",
+      schedule: "none",
+      grace: { value: 7, unit: "days" },
+      creatorPersonId: who.personId,
+      inviteCode,
+      completedRounds: 0,
+      createdAt: NOW,
+      kind: "rota",
+      rota: {
+        days: { kind: "daily" },
+        firstDate: "2027-01-15",
+        endDate: null,
+        timeZone: "Asia/Dubai",
+        messages: {
+          dayAt: 480,
+          reminder: { at: 960, on: true },
+          unread: { at: 1140, on: true },
+          summary: { at: 1260, on: false },
+        },
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+      },
+    }),
+  );
+  await join(t, khatmaId, who);
+  return khatmaId;
+}
+
+test("view of a rota khatma says so, before looking for a round", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  await createRotaKhatma(t, ali, "rotaKhatma01");
+  expect(
+    await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
+  ).toEqual({ rota: true });
+  expect(
+    await t.query(api.khatmas.view, {
+      inviteCode: "rotaKhatma01",
+      sessionToken: ali.token,
+    }),
+  ).toEqual({ rota: true });
+});
+
+test("mine lists a rota khatma with the open day's done count and no holding", async () => {
+  const t = convexTest(schema, modules);
+  const ali = await signedIn(t, "A");
+  const khatmaId = await createRotaKhatma(t, ali, "rotaKhatma02");
+
+  const card = async () =>
+    (await t.query(api.khatmas.mine, { sessionToken: ali.token }))[0];
+  expect(await card()).toMatchObject({
+    kind: "rota",
+    inviteCode: "rotaKhatma02",
+    done: 0,
+    holding: null,
+  });
+
+  // an open day with two ajza' done counts them; once closed it counts nothing
+  const dayId = await t.run(async (ctx) => {
+    const id = await ctx.db.insert("rotaDays", {
+      khatmaId,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2027-01-15",
+      startedAt: NOW,
+      closesAt: NOW + DAY,
+      completedAt: null,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+    });
+    for (const [juz, doneAt] of [
+      [1, NOW],
+      [2, NOW],
+      [3, null],
+    ] as const) {
+      await ctx.db.insert("rotaReads", {
+        dayId: id,
+        khatmaId,
+        juz,
+        slot: juz,
+        holderId: null,
+        readerId: null,
+        doneAt,
+        doneByOrganizer: false,
+        reassignedAt: null,
+      });
+    }
+    return id;
+  });
+  expect(await card()).toMatchObject({ done: 2, holding: null });
+  await t.run((ctx) => ctx.db.patch(dayId, { closedAt: NOW + DAY }));
+  expect(await card()).toMatchObject({ done: 0 });
 });
 
 test("mine shows hasNote while an uncleared note waits in that khatma", async () => {

@@ -33,6 +33,20 @@ export const rotaMessagesValidator = v.object({
   summary: timedMessage,
 });
 
+/** A rota khatma's settings, stored on its `khatmas` row. Dates are `YYYY-MM-DD` in `timeZone`. */
+export const rotaConfigValidator = v.object({
+  days: readingDaysValidator,
+  firstDate: v.string(),
+  /** The last reading date, or null to go on without end. */
+  endDate: v.union(v.string(), v.null()),
+  timeZone: v.string(),
+  messages: rotaMessagesValidator,
+  pausedAt: v.union(v.number(), v.null()),
+  /** Reading dates skipped while paused. */
+  pauseDates: v.array(v.string()),
+  archivedAt: v.union(v.number(), v.null()),
+});
+
 export const ROTA_SIZE = 30;
 
 const DAY_MS = 86_400_000;

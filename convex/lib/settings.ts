@@ -72,6 +72,21 @@ export const SETTING_DEFAULTS = {
   summaryHour: 8,
   /** at most one milestone push per this window */
   milestonePushSpacingMs: MINUTE,
+  // Rotating khatmas (ARQ-287). Times are minutes after local midnight.
+  rotaDayAt: 480,
+  rotaReminderAt: 960,
+  rotaReminderOn: true,
+  rotaUnreadAt: 1140,
+  rotaUnreadOn: true,
+  rotaSummaryAt: 1260,
+  rotaSummaryOn: false,
+  /** active (not archived) rota khatmas one organizer may have */
+  rotaMaxActivePerOrganizer: 2,
+  rotaMaxSlotsPerPerson: 3,
+  /** days with nobody reading before the organizer is told */
+  rotaSilenceNoticeDays: 3,
+  /** days with nobody reading before the khatma stops */
+  rotaSilenceStopDays: 7,
 };
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

@@ -8,7 +8,13 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 export type SettingGroup =
-  "pace" | "notifications" | "limits" | "sessions" | "switches" | "help";
+  | "pace"
+  | "notifications"
+  | "limits"
+  | "sessions"
+  | "switches"
+  | "help"
+  | "rota";
 
 export type SettingSpec = { group: SettingGroup } & (
   | { kind: "int"; min: number; max: number }
@@ -17,6 +23,8 @@ export type SettingSpec = { group: SettingGroup } & (
   | { kind: "duration"; min: number; max: number }
   /** a whole hour, 0 to 23 */
   | { kind: "hour" }
+  /** minutes after local midnight, 0 to 1425 in steps of 15 */
+  | { kind: "time" }
   | { kind: "bool" }
   /** trimmed text or null */
   | { kind: "text"; maxLength: number }
@@ -170,6 +178,17 @@ export const SETTING_SPECS: { [K in SettingKey]: SettingSpec } = {
     max: 730 * DAY,
     group: "help",
   },
+  rotaDayAt: { kind: "time", group: "rota" },
+  rotaReminderAt: { kind: "time", group: "rota" },
+  rotaReminderOn: { kind: "bool", group: "rota" },
+  rotaUnreadAt: { kind: "time", group: "rota" },
+  rotaUnreadOn: { kind: "bool", group: "rota" },
+  rotaSummaryAt: { kind: "time", group: "rota" },
+  rotaSummaryOn: { kind: "bool", group: "rota" },
+  rotaMaxActivePerOrganizer: { kind: "int", min: 1, max: 20, group: "rota" },
+  rotaMaxSlotsPerPerson: { kind: "int", min: 1, max: 30, group: "rota" },
+  rotaSilenceNoticeDays: { kind: "int", min: 1, max: 30, group: "rota" },
+  rotaSilenceStopDays: { kind: "int", min: 2, max: 60, group: "rota" },
 };
 
 export type SettingError =
@@ -226,6 +245,10 @@ export function validateSetting(
     case "hour":
       if (!isNumber(value) || !Number.isInteger(value)) return "wrong_type";
       return inRange(value, 0, 23);
+    case "time":
+      if (!isNumber(value) || !Number.isInteger(value)) return "wrong_type";
+      if (value % 15 !== 0) return "out_of_range";
+      return inRange(value, 0, 1425);
     case "bool":
       return typeof value === "boolean" ? null : "wrong_type";
     case "text":

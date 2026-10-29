@@ -6,6 +6,7 @@ import { t } from "../i18n/ar";
 import { SwitchKhatmaSheet } from "./SwitchKhatmaSheet";
 
 const card = (over: object = {}) => ({
+  kind: "pool" as const,
   inviteCode: "A",
   name: "ختمة العائلة",
   createdAt: Date.UTC(2026, 9, 20, 12),

@@ -262,8 +262,12 @@ export const create = action({
 
 export const view = sessionQuery({
   args: { inviteCode: v.string(), from: v.optional(v.string()) },
-  handler: async (ctx, args): Promise<KhatmaView | { notFound: true }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<KhatmaView | { notFound: true } | { rota: true }> => {
     const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
+    if (khatma?.kind === "rota") return { rota: true };
     if (!khatma || !khatma.currentRoundId) return { notFound: true };
     const round = await ctx.db.get(khatma.currentRoundId);
     if (!round) return { notFound: true };
@@ -427,6 +431,24 @@ export const setNotifications = sessionMutation({
 // ---------------------------------------------------------------------------
 // Mine
 
+/** How many ajza' are done in a rota khatma's open day; 0 with no open day. */
+async function openRotaDayDone(
+  ctx: QueryCtx,
+  khatmaId: Id<"khatmas">,
+): Promise<number> {
+  const day = await ctx.db
+    .query("rotaDays")
+    .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatmaId))
+    .order("desc")
+    .first();
+  if (!day || day.closedAt !== null) return 0;
+  const reads = await ctx.db
+    .query("rotaReads")
+    .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
+    .collect();
+  return reads.filter((r) => r.doneAt !== null).length;
+}
+
 export const mine = sessionQuery({
   args: {},
   handler: async (ctx) => {
@@ -446,12 +468,15 @@ export const mine = sessionQuery({
       active.map(async (m) => {
         const khatma = await ctx.db.get(m.khatmaId);
         if (!khatma) return null;
+        const rota = khatma.kind === "rota";
         const assignments = khatma.currentRoundId
           ? await roundAssignments(ctx, khatma.currentRoundId)
           : [];
-        const done = [...juzStates(assignments).values()].filter(
-          (s) => s.state === "done",
-        ).length;
+        const done = rota
+          ? await openRotaDayDone(ctx, khatma._id)
+          : [...juzStates(assignments).values()].filter(
+              (s) => s.state === "done",
+            ).length;
         const note = await ctx.db
           .query("notes")
           .withIndex("by_person_khatma", (q) =>
@@ -462,12 +487,15 @@ export const mine = sessionQuery({
           )
           .first();
         return {
+          kind: rota ? ("rota" as const) : ("pool" as const),
           inviteCode: khatma.inviteCode,
           name: khatma.name,
           createdAt: khatma.createdAt,
           schedule: khatma.schedule,
           done,
-          holding: heldAssignment(assignments, personId)?.juz ?? null,
+          holding: rota
+            ? null
+            : (heldAssignment(assignments, personId)?.juz ?? null),
           hasNote: note !== null,
         };
       }),

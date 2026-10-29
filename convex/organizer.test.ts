@@ -312,7 +312,7 @@ test("resetInvite: old code notFound, old share tokens give no inviterName, new 
     });
   expect(await view(code)).toEqual({ notFound: true });
   const fresh = await view(inviteCode);
-  if ("notFound" in fresh) throw new Error("notFound");
+  if ("notFound" in fresh || "rota" in fresh) throw new Error("notFound");
   expect(fresh.khatmaId).toBe(khatma._id);
   expect(fresh.me.isMember).toBe(false);
   expect(
@@ -333,7 +333,7 @@ test("resetInvite: old code notFound, old share tokens give no inviterName, new 
 
   // the khatma itself is untouched, and members still see it as theirs
   const mine = await view(inviteCode, undefined, ali);
-  if ("notFound" in mine) throw new Error("notFound");
+  if ("notFound" in mine || "rota" in mine) throw new Error("notFound");
   expect(mine.me.isMember).toBe(true);
   expect((await khatmaById(t, khatma._id)).creatorPersonId).toBe(org.personId);
 });
@@ -401,7 +401,7 @@ test("removeMember frees their juz without an organizer alert and blocks rejoini
     sessionToken: sara.token,
     inviteCode: code,
   });
-  if ("notFound" in states) throw new Error("notFound");
+  if ("notFound" in states || "rota" in states) throw new Error("notFound");
   expect(states.tiles[6]?.state).toBe("open");
   expect(states.tiles[7]?.state).toBe("reading");
   expect(await take(t, code, ali, 7)).toEqual({ ok: false, reason: "blocked" });
@@ -564,6 +564,33 @@ test("autoHandover after 30 days picks the earliest active joiner; no candidate 
     org2.personId,
   );
   expect(await notesOf(t2, org2, "organizerMoved")).toHaveLength(0);
+});
+
+test("autoHandoverSweep leaves a rota khatma with its away organizer", async () => {
+  const { t, org } = await setup();
+  const member = await signedIn(t, "عضو", NOW);
+  const rotaId = await t.run(async (ctx) => {
+    const id = await ctx.db.insert("khatmas", {
+      name: "ختمة التناوب",
+      schedule: "none",
+      grace: { value: 7, unit: "days" },
+      creatorPersonId: org.personId,
+      inviteCode: "rotaorg",
+      completedRounds: 0,
+      createdAt: NOW,
+      kind: "rota",
+    });
+    return id;
+  });
+  await join(t, rotaId, member);
+  await t.run((ctx) =>
+    ctx.db.patch(org.personId, { lastSeenAt: NOW - 60 * DAY }),
+  );
+  await t.mutation(internal.organizer.autoHandoverSweep, {});
+  vi.advanceTimersByTime(10);
+  await t.finishInProgressScheduledFunctions();
+  expect((await khatmaOf(t, "rotaorg")).creatorPersonId).toBe(org.personId);
+  expect(await notesOf(t, member, "nowOrganizer")).toHaveLength(0);
 });
 
 test("touch updates lastSeenAt and timeZone", async () => {

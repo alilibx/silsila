@@ -14,6 +14,8 @@ export const NOTE_KINDS = [
   "completed",
   "nowOrganizer",
   "organizerMoved",
+  "rotaUnread",
+  "rotaSummary",
 ] as const;
 
 export type NoteKind = (typeof NOTE_KINDS)[number];
@@ -94,5 +96,11 @@ export function noteText(n: NoteTextInput, now: number = Date.now()): string {
       return "أصبحتَ منظّم هذه الختمة. جزاك الله خيراً.";
     case "organizerMoved":
       return "مرّ وقت منذ زيارتك، فنقلنا تنظيم الختمة إلى أحد أعضائها ليستمر الخير. ما زلت عضواً فيها.";
+    case "rotaUnread":
+      return n.juz.length === 1
+        ? `لم تُسجَّل بعد قراءة الجزء ${juzList(n.juz)} في ختمة اليوم.`
+        : `لم تُسجَّل بعد قراءة الأجزاء ${juzList(n.juz)} في ختمة اليوم.`;
+    case "rotaSummary":
+      return `ختمة اليوم: ${toArabicDigits(n.count ?? 0)} من ٣٠ جزءاً تمّت.`;
   }
 }

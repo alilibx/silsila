@@ -12,6 +12,7 @@ const ORDER: SettingGroup[] = [
   "help",
   "limits",
   "sessions",
+  "rota",
 ];
 
 /** Every setting, grouped (spec 9.1). */

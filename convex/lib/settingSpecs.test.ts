@@ -98,3 +98,30 @@ test("summary hour and milestone spacing", () => {
   expect(validateSetting("milestonePushSpacingMs", 5_000)).toBe("out_of_range");
   expect(validateSetting("summaryHour", 8)).toBeNull();
 });
+
+test("every rota setting has a spec in the rota group", () => {
+  const keys = (Object.keys(SETTING_DEFAULTS) as SettingKey[]).filter((k) =>
+    /^rota[A-Z]/.test(k),
+  );
+  expect(keys).toHaveLength(11);
+  for (const key of keys) expect(SETTING_SPECS[key].group).toBe("rota");
+});
+
+test("a time is minutes after midnight in steps of 15", () => {
+  expect(validateSetting("rotaDayAt", 480)).toBeNull();
+  expect(validateSetting("rotaDayAt", 0)).toBeNull();
+  expect(validateSetting("rotaDayAt", 1425)).toBeNull();
+  expect(validateSetting("rotaDayAt", 485)).toBe("out_of_range");
+  expect(validateSetting("rotaDayAt", 1440)).toBe("out_of_range");
+  expect(validateSetting("rotaDayAt", -15)).toBe("out_of_range");
+  expect(validateSetting("rotaDayAt", 7.5)).toBe("wrong_type");
+  expect(validateSetting("rotaDayAt", "480")).toBe("wrong_type");
+});
+
+test("rota limits have their own ranges", () => {
+  expect(validateSetting("rotaMaxActivePerOrganizer", 0)).toBe("out_of_range");
+  expect(validateSetting("rotaMaxActivePerOrganizer", 2)).toBeNull();
+  expect(validateSetting("rotaMaxSlotsPerPerson", 31)).toBe("out_of_range");
+  expect(validateSetting("rotaSilenceStopDays", 1)).toBe("out_of_range");
+  expect(validateSetting("rotaSilenceNoticeDays", 3)).toBeNull();
+});

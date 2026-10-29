@@ -191,7 +191,7 @@ test("a held juz' shows its reader their pace in days, and others nothing", asyn
     inviteCode: "STATSCODE012",
     sessionToken: token,
   });
-  if ("notFound" in view) throw new Error("not found");
+  if ("notFound" in view || "rota" in view) throw new Error("not found");
   expect(view.me.hold).toBeNull();
   // taking a juz' puts the pace on the held card
   expect(
@@ -205,7 +205,7 @@ test("a held juz' shows its reader their pace in days, and others nothing", asyn
     inviteCode: "STATSCODE012",
     sessionToken: token,
   });
-  if ("notFound" in held) throw new Error("not found");
+  if ("notFound" in held || "rota" in held) throw new Error("not found");
   expect(held.me.hold?.paceDays).toBe(2);
 });
 

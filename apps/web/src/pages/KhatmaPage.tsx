@@ -38,6 +38,8 @@ import { NotFoundPage } from "./NotFoundPage";
 const chip =
   "rounded-full border border-line bg-paper-2 px-3 py-1 text-base text-ink-soft";
 
+const NOT_FOUND = { notFound: true } as const;
+
 function khatmaTitle(view: KhatmaView): string {
   return view.name ?? t.khatma.untitled(formatDate(view.createdAt));
 }
@@ -60,11 +62,13 @@ export function KhatmaPage() {
       { replace: true },
     );
   const sessionToken = useSessionToken();
-  const view = useQuery(api.khatmas.view, {
+  const found = useQuery(api.khatmas.view, {
     sessionToken,
     inviteCode,
     ...(from ? { from } : {}),
   });
+  // A rotating khatma has its own page (a later task); until then it reads as not found.
+  const view = found !== undefined && "rota" in found ? NOT_FOUND : found;
   // Tab ids live here so a tab change the page makes can move focus to the new tab.
   const tabIds = useId();
   const [focusTab, setFocusTab] = useState<KhatmaTab | null>(null);

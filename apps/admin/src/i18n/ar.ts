@@ -53,6 +53,17 @@ const labels: Record<SettingKey, string> = {
   helpRetentionMs: "الاحتفاظ بالمحادثة بعد الإغلاق",
   summaryHour: "ساعة الملخص الصباحي (بتوقيت دبي)",
   milestonePushSpacingMs: "أقل مدة بين تنبيهي إنجاز",
+  rotaDayAt: "وقت رسالة ختمة اليوم",
+  rotaReminderAt: "وقت تذكير القراءة",
+  rotaReminderOn: "تذكير القراءة مفعّل",
+  rotaUnreadAt: "وقت قائمة الأجزاء غير المقروءة",
+  rotaUnreadOn: "قائمة الأجزاء غير المقروءة مفعّلة",
+  rotaSummaryAt: "وقت ملخص اليوم",
+  rotaSummaryOn: "ملخص اليوم مفعّل",
+  rotaMaxActivePerOrganizer: "أقصى عدد ختمات بالتناوب نشطة لكل منظّم",
+  rotaMaxSlotsPerPerson: "أقصى عدد أجزاء لكل قارئ في الختمة بالتناوب",
+  rotaSilenceNoticeDays: "أيام الصمت قبل تنبيه المنظّم",
+  rotaSilenceStopDays: "أيام الصمت قبل إيقاف الختمة",
 };
 
 const groups: Record<SettingGroup, string> = {
@@ -62,6 +73,7 @@ const groups: Record<SettingGroup, string> = {
   limits: "الحدود",
   sessions: "الجلسات والاحتفاظ",
   help: "طلبات المساعدة",
+  rota: "الختمة بالتناوب",
 };
 
 const actions: Record<AuditAction, string> = {
@@ -77,6 +89,7 @@ const actions: Record<AuditAction, string> = {
   "phone.unblock": "ألغى حظر رقم",
   "khatma.resetInvite": "أعاد ضبط رابط دعوة",
   "khatma.handOver": "سلّم دور المنظّم",
+  "person.rotaAllowed": "غيّر السماح بالختمة بالتناوب",
 };
 
 /** Every admin panel string lives here. Components never contain Arabic literals. */

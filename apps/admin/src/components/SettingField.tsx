@@ -13,7 +13,7 @@ import { useMutation } from "convex/react";
 import { useId, useState } from "react";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
-import { formatSetting } from "../lib/formatSetting";
+import { formatSetting, formatTime } from "../lib/formatSetting";
 
 export type SettingRow = {
   key: SettingKey;
@@ -30,6 +30,8 @@ const UNIT_MS = {
   days: 86_400_000,
 } as const;
 type Unit = keyof typeof UNIT_MS;
+/** Every time of day the `time` spec accepts: minutes after midnight, in 15-minute steps. */
+const TIME_STEPS = Array.from({ length: 96 }, (_, i) => i * 15);
 const UNITS: Unit[] = ["seconds", "minutes", "hours", "days"];
 
 /** The largest unit that divides `ms` whole (seconds at least). */
@@ -198,6 +200,7 @@ function Editor({
       case "int":
       case "number":
       case "hour":
+      case "time":
         return onSave(parseNumber(text));
       case "grace":
         return onSave(grace);
@@ -239,6 +242,19 @@ function Editor({
               onChange={(e) => setText(e.target.value)}
               className="w-full rounded-ui border-2 border-line bg-white p-3"
             />
+          ) : spec.kind === "time" ? (
+            <select
+              id={inputId}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full rounded-ui border-2 border-line bg-white p-3 text-lg"
+            >
+              {TIME_STEPS.map((minutes) => (
+                <option key={minutes} value={String(minutes)}>
+                  {formatTime(minutes)}
+                </option>
+              ))}
+            </select>
           ) : (
             <input
               id={inputId}
