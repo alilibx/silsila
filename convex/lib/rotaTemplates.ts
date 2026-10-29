@@ -109,6 +109,26 @@ export function cycleTemplate(khatma: Khatma): TemplateMessage {
 }
 
 /**
+ * The free-form versions of the templates, for messages inside the 24-hour
+ * window. Each repeats its template's body word for word, so a member reads
+ * the same message in or out of the window.
+ */
+export function reminderText(juz: number[]): string {
+  return `تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة ${juzPhraseGenitive(juz)}.`;
+}
+
+export function assignedText(juz: number[], number: number): string {
+  return `تحديث على قراءتك: أُسندت إليك اليوم قراءة ${juzPhraseGenitive(juz)} في الختمة ${toArabicDigits(number)}.`;
+}
+
+export function coveredText(juz: number[]): string {
+  return `تحديث على قراءتك: تمّت اليوم قراءة ${juzPhraseGenitive(juz)} عنك، فلم يعد عليك شيء منها.`;
+}
+
+export const cycleText =
+  "تحديث على قراءتك: أكملت ثلاثين جزءاً في ثلاثين ختمة، أي القرآن كاملاً.";
+
+/**
  * The reply to the member's join message. `next` holds the weekday and the
  * time of their next juz' message, already formatted, or null with no day
  * ahead to promise.

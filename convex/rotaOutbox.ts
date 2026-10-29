@@ -1,0 +1,324 @@
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
+import { encodePayload } from "./lib/rotaPayload";
+import {
+  ROTA_BUTTONS,
+  assignedText,
+  assignedTemplate,
+  completeTemplate,
+  coveredTemplate,
+  coveredText,
+  cycleTemplate,
+  cycleText,
+  duaText,
+  juzTemplate,
+  juzText,
+  reminderTemplate,
+  reminderText,
+} from "./lib/rotaTemplates";
+import { quietHours } from "./lib/settings";
+import { nextAwake } from "./lib/wakingTime";
+import type { TemplateMessage } from "./lib/whatsappTemplates";
+import {
+  sendWhatsAppButtons,
+  sendWhatsAppTemplate,
+  sendWhatsAppText,
+  siteUrl,
+} from "./whatsapp";
+
+// Convex provides `process.env`; the project doesn't pull in @types/node.
+declare const process: { env: Record<string, string | undefined> };
+
+type Kind = Doc<"rotaOutbox">["kind"];
+type Participant = Doc<"rotaParticipants">;
+
+/** A free-form message, with reply buttons where the template has quick replies. */
+type FreeForm = { text: string; buttons?: { id: string; title: string }[] };
+
+const WINDOW_MS = 24 * 3_600_000;
+const STAGING_SITE = "https://stg.wirdak.app";
+
+/** Whether a participant may be sent messages Wirdak starts. */
+function reachable(p: Participant | null): p is Participant {
+  return (
+    p !== null &&
+    p.joinedAt != null &&
+    p.stoppedAt == null &&
+    p.silencedAt == null
+  );
+}
+
+/**
+ * Queues one message to one participant and schedules its delivery for when
+ * quiet hours end. Nothing is queued for someone who hasn't joined, has
+ * stopped or was silenced, or for a message already queued for the same
+ * day, kind and participant (rows without a day are never duplicates).
+ */
+export async function enqueue(
+  ctx: MutationCtx,
+  row: {
+    khatmaId: Id<"khatmas">;
+    participantId: Id<"rotaParticipants">;
+    dayId: Id<"rotaDays"> | null;
+    kind: Kind;
+    juz: number[];
+    number: number | null;
+  },
+): Promise<Id<"rotaOutbox"> | null> {
+  const participant = await ctx.db.get(row.participantId);
+  if (!reachable(participant)) return null;
+  const khatma = await ctx.db.get(row.khatmaId);
+  if (!khatma?.rota) return null;
+  if (row.dayId !== null) {
+    const dayId = row.dayId;
+    const existing = await ctx.db
+      .query("rotaOutbox")
+      .withIndex("by_day_kind_participant", (q) =>
+        q
+          .eq("dayId", dayId)
+          .eq("kind", row.kind)
+          .eq("participantId", row.participantId),
+      )
+      .first();
+    if (existing) return null;
+  }
+  const now = Date.now();
+  const outboxId = await ctx.db.insert("rotaOutbox", {
+    ...row,
+    createdAt: now,
+    sentAt: null,
+    skippedAt: null,
+  });
+  const at = nextAwake(now, khatma.rota.timeZone, await quietHours(ctx));
+  await ctx.scheduler.runAt(at, internal.rotaOutbox.deliver, { outboxId });
+  return outboxId;
+}
+
+/** The payloads of a day's «أتممت» and «ليس بعد» buttons. */
+function donePayloads(row: Doc<"rotaOutbox">, staging: boolean) {
+  const ids = { dayId: row.dayId as string, participantId: row.participantId };
+  return {
+    done: encodePayload({ action: "done", ...ids }, staging),
+    notYet: encodePayload({ action: "notYet", ...ids }, staging),
+  };
+}
+
+/** What a row says, as its template or, inside the 24-hour window, as free-form. */
+function compose(
+  row: Doc<"rotaOutbox">,
+  khatma: { name: string | null; createdAt: number },
+  windowOpen: boolean,
+  staging: boolean,
+): TemplateMessage | FreeForm | null {
+  const number = row.number ?? 0;
+  switch (row.kind) {
+    case "juz":
+    case "reminder":
+    case "assigned": {
+      if (row.dayId === null || row.number === null) return null;
+      const payloads = donePayloads(row, staging);
+      if (!windowOpen) {
+        if (row.kind === "juz") {
+          return juzTemplate(khatma, row.juz, number, payloads);
+        }
+        if (row.kind === "reminder") {
+          return reminderTemplate(khatma, row.juz, payloads);
+        }
+        return assignedTemplate(khatma, row.juz, number, payloads);
+      }
+      const text =
+        row.kind === "juz"
+          ? juzText(number, row.juz)
+          : row.kind === "reminder"
+            ? reminderText(row.juz)
+            : assignedText(row.juz, number);
+      return {
+        text,
+        buttons: [
+          { id: payloads.done, title: ROTA_BUTTONS.done },
+          { id: payloads.notYet, title: ROTA_BUTTONS.notYet },
+        ],
+      };
+    }
+    case "covered":
+      return windowOpen
+        ? { text: coveredText(row.juz) }
+        : coveredTemplate(khatma, row.juz);
+    case "complete": {
+      if (row.dayId === null || row.number === null) return null;
+      if (windowOpen) return { text: duaText() };
+      const dua = encodePayload(
+        {
+          action: "dua",
+          dayId: row.dayId,
+          participantId: row.participantId,
+        },
+        staging,
+      );
+      return completeTemplate(khatma, number, dua);
+    }
+    case "cycle":
+      return windowOpen ? { text: cycleText } : cycleTemplate(khatma);
+  }
+}
+
+/**
+ * What `deliver` sends for a row: null when it no longer calls for a message
+ * (already sent or skipped, the participant isn't reachable, the khatma is
+ * archived, or a day's reading is closed or done), `retryAt` when it's quiet
+ * hours in the khatma's time zone, or the phone and the message to send. Inside
+ * the phone's 24-hour window the message is free-form, outside it a template.
+ */
+export const plan = internalQuery({
+  args: { outboxId: v.id("rotaOutbox") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    | { phone: string; message: TemplateMessage | FreeForm }
+    | { retryAt: number }
+    | null
+  > => {
+    const row = await ctx.db.get(args.outboxId);
+    if (!row || row.sentAt !== null || row.skippedAt !== null) return null;
+    const participant = await ctx.db.get(row.participantId);
+    if (!reachable(participant)) return null;
+    const khatma = await ctx.db.get(row.khatmaId);
+    const rota = khatma?.rota;
+    if (!khatma || !rota || rota.archivedAt !== null) return null;
+    if (
+      row.dayId !== null &&
+      (row.kind === "juz" || row.kind === "reminder" || row.kind === "assigned")
+    ) {
+      const day = await ctx.db.get(row.dayId);
+      if (!day || day.closedAt !== null) return null;
+      const dayId = day._id;
+      const reads = await Promise.all(
+        row.juz.map((juz) =>
+          ctx.db
+            .query("rotaReads")
+            .withIndex("by_day_juz", (q) => q.eq("dayId", dayId).eq("juz", juz))
+            .first(),
+        ),
+      );
+      if (reads.every((r) => !r || r.doneAt !== null)) return null;
+    }
+    const now = Date.now();
+    const awake = nextAwake(now, rota.timeZone, await quietHours(ctx));
+    if (awake > now) return { retryAt: awake };
+    const contact = await ctx.db
+      .query("waContacts")
+      .withIndex("by_phone", (q) => q.eq("phone", participant.phone))
+      .unique();
+    const windowOpen =
+      contact !== null && contact.lastInboundAt >= now - WINDOW_MS;
+    const message = compose(
+      row,
+      { name: khatma.name, createdAt: khatma.createdAt },
+      windowOpen,
+      siteUrl() === STAGING_SITE,
+    );
+    return message === null ? null : { phone: participant.phone, message };
+  },
+});
+
+/** Marks a row sent; false when it already was sent or skipped, so the caller must not send. */
+export const markSent = internalMutation({
+  args: { outboxId: v.id("rotaOutbox") },
+  handler: async (ctx, args): Promise<boolean> => {
+    const row = await ctx.db.get(args.outboxId);
+    if (!row || row.sentAt !== null || row.skippedAt !== null) return false;
+    await ctx.db.patch(args.outboxId, { sentAt: Date.now() });
+    return true;
+  },
+});
+
+/** Marks a row skipped, unless it was already sent or skipped. */
+export const markSkipped = internalMutation({
+  args: { outboxId: v.id("rotaOutbox") },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.outboxId);
+    if (!row || row.sentAt !== null || row.skippedAt !== null) return;
+    await ctx.db.patch(args.outboxId, { skippedAt: Date.now() });
+  },
+});
+
+/**
+ * Sends one queued message, once. Marked sent before sending, so a retried
+ * action never sends twice; a failed send isn't retried. During quiet hours
+ * it runs again when they end.
+ */
+export const deliver = internalAction({
+  args: { outboxId: v.id("rotaOutbox") },
+  handler: async (ctx, args) => {
+    const plan = await ctx.runQuery(internal.rotaOutbox.plan, args);
+    if (!plan) {
+      await ctx.runMutation(internal.rotaOutbox.markSkipped, args);
+      return;
+    }
+    if ("retryAt" in plan) {
+      await ctx.scheduler.runAt(
+        plan.retryAt,
+        internal.rotaOutbox.deliver,
+        args,
+      );
+      return;
+    }
+    if (!(await ctx.runMutation(internal.rotaOutbox.markSent, args))) return;
+    const { phone, message } = plan;
+    if ("name" in message) {
+      await sendWhatsAppTemplate(phone, message);
+    } else if (message.buttons) {
+      await sendWhatsAppButtons(phone, message.text, message.buttons);
+    } else {
+      await sendWhatsAppText(phone, message.text);
+    }
+  },
+});
+
+/**
+ * Staging and dev only: sends each rota template to a phone with sample
+ * values, so they can be checked on a handset:
+ * `bun run convex run rotaOutbox:sendSample '{"phone":"+9715…"}'`.
+ * No opt-in or window checks.
+ */
+export const sendSample = internalAction({
+  args: { phone: v.string() },
+  handler: async (_ctx, args): Promise<boolean[]> => {
+    const deployment = process.env.WIRDAK_ENV;
+    if (deployment !== "dev" && deployment !== "staging") {
+      throw new Error("sendSample runs only when WIRDAK_ENV is dev or staging");
+    }
+    const staging = siteUrl() === STAGING_SITE;
+    const khatma = { name: "ختمة العائلة", createdAt: Date.now() };
+    const ids = { dayId: "sample", participantId: "sample" };
+    const payloads = {
+      done: encodePayload({ action: "done", ...ids }, staging),
+      notYet: encodePayload({ action: "notYet", ...ids }, staging),
+    };
+    const messages = [
+      juzTemplate(khatma, [5, 6], 3, payloads),
+      reminderTemplate(khatma, [5, 6], payloads),
+      assignedTemplate(khatma, [3, 5, 6], 7, payloads),
+      coveredTemplate(khatma, [26]),
+      completeTemplate(
+        khatma,
+        30,
+        encodePayload({ action: "dua", ...ids }, staging),
+      ),
+      cycleTemplate(khatma),
+    ];
+    const results: boolean[] = [];
+    for (const message of messages) {
+      results.push(await sendWhatsAppTemplate(args.phone, message));
+    }
+    return results;
+  },
+});
