@@ -4,13 +4,24 @@ import { t } from "../i18n/ar";
 import { posthogLog } from "../lib/posthogLogs";
 import { Button } from "./Button";
 
+/** Sends a caught render error to PostHog (exception and log) and the console. */
+export function reportRenderError(error: unknown, info: ErrorInfo): void {
+  const exception =
+    error instanceof Error ? error : new Error("Unknown React render error");
+  posthog.captureException(exception, {
+    component_stack: info.componentStack,
+  });
+  posthogLog.error("react render failed", { error_type: exception.name });
+  console.error(error, info.componentStack);
+}
+
 type Props = { children: ReactNode };
 type State = { failed: boolean };
 
 /**
- * Last line of defence: a render error (for example a Convex query failing because the backend
- * is mid-deploy) shows kind copy and a reload button instead of a blank page. It sits outside the
- * router, so it uses a plain link home.
+ * Last line of defence: a render error that no RetryBoundary inside the layout caught shows kind
+ * copy and a reload button instead of a blank page. It sits outside the router, so it uses a
+ * plain link home.
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { failed: false };
@@ -20,13 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    const exception =
-      error instanceof Error ? error : new Error("Unknown React render error");
-    posthog.captureException(exception, {
-      component_stack: info.componentStack,
-    });
-    posthogLog.error("react render failed", { error_type: exception.name });
-    console.error(error, info.componentStack);
+    reportRenderError(error, info);
   }
 
   render() {
