@@ -741,7 +741,7 @@ export const markNotDone = sessionMutation({
 const UPCOMING_DATES = 8;
 
 type SettingsView = {
-  name: string | null;
+  name: string;
   days: ReadingDays;
   firstDate: string;
   firstDatePassed: boolean;
@@ -784,7 +784,7 @@ export const settings = sessionQuery({
     );
     const quiet = await quietHours(ctx);
     return {
-      name: khatma.name,
+      name: khatma.name ?? "",
       days: rota.days,
       firstDate: rota.firstDate,
       firstDatePassed: await firstDatePassed(ctx, khatma, rota, today),
@@ -826,13 +826,18 @@ export const update = sessionMutation({
           | "invalid_dates"
           | "first_date_passed"
           | "invalid_times"
-          | "invalid_zone";
+          | "invalid_zone"
+          | "invalid_name";
       }
   > => {
     const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
     const rota = khatma.rota;
     if (!rota) throw new ConvexError({ code: "forbidden" });
 
+    // A rota khatma always has a name, as at creation.
+    const name =
+      args.name === undefined ? undefined : cleanKhatmaName(args.name);
+    if (name === null) return { error: "invalid_name" };
     if (args.days !== undefined && !isValidReadingDays(args.days)) {
       return { error: "invalid_days" };
     }
@@ -874,7 +879,7 @@ export const update = sessionMutation({
     }
 
     await ctx.db.patch(khatma._id, {
-      ...(args.name !== undefined ? { name: cleanKhatmaName(args.name) } : {}),
+      ...(name !== undefined ? { name } : {}),
       rota: {
         ...rota,
         days,

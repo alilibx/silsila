@@ -225,10 +225,25 @@ test("update saves the name, the end date, the time zone and the message times",
     messages,
   });
 
-  expect(await update(t, s, { name: null, endDate: null })).toEqual({
-    ok: true,
+  expect(await update(t, s, { endDate: null })).toEqual({ ok: true });
+  expect(await settings(t, s)).toMatchObject({
+    name: "ختمة الأسرة",
+    endDate: null,
   });
-  expect(await settings(t, s)).toMatchObject({ name: null, endDate: null });
+});
+
+test("update keeps the name required: null, blank and letter-less names change nothing", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  for (const name of [null, "", "   ", "!!! ..."]) {
+    expect(await update(t, s, { name, endDate: "2027-12-31" })).toEqual({
+      error: "invalid_name",
+    });
+  }
+  expect(await settings(t, s)).toMatchObject({
+    name: "ختمة",
+    endDate: null,
+  });
 });
 
 test("update refuses bad days, dates, times and zones", async () => {
