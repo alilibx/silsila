@@ -549,6 +549,31 @@ export const ar = {
     tabs: { today: "اليوم", people: "المشاركون" },
     whatsappOnly: "هذه الختمة تعمل على واتساب. يصلك جزؤك كل يوم مع زرّين.",
     imOrganizer: "أنت المنظّم؟ سجّل الدخول",
+    joinOnWhatsApp: "انضمّ عبر واتساب",
+    // Joining
+    shareJoin: "أرسل رابط الانضمام إلى مجموعتكم",
+    shareMessage: (title: string, link: string) =>
+      `السلام عليكم، بدأنا ${title}، ختمة يومية بالتناوب. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${link}`,
+    joined: "انضمّ",
+    notJoined: "لم ينضمّ · أعد الإرسال",
+    notJoinedShort: "لم ينضمّ",
+    notJoinedMe: "لم تنضمّ بعد · انضمّ الآن",
+    stoppedMessages: "أوقف الرسائل",
+    silencedMessages: "أوقفنا الرسائل",
+    requestsHeading: "طلبات الانضمام",
+    requestLine: (name: string | null, phone: string) =>
+      name ? `${name} · ${phone}` : phone,
+    requestJuz: "جزؤه",
+    acceptRequest: "أضفه واختر جزأه",
+    declineRequest: "لا",
+    joinRequestErrors: {
+      not_found: "لم نجد هذا الطلب. أعد تحميل الصفحة.",
+      juz_taken: "هذا الجزء له قارئ الآن. اختر جزءاً آخر.",
+      already_added: "هذا الرقم مضاف في الختمة.",
+      no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
+    } as Record<string, string>,
+    answerNone: "لم يردّ",
+    answerNotYet: "ردّ: ليس بعد",
     cardLine: (done: string, total: string) =>
       `ختمة بالتناوب · ${done} من ${total} اليوم`,
     // Today

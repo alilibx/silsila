@@ -516,3 +516,22 @@ test("a juz' moved on from a reader who isn't the holder covers that reader too"
     { participantId: b, juz: [8] },
   ]);
 });
+
+test("an unread tile says whether the reader answered «ليس بعد»; a done one has no answer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  await add(t, s, 4);
+  await add(t, s, 5);
+  await startDay(t, s);
+  const four = await tile(t, s, 4);
+  const five = await tile(t, s, 5);
+  expect(four.answer).toBe("none");
+  await t.run((ctx) => ctx.db.patch(four.readId, { notYetAt: NOW }));
+  expect((await tile(t, s, 4)).answer).toBe("notYet");
+
+  await act(t, s, "markDone", { readId: five.readId });
+  expect((await tile(t, s, 5)).answer).toBeNull();
+  // Done outranks an earlier «ليس بعد».
+  await act(t, s, "markDone", { readId: four.readId });
+  expect((await tile(t, s, 4)).answer).toBeNull();
+});

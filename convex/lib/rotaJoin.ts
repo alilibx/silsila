@@ -1,5 +1,7 @@
+import type { Doc } from "../_generated/dataModel";
 import { CODE_ALPHABET, randomCode } from "./crypto";
 import { normalizeDigits } from "./digits";
+import { khatmaTitle } from "./whatsappTemplates";
 
 /** A rota khatma's join code is this many symbols of `CODE_ALPHABET`. */
 export const JOIN_CODE_LENGTH = 6;
@@ -55,4 +57,16 @@ export function joinLink(
 ): string {
   const digits = publicNumber.replace(/\D/g, "");
   return `https://wa.me/${digits}?text=${encodeURIComponent(joinText(title, code))}`;
+}
+
+/**
+ * A rota khatma's join link, or null while it has no join code or the public
+ * business number is not set (nothing to link to).
+ */
+export function khatmaJoinLink(
+  khatma: Pick<Doc<"khatmas">, "name" | "createdAt" | "joinCode">,
+  publicNumber: string | undefined,
+): string | null {
+  if (!publicNumber || khatma.joinCode === undefined) return null;
+  return joinLink(publicNumber, khatmaTitle(khatma), khatma.joinCode);
 }

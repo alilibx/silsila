@@ -17,6 +17,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 type T = TestConvexForDataModel<DataModel>;
@@ -431,4 +432,323 @@ test("there is no next day to place people on once the end date has passed", asy
     date: null,
     isFirst: false,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Joining
+
+const PUBLIC_NUMBER = "971500000000";
+
+async function khatmaOf(t: T, s: Setup) {
+  return t.run(async (ctx) => {
+    const k = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", s.inviteCode))
+      .unique();
+    return k!;
+  });
+}
+
+async function request(
+  t: T,
+  s: Setup,
+  over: Partial<{
+    phone: string;
+    profileName: string | null;
+    createdAt: number;
+  }> = {},
+) {
+  const khatma = await khatmaOf(t, s);
+  return t.run((ctx) =>
+    ctx.db.insert("rotaJoinRequests", {
+      khatmaId: khatma._id,
+      phone: "+971501112233",
+      profileName: "خالد",
+      createdAt: NOW - 1000,
+      resolvedAt: null,
+      outcome: null,
+      ...over,
+    }),
+  );
+}
+
+function accept(
+  t: T,
+  s: Setup,
+  requestId: Id<"rotaJoinRequests">,
+  juz: number,
+  token = s.token,
+) {
+  return t.mutation(api.rota.acceptJoinRequest, {
+    sessionToken: token,
+    inviteCode: s.inviteCode,
+    requestId,
+    juz,
+  });
+}
+
+function participantRow(t: T, id: Id<"rotaParticipants">) {
+  return t.run((ctx) => ctx.db.get(id));
+}
+
+test("people has the join link built from the code and the public number", async () => {
+  vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", PUBLIC_NUMBER);
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const khatma = await khatmaOf(t, s);
+  const view = await people(t, s);
+  expect(view?.title).toBe("ختمة");
+  expect(view?.joinLink).toBe(
+    `https://wa.me/${PUBLIC_NUMBER}?text=${encodeURIComponent(
+      `انضمام إلى ختمة · ${khatma.joinCode}`,
+    )}`,
+  );
+});
+
+test("without the public number or a join code there is no link, and ensureJoinLink draws the code", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  expect((await people(t, s))?.joinLink).toBeNull();
+
+  vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", PUBLIC_NUMBER);
+  const khatma = await khatmaOf(t, s);
+  await t.run((ctx) => ctx.db.patch(khatma._id, { joinCode: undefined }));
+  expect((await people(t, s))?.joinLink).toBeNull();
+
+  expect(
+    await t.mutation(api.rota.ensureJoinLink, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+    }),
+  ).toEqual({ ok: true });
+  const code = (await khatmaOf(t, s)).joinCode;
+  expect(code).toMatch(/^[A-Z0-9]{6}$/);
+  expect((await people(t, s))?.joinLink).toContain(
+    encodeURIComponent(`· ${code}`),
+  );
+  // Safe to repeat, and keeps the code.
+  await t.mutation(api.rota.ensureJoinLink, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+  });
+  expect((await khatmaOf(t, s)).joinCode).toBe(code);
+
+  const other = await person(t);
+  await expect(
+    t.mutation(api.rota.ensureJoinLink, {
+      sessionToken: other.token,
+      inviteCode: s.inviteCode,
+    }),
+  ).rejects.toThrow();
+});
+
+test("people shows who joined, stopped or was silenced, with the phone the organizer typed", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const joined = participantId(await add(t, s, { phone: "+971505550001" }));
+  const stopped = participantId(await add(t, s, { phone: "+971505550002" }));
+  const silenced = participantId(await add(t, s, { phone: "+971505550003" }));
+  await add(t, s, { phone: "+971505550004" });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(joined, { joinedAt: NOW });
+    await ctx.db.patch(stopped, {
+      joinedAt: NOW,
+      stoppedAt: NOW,
+    });
+    await ctx.db.patch(silenced, {
+      joinedAt: NOW,
+      silencedAt: NOW,
+    });
+  });
+  const view = await people(t, s);
+  const state = (p: {
+    joined: boolean;
+    stopped: boolean;
+    silenced: boolean;
+  }) => [p.joined, p.stopped, p.silenced];
+  expect(view?.participants.map((p) => state(p))).toEqual([
+    [false, false, false], // the organizer
+    [true, false, false],
+    [true, true, false],
+    [true, false, true],
+    [false, false, false],
+  ]);
+  expect(view?.participants[1]?.phone).toBe("+971505550001");
+  expect(view?.rows[2]?.participant).toMatchObject({
+    phone: "+971505550002",
+    joined: true,
+    stopped: true,
+    silenced: false,
+  });
+});
+
+test("people lists the open join requests, oldest first, with the number masked", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const second = await request(t, s, {
+    phone: "+971502223344",
+    profileName: null,
+    createdAt: NOW - 500,
+  });
+  const first = await request(t, s);
+  const done = await request(t, s, { phone: "+971503334455" });
+  await t.run((ctx) =>
+    ctx.db.patch(done, { resolvedAt: NOW, outcome: "declined" }),
+  );
+  const view = await people(t, s);
+  expect(view?.requests).toEqual([
+    {
+      id: first,
+      name: "خالد",
+      phoneMasked: "+971 50 ••• 2233",
+      createdAt: NOW - 1000,
+    },
+    {
+      id: second,
+      name: null,
+      phoneMasked: "+971 50 ••• 3344",
+      createdAt: NOW - 500,
+    },
+  ]);
+  expect(JSON.stringify(view?.requests)).not.toContain("1112233");
+});
+
+test("accepting a request places the person on that juz' as joined and closes the request", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  const res = await accept(t, s, id, 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+
+  const row = await participantRow(t, res.participantId);
+  expect(row).toMatchObject({
+    name: "خالد",
+    phone: "+971501112233",
+    personId: null,
+    removedAt: null,
+    joinedAt: expect.any(Number),
+  });
+  const slot = await t.run((ctx) =>
+    ctx.db
+      .query("rotaSlots")
+      .withIndex("by_participant", (q) =>
+        q.eq("participantId", res.participantId),
+      )
+      .unique(),
+  );
+  expect(slot?.slot).toBe(slotFor(7, 1));
+  expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
+    resolvedAt: expect.any(Number),
+    outcome: "accepted",
+  });
+  const view = await people(t, s);
+  expect(view?.requests).toEqual([]);
+  expect(view?.rows[6]?.participant).toMatchObject({
+    name: "خالد",
+    joined: true,
+  });
+});
+
+test("an accepted person with no profile name is named by the masked number, and is linked to their Wirdak account", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const member = await t.run((ctx) =>
+    ctx.db.insert("people", {
+      phone: "+971502223344",
+      displayName: "ضيف",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: NOW,
+    }),
+  );
+  const id = await request(t, s, { phone: "+971502223344", profileName: null });
+  const res = await accept(t, s, id, 3);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  expect(await participantRow(t, res.participantId)).toMatchObject({
+    name: "+971 50 ••• 3344",
+    personId: member,
+  });
+});
+
+test("accepting refuses a held juz', keeping the request open", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  expect(await accept(t, s, id, 1)).toEqual({ error: "juz_taken" });
+  expect((await people(t, s))?.requests).toHaveLength(1);
+  await expect(accept(t, s, id, 31)).rejects.toThrow();
+});
+
+test("accepting a request that is gone, resolved or another khatma's is not_found", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const other = await setup(t);
+  const resolved = await request(t, s);
+  await t.run((ctx) =>
+    ctx.db.patch(resolved, { resolvedAt: NOW, outcome: "declined" }),
+  );
+  const foreign = await request(t, other);
+  expect(await accept(t, s, resolved, 5)).toEqual({ error: "not_found" });
+  expect(await accept(t, s, foreign, 5)).toEqual({ error: "not_found" });
+  expect(
+    await t.mutation(api.rota.declineJoinRequest, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+      requestId: foreign,
+    }),
+  ).toEqual({ error: "not_found" });
+  expect((await people(t, other))?.requests).toHaveLength(1);
+});
+
+test("accepting a number that became a participant meanwhile closes the request and counts it as joined", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const added = participantId(await add(t, s, { phone: "+971501112233" }));
+  const id = await request(t, s);
+  expect(await accept(t, s, id, 9)).toEqual({ error: "already_added" });
+  expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
+    resolvedAt: expect.any(Number),
+    outcome: "accepted",
+  });
+  expect(await participantRow(t, added)).toMatchObject({
+    joinedAt: expect.any(Number),
+  });
+  const view = await people(t, s);
+  expect(view?.participants).toHaveLength(2);
+  expect(view?.requests).toEqual([]);
+});
+
+test("declining closes the request without adding anyone", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  const decline = () =>
+    t.mutation(api.rota.declineJoinRequest, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+      requestId: id,
+    });
+  expect(await decline()).toEqual({ ok: true });
+  expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
+    resolvedAt: expect.any(Number),
+    outcome: "declined",
+  });
+  expect((await people(t, s))?.participants).toHaveLength(1);
+  expect(await decline()).toEqual({ error: "not_found" });
+});
+
+test("only the organizer answers a join request", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  const stranger = await person(t);
+  await expect(accept(t, s, id, 5, stranger.token)).rejects.toThrow();
+  await expect(
+    t.mutation(api.rota.declineJoinRequest, {
+      sessionToken: stranger.token,
+      inviteCode: s.inviteCode,
+      requestId: id,
+    }),
+  ).rejects.toThrow();
+  expect((await people(t, s))?.requests).toHaveLength(1);
 });

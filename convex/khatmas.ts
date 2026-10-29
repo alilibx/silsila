@@ -14,12 +14,14 @@ import { JUZ, JUZ_COUNT } from "./lib/juz";
 import { paceDays, personPace } from "./lib/pace";
 import { khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
+import { khatmaJoinLink } from "./lib/rotaJoin";
 import { lastRotaDay } from "./lib/rotaPlace";
 import { scheduleValidator, type Schedule } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
 import { resolveSession, sessionMutation, sessionQuery } from "./lib/session";
 import { cleanKhatmaName } from "./lib/text";
 import { suggestJuzInRound } from "./pool";
+import { env } from "./whatsapp";
 import {
   heldAssignment,
   insertRound,
@@ -267,10 +269,18 @@ export const view = sessionQuery({
     ctx,
     args,
   ): Promise<
-    KhatmaView | { notFound: true } | { rota: true; name: string | null }
+    | KhatmaView
+    | { notFound: true }
+    | { rota: true; name: string | null; joinLink: string | null }
   > => {
     const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
-    if (khatma?.kind === "rota") return { rota: true, name: khatma.name };
+    if (khatma?.kind === "rota") {
+      return {
+        rota: true,
+        name: khatma.name,
+        joinLink: khatmaJoinLink(khatma, env("WHATSAPP_PUBLIC_NUMBER")),
+      };
+    }
     if (!khatma || !khatma.currentRoundId) return { notFound: true };
     const round = await ctx.db.get(khatma.currentRoundId);
     if (!round) return { notFound: true };

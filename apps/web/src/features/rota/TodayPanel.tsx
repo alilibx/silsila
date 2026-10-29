@@ -168,6 +168,11 @@ function TileSheet({
           {t.rota.readerNow(tile.readerName)}
         </p>
       )}
+      {tile.answer !== null && (
+        <p className="mt-1 text-ink-soft">
+          {tile.answer === "notYet" ? t.rota.answerNotYet : t.rota.answerNone}
+        </p>
+      )}
       <div className="mt-4 grid gap-3">
         <Button disabled={busy} onClick={() => setPicking(true)}>
           {t.rota.assign}

@@ -11,7 +11,7 @@ import { organizerOf, requireOrganizer } from "./organizer";
 import { randomToken } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
 import { checkRateLimit } from "./lib/rateLimit";
-import { randomJoinCode } from "./lib/rotaJoin";
+import { khatmaJoinLink, randomJoinCode } from "./lib/rotaJoin";
 import {
   addDays,
   isReadingDate,
@@ -34,10 +34,17 @@ import {
 import type { SessionContext } from "./lib/session";
 import { sessionMutation, sessionQuery } from "./lib/session";
 import { getSetting, quietHours } from "./lib/settings";
-import { cleanDisplayName, cleanKhatmaName, normalizePhone } from "./lib/text";
+import {
+  cleanDisplayName,
+  cleanKhatmaName,
+  maskPhone,
+  normalizePhone,
+} from "./lib/text";
+import { khatmaTitle } from "./lib/whatsappTemplates";
 import { instantAt, localDate, safeTimeZone } from "./lib/wakingTime";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
 import { enqueue } from "./rotaOutbox";
+import { env } from "./whatsapp";
 
 const DAY_MS = 86_400_000;
 /** Attempts at drawing an unused invite code; a collision is ~1e-20 likely. */
@@ -327,26 +334,59 @@ function isJuz(juz: number): boolean {
   return Number.isInteger(juz) && juz >= 1 && juz <= ROTA_SIZE;
 }
 
+/** What the organizer sees of one participant; the phone is the one they typed. */
+type PersonState = {
+  phone: string;
+  /** They sent their own join message. */
+  joined: boolean;
+  /** They sent «إيقاف». */
+  stopped: boolean;
+  /** Wirdak stopped messaging them after days without a reply. */
+  silenced: boolean;
+};
+
 type PeopleView = {
+  /** The khatma's title, as the join message names it. */
+  title: string;
+  /** The wa.me link members tap to join; null until the khatma has a join code. */
+  joinLink: string | null;
+  /** Numbers that sent the join code and wait for the organizer's answer. */
+  requests: {
+    id: Id<"rotaJoinRequests">;
+    name: string | null;
+    phoneMasked: string;
+    createdAt: number;
+  }[];
   target: { number: number; date: string | null; isFirst: boolean };
   rows: {
     juz: number;
-    participant: {
-      id: Id<"rotaParticipants">;
-      name: string;
-      isMe: boolean;
-      slots: number;
-    } | null;
+    participant:
+      | ({
+          id: Id<"rotaParticipants">;
+          name: string;
+          isMe: boolean;
+          slots: number;
+        } & PersonState)
+      | null;
   }[];
-  participants: {
+  participants: ({
     id: Id<"rotaParticipants">;
     name: string;
     isMe: boolean;
     juz: number[];
-  }[];
+  } & PersonState)[];
   freeJuz: number[];
   maxSlots: number;
 };
+
+function personState(p: Doc<"rotaParticipants">): PersonState {
+  return {
+    phone: p.phone,
+    joined: p.joinedAt != null,
+    stopped: p.stoppedAt != null,
+    silenced: p.silencedAt != null,
+  };
+}
 
 /** Everyone in the khatma and who holds which juz' of the next day to start. Organizer only. */
 export const people = sessionQuery({
@@ -378,7 +418,23 @@ export const people = sessionQuery({
     }
     const byId = new Map(participants.map((p) => [p._id, p]));
     const isMe = (p: Doc<"rotaParticipants">) => p.personId === person._id;
+    const requests = (
+      await ctx.db
+        .query("rotaJoinRequests")
+        .withIndex("by_khatma_open", (q) =>
+          q.eq("khatmaId", khatma._id).eq("resolvedAt", null),
+        )
+        .collect()
+    ).sort((a, b) => a.createdAt - b.createdAt);
     return {
+      title: khatmaTitle(khatma),
+      joinLink: khatmaJoinLink(khatma, env("WHATSAPP_PUBLIC_NUMBER")),
+      requests: requests.map((r) => ({
+        id: r._id,
+        name: r.profileName,
+        phoneMasked: maskPhone(r.phone),
+        createdAt: r.createdAt,
+      })),
       target: {
         number: target.number,
         date: target.date,
@@ -396,6 +452,7 @@ export const people = sessionQuery({
                 name: holder.name,
                 isMe: isMe(holder),
                 slots: heldBy.get(holder._id)?.length ?? 0,
+                ...personState(holder),
               }
             : null,
         };
@@ -405,6 +462,7 @@ export const people = sessionQuery({
         name: p.name,
         isMe: isMe(p),
         juz: heldBy.get(p._id) ?? [],
+        ...personState(p),
       })),
       freeJuz: Array.from({ length: ROTA_SIZE }, (_, i) => i + 1).filter(
         (juz) => !byJuz.has(juz),
@@ -413,6 +471,49 @@ export const people = sessionQuery({
     };
   },
 });
+
+/**
+ * Adds a new participant to the khatma on the juz' (or the lowest free one
+ * when `juz` is undefined) of the next day to start. `joinedAt` is set only
+ * for someone who already sent their join message.
+ */
+async function placeNewParticipant(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  who: { name: string; phone: string; personId: Id<"people"> | null },
+  juz: number | undefined,
+  joinedAt?: number,
+): Promise<
+  | { participantId: Id<"rotaParticipants">; juz: number }
+  | { error: "no_free_juz" | "juz_taken" }
+> {
+  const target = await targetDay(ctx, khatma);
+  const byJuz = await slotRowsByJuz(ctx, khatma._id, target.number);
+  if (juz === undefined) {
+    juz = Array.from({ length: ROTA_SIZE }, (_, i) => i + 1).find(
+      (j) => !byJuz.has(j),
+    );
+    if (juz === undefined) return { error: "no_free_juz" };
+  } else if (!isJuz(juz)) {
+    throw new ConvexError({ code: "invalid_juz" });
+  } else if (byJuz.has(juz)) {
+    return { error: "juz_taken" };
+  }
+
+  const participantId = await ctx.db.insert("rotaParticipants", {
+    khatmaId: khatma._id,
+    ...who,
+    addedAt: Date.now(),
+    removedAt: null,
+    ...(joinedAt !== undefined ? { joinedAt } : {}),
+  });
+  await ctx.db.insert("rotaSlots", {
+    khatmaId: khatma._id,
+    slot: slotFor(juz, target.number),
+    participantId,
+  });
+  return { participantId, juz };
+}
 
 export const addParticipant = sessionMutation({
   args: {
@@ -450,34 +551,14 @@ export const addParticipant = sessionMutation({
       return { error: "already_added" };
     }
 
-    const target = await targetDay(ctx, khatma);
-    const byJuz = await slotRowsByJuz(ctx, khatma._id, target.number);
-    let juz = args.juz;
-    if (juz === undefined) {
-      juz = Array.from({ length: ROTA_SIZE }, (_, i) => i + 1).find(
-        (j) => !byJuz.has(j),
-      );
-      if (juz === undefined) return { error: "no_free_juz" };
-    } else if (!isJuz(juz)) {
-      throw new ConvexError({ code: "invalid_juz" });
-    } else if (byJuz.has(juz)) {
-      return { error: "juz_taken" };
-    }
-
-    const participantId = await ctx.db.insert("rotaParticipants", {
-      khatmaId: khatma._id,
-      name,
-      phone,
-      personId: null,
-      addedAt: Date.now(),
-      removedAt: null,
-    });
-    await ctx.db.insert("rotaSlots", {
-      khatmaId: khatma._id,
-      slot: slotFor(juz, target.number),
-      participantId,
-    });
-    return { ok: true, participantId, juz };
+    const placed = await placeNewParticipant(
+      ctx,
+      khatma,
+      { name, phone, personId: null },
+      args.juz,
+    );
+    if ("error" in placed) return placed;
+    return { ok: true, ...placed };
   },
 });
 
@@ -612,6 +693,115 @@ export const removeParticipant = sessionMutation({
 });
 
 // ---------------------------------------------------------------------------
+// Joining
+
+/**
+ * Makes sure the khatma has a join code, so the People screen can show its
+ * link. Queries can't write, so the screen asks for this when it has none.
+ */
+export const ensureJoinLink = sessionMutation({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<{ ok: true }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    await ensureJoinCode(ctx, khatma);
+    return { ok: true };
+  },
+});
+
+/** An open join request of this khatma, or null. */
+async function openRequest(
+  ctx: QueryCtx,
+  khatmaId: Id<"khatmas">,
+  requestId: Id<"rotaJoinRequests">,
+): Promise<Doc<"rotaJoinRequests"> | null> {
+  const request = await ctx.db.get(requestId);
+  return request && request.khatmaId === khatmaId && request.resolvedAt === null
+    ? request
+    : null;
+}
+
+/**
+ * Accepts a join request: the number becomes a participant on that juz' of the
+ * next day to start, already joined (their join message was the opt-in). If the
+ * number was added meanwhile, the request is closed and linked to that person.
+ */
+export const acceptJoinRequest = sessionMutation({
+  args: {
+    inviteCode: v.string(),
+    requestId: v.id("rotaJoinRequests"),
+    juz: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    | { ok: true; participantId: Id<"rotaParticipants"> }
+    | { error: "not_found" | "juz_taken" | "already_added" }
+  > => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const request = await openRequest(ctx, khatma._id, args.requestId);
+    if (!request) return { error: "not_found" };
+    const now = Date.now();
+    const existing = (
+      await ctx.db
+        .query("rotaParticipants")
+        .withIndex("by_khatma_phone", (q) =>
+          q.eq("khatmaId", khatma._id).eq("phone", request.phone),
+        )
+        .collect()
+    ).find((p) => p.removedAt === null);
+    if (existing) {
+      if (existing.joinedAt == null) {
+        await ctx.db.patch(existing._id, { joinedAt: now });
+      }
+      await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
+      return { error: "already_added" };
+    }
+
+    const person = await ctx.db
+      .query("people")
+      .withIndex("by_phone", (q) => q.eq("phone", request.phone))
+      .first();
+    const placed = await placeNewParticipant(
+      ctx,
+      khatma,
+      {
+        name:
+          cleanDisplayName(request.profileName ?? "") ??
+          maskPhone(request.phone),
+        phone: request.phone,
+        personId: person?._id ?? null,
+      },
+      args.juz,
+      now,
+    );
+    if ("error" in placed) {
+      // `juz` was given, so a juz' is always chosen.
+      return { error: "juz_taken" };
+    }
+    await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
+    return { ok: true, participantId: placed.participantId };
+  },
+});
+
+export const declineJoinRequest = sessionMutation({
+  args: { inviteCode: v.string(), requestId: v.id("rotaJoinRequests") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_found" }> => {
+    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const request = await openRequest(ctx, khatma._id, args.requestId);
+    if (!request) return { error: "not_found" };
+    await ctx.db.patch(request._id, {
+      resolvedAt: Date.now(),
+      outcome: "declined",
+    });
+    return { ok: true };
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Today
 
 type TodayView = {
@@ -634,6 +824,8 @@ type TodayView = {
     holderName: string | null;
     readerName: string | null;
     readerId: Id<"rotaParticipants"> | null;
+    /** What the reader answered to an unread juz': «ليس بعد», or nothing yet; null once done. */
+    answer: "notYet" | "none" | null;
   }[];
   participants: {
     id: Id<"rotaParticipants">;
@@ -692,6 +884,12 @@ export const today = sessionQuery({
       holderName: nameOf(r.holderId),
       readerName: nameOf(r.readerId),
       readerId: r.readerId,
+      answer:
+        r.doneAt !== null
+          ? null
+          : r.notYetAt != null
+            ? ("notYet" as const)
+            : ("none" as const),
     }));
     const participants = everyone
       .filter((p) => p.removedAt === null)

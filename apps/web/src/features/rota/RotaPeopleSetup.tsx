@@ -9,6 +9,7 @@ import { t } from "../../i18n/ar";
 import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
 import { ErrorLine } from "./ErrorLine";
+import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
 import { StepBar } from "./StepBar";
 import { useRotaCall } from "./useRotaCall";
 
@@ -81,6 +82,7 @@ export function RotaPeopleSetup() {
   const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
   const khatmaPath = `/j/${encodeURIComponent(inviteCode)}`;
+  useEnsureJoinLink(inviteCode, view?.joinLink);
 
   if (view === undefined) return <main className="mx-auto max-w-xl p-5" />;
   // Only the organizer sets people up.
@@ -104,7 +106,10 @@ export function RotaPeopleSetup() {
         className="mt-5 divide-y divide-line rounded-ui border-2 border-line bg-card px-4"
       >
         {view.participants.map((person, index) => (
-          <li key={person.id} className="flex min-h-14 items-center gap-3 py-2">
+          <li
+            key={person.id}
+            className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1 py-2"
+          >
             <span className="w-7 shrink-0 text-center font-semibold text-green-deep">
               {toArabicDigits(index + 1)}
             </span>
@@ -116,6 +121,14 @@ export function RotaPeopleSetup() {
                 {t.rota.juzOf(person.juz)}
               </span>
             )}
+            <span className="w-full ps-10">
+              <JoinChip
+                person={person}
+                isMe={person.isMe}
+                title={view.title}
+                joinLink={view.joinLink}
+              />
+            </span>
           </li>
         ))}
       </ol>
@@ -135,7 +148,8 @@ export function RotaPeopleSetup() {
         </button>
       )}
 
-      <div className="mt-6">
+      <div className="mt-6 grid gap-3">
+        <ShareJoinLink title={view.title} joinLink={view.joinLink} />
         {/* The khatma's days start only once setup is done. */}
         <Button
           disabled={finishing.busy}

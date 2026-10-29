@@ -6,7 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { RotaKhatmaPage } from "./RotaKhatmaPage";
 
-type Person = { id: string; name: string; isMe: boolean; juz: number[] };
+type Person = {
+  id: string;
+  name: string;
+  isMe: boolean;
+  juz: number[];
+  phone?: string;
+  joined?: boolean;
+  stopped?: boolean;
+  silenced?: boolean;
+};
+
+const JOIN_LINK =
+  "https://wa.me/971500000000?text=%D8%A7%D9%86%D8%B6%D9%85%D8%A7%D9%85%20%D8%A5%D9%84%D9%89%20%D8%AE%D8%AA%D9%85%D8%A9%20%C2%B7%20ABC234";
 
 const m = vi.hoisted(() => ({
   today: undefined as unknown,
@@ -14,6 +26,7 @@ const m = vi.hoisted(() => ({
   people: undefined as unknown,
   mine: [] as unknown,
   me: null as unknown,
+  joinLink: null as string | null,
   notes: [] as unknown,
   fns: {
     reassign: vi.fn(),
@@ -24,6 +37,9 @@ const m = vi.hoisted(() => ({
     moveJuz: vi.fn(),
     removeParticipant: vi.fn(),
     freeJuz: vi.fn(),
+    ensureJoinLink: vi.fn(),
+    acceptJoinRequest: vi.fn(),
+    declineJoinRequest: vi.fn(),
     finishSetup: vi.fn(),
     dismiss: vi.fn(),
   },
@@ -110,6 +126,7 @@ function todayView(overrides: Record<string, unknown> = {}) {
         holderName: juz === 8 ? "سارة" : juz === 9 ? "خالد" : "مريم",
         readerName: juz === 9 ? "مريم" : "مريم",
         readerId: juz === 9 ? "p2" : juz === 8 ? "p3" : "p2",
+        answer: state === "done" ? null : juz === 10 ? "notYet" : "none",
       };
     }),
     participants: people.map((p) => ({ ...p, doneToday: p.id !== "p3" })),
@@ -117,20 +134,43 @@ function todayView(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const withState = (p: Person) => ({
+  phone: "+971500000000",
+  joined: true,
+  stopped: false,
+  silenced: false,
+  ...p,
+});
+
 function peopleView(
-  holders: Person[],
+  rawHolders: Person[],
   target = { number: 13, date: "2026-11-11", isFirst: false },
+  extra: Record<string, unknown> = {},
 ) {
-  const byJuz = new Map<number, Person>();
+  const holders = rawHolders.map(withState);
+  const byJuz = new Map<number, ReturnType<typeof withState>>();
   for (const p of holders) for (const juz of p.juz) byJuz.set(juz, p);
   return {
+    title: "ختمة العائلة",
+    joinLink: JOIN_LINK,
+    requests: [],
+    ...extra,
     target,
     rows: Array.from({ length: 30 }, (_, i) => {
       const p = byJuz.get(i + 1);
       return {
         juz: i + 1,
         participant: p
-          ? { id: p.id, name: p.name, isMe: p.isMe, slots: p.juz.length }
+          ? {
+              id: p.id,
+              name: p.name,
+              isMe: p.isMe,
+              slots: p.juz.length,
+              phone: p.phone,
+              joined: p.joined,
+              stopped: p.stopped,
+              silenced: p.silenced,
+            }
           : null,
       };
     }),
@@ -158,7 +198,13 @@ function renderAt(url = "/j/CODE") {
   );
 }
 function Page() {
-  return <RotaKhatmaPage inviteCode="CODE" name="ختمة العائلة" />;
+  return (
+    <RotaKhatmaPage
+      inviteCode="CODE"
+      name="ختمة العائلة"
+      joinLink={m.joinLink}
+    />
+  );
 }
 
 const grid = () => screen.getByRole("region", { name: t.rota.gridLabel });
@@ -176,6 +222,7 @@ beforeEach(() => {
   m.people = peopleView(roster);
   m.mine = [];
   m.me = { displayName: "علي" };
+  m.joinLink = JOIN_LINK;
   m.notes = [];
 });
 afterEach(() => {
@@ -275,6 +322,32 @@ describe("Today", () => {
         within(sheet).getByRole("button", { name: action }),
       ).toBeInTheDocument();
     }
+  });
+
+  it("an unread juz' says whether the reader answered", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ٨، لم يُقرأ" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(t.rota.answerNone);
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      t.rota.answerNotYet,
+    );
+    await user.click(screen.getByRole("button", { name: t.sheet.close }));
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ١٠، لم يُقرأ" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(t.rota.answerNotYet);
+  });
+
+  it("a done juz' shows no answer", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ١، تمّ" }),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(t.rota.answerNone);
   });
 
   it("a reassigned juz' also says who reads it now", async () => {
@@ -480,6 +553,22 @@ describe("page", () => {
     // Signed in, so there is nothing to sign in to.
     expect(
       screen.queryByRole("button", { name: t.rota.imOrganizer }),
+    ).toBeNull();
+  });
+
+  it("gives a visitor a big «انضمّ عبر واتساب» button to the join link", () => {
+    m.today = null;
+    renderAt();
+    const join = screen.getByRole("link", { name: t.rota.joinOnWhatsApp });
+    expect(join).toHaveAttribute("href", JOIN_LINK);
+  });
+
+  it("shows no join button while the khatma has no join link", () => {
+    m.today = null;
+    m.joinLink = null;
+    renderAt();
+    expect(
+      screen.queryByRole("link", { name: t.rota.joinOnWhatsApp }),
     ).toBeNull();
   });
 
