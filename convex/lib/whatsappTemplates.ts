@@ -6,12 +6,16 @@ import {
   type NoteTextInput,
 } from "./noteText";
 
-/** A template send: the header and body texts, and the first button's parameter. */
+/**
+ * A template send: the header and body texts, the first button's parameter,
+ * and a payload for each quick-reply button (button `i` of the template).
+ */
 export type TemplateMessage = {
   name: string;
   header?: string;
   body?: string[];
   buttonParam?: string;
+  quickReplies?: string[];
 };
 
 /**

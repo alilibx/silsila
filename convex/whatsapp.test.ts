@@ -8,11 +8,13 @@ import {
   adminPinReply,
   describeMessage,
   parseIncoming,
+  parseRelayed,
   relayIncoming,
   relaySignature,
   sendPin,
   sendSignInAlert,
   sendVerified,
+  sendWhatsAppButtons,
   sendWhatsAppLink,
   sendWhatsAppTemplate,
   whatsappConfigured,
@@ -113,6 +115,7 @@ test("parseIncoming extracts text messages", () => {
       waMessageId: "wamid.1",
       from: "971501234567",
       text: "رمز التحقق في وِردك: K7Q2-9XMB-4T",
+      profileName: "Ali",
     },
   ]);
   expect(
@@ -140,7 +143,14 @@ test("parseIncoming ignores non-text messages and malformed input", () => {
         },
       ]),
     ),
-  ).toEqual([{ waMessageId: "wamid.ok", from: "971501234567", text: "hi" }]);
+  ).toEqual([
+    {
+      waMessageId: "wamid.ok",
+      from: "971501234567",
+      text: "hi",
+      profileName: "Ali",
+    },
+  ]);
 });
 
 test("parseIncoming can keep only messages to our business number", () => {
@@ -169,6 +179,101 @@ test("parseIncoming can keep only messages to our business number", () => {
   };
   expect(parseIncoming(bare)).toHaveLength(1);
   expect(parseIncoming(bare, "1234567890")).toEqual([]);
+});
+
+test("parseIncoming reads button taps and the sender's profile name", () => {
+  const messages = webhook(
+    [
+      {
+        from: "971501234567",
+        id: "wamid.btn",
+        type: "button",
+        button: { payload: "r1|p|done|d1|p1", text: "تمّ" },
+      },
+      {
+        from: "971501234567",
+        id: "wamid.int",
+        type: "interactive",
+        interactive: {
+          type: "button_reply",
+          button_reply: { id: "r1|p|notYet|d1|p1", title: "ليس بعد" },
+        },
+      },
+      // a list reply is not a button reply
+      {
+        from: "971501234567",
+        id: "wamid.list",
+        type: "interactive",
+        interactive: {
+          type: "list_reply",
+          list_reply: { id: "x", title: "y" },
+        },
+      },
+      // a button with no payload can't be told apart from noise
+      {
+        from: "971501234567",
+        id: "wamid.nopayload",
+        type: "button",
+        button: { text: "تمّ" },
+      },
+      {
+        from: "971501234567",
+        id: "wamid.long",
+        type: "button",
+        button: { payload: "x".repeat(257), text: "تمّ" },
+      },
+    ],
+    {
+      contacts: [
+        { wa_id: "971509999999", profile: { name: "Someone else" } },
+        { wa_id: "971501234567", profile: { name: "ن".repeat(80) } },
+      ],
+    },
+  );
+  expect(parseIncoming(messages)).toEqual([
+    {
+      waMessageId: "wamid.btn",
+      from: "971501234567",
+      text: "تمّ",
+      payload: "r1|p|done|d1|p1",
+      profileName: "ن".repeat(60),
+    },
+    {
+      waMessageId: "wamid.int",
+      from: "971501234567",
+      text: "ليس بعد",
+      payload: "r1|p|notYet|d1|p1",
+      profileName: "ن".repeat(60),
+    },
+  ]);
+  // a text message carries the profile name but no payload
+  const [text] = parseIncoming(sampleWebhook);
+  expect(text).toEqual({
+    waMessageId: "wamid.1",
+    from: "971501234567",
+    text: "رمز التحقق في وِردك: K7Q2-9XMB-4T",
+    profileName: "Ali",
+  });
+  expect("payload" in text!).toBe(false);
+});
+
+test("parseRelayed carries the payload and profile name", () => {
+  const relayed = {
+    waMessageId: "wamid.btn",
+    from: "971501234567",
+    text: "تمّ",
+    payload: "r1|s|done|d1|p1",
+    profileName: "Ali",
+  };
+  expect(parseRelayed(relayed)).toEqual(relayed);
+  expect(
+    parseRelayed({ ...relayed, payload: undefined, profileName: undefined }),
+  ).toEqual({ waMessageId: "wamid.btn", from: "971501234567", text: "تمّ" });
+  expect(parseRelayed({ ...relayed, payload: "x".repeat(257) })).toBeNull();
+  expect(parseRelayed({ ...relayed, payload: 5 })).toBeNull();
+  expect(
+    parseRelayed({ ...relayed, profileName: "ن".repeat(80) })?.profileName,
+  ).toBe("ن".repeat(60));
 });
 
 test("recordInbound returns true once per message id", async () => {
@@ -359,6 +464,65 @@ test("sendWhatsAppTemplate posts a template with header, body and url button", a
       },
     },
   ]);
+});
+
+test("sendWhatsAppTemplate adds a payload for each quick-reply button", async () => {
+  await sendWhatsAppTemplate("+971501234567", {
+    name: "wirdak_rota_day",
+    header: "ختمة رمضان",
+    body: ["١٢"],
+    quickReplies: ["r1|p|done|d1|p1", "r1|p|notYet|d1|p1"],
+  });
+  const template = payloads[0]!.template as { components: unknown[] };
+  expect(template.components.slice(2)).toEqual([
+    {
+      type: "button",
+      sub_type: "quick_reply",
+      index: "0",
+      parameters: [{ type: "payload", payload: "r1|p|done|d1|p1" }],
+    },
+    {
+      type: "button",
+      sub_type: "quick_reply",
+      index: "1",
+      parameters: [{ type: "payload", payload: "r1|p|notYet|d1|p1" }],
+    },
+  ]);
+});
+
+test("sendWhatsAppButtons posts an interactive reply-buttons message", async () => {
+  expect(
+    await sendWhatsAppButtons("+971501234567", "هل أتممت وردك؟", [
+      { id: "r1|p|done|d1|p1", title: "تمّ" },
+      { id: "r1|p|notYet|d1|p1", title: "ليس بعد" },
+      { id: "c", title: "ن".repeat(30) },
+      { id: "d", title: "رابع" },
+    ]),
+  ).toBe(true);
+  expect(payloads).toEqual([
+    {
+      messaging_product: "whatsapp",
+      to: "971501234567",
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: "هل أتممت وردك؟" },
+        action: {
+          buttons: [
+            { type: "reply", reply: { id: "r1|p|done|d1|p1", title: "تمّ" } },
+            {
+              type: "reply",
+              reply: { id: "r1|p|notYet|d1|p1", title: "ليس بعد" },
+            },
+            { type: "reply", reply: { id: "c", title: "ن".repeat(20) } },
+          ],
+        },
+      },
+    },
+  ]);
+  expect(describeMessage(payloads[0])).toBe(
+    `هل أتممت وردك؟\n[تمّ] r1|p|done|d1|p1\n[ليس بعد] r1|p|notYet|d1|p1\n[${"ن".repeat(20)}] c`,
+  );
 });
 
 test("sendWhatsAppTemplate leaves out empty components", async () => {
@@ -582,7 +746,12 @@ test("webhook with a valid signature schedules handleIncoming per message", asyn
   expect(jobs.map((j) => [j.name, j.args[0]])).toEqual([
     [
       "whatsapp:handleIncoming",
-      { waMessageId: "wamid.1", from: "971501234567", text: "hello" },
+      {
+        waMessageId: "wamid.1",
+        from: "971501234567",
+        text: "hello",
+        profileName: "Ali",
+      },
     ],
     [
       "whatsapp:handleIncoming",

@@ -230,14 +230,18 @@ export const create = action({
       });
       if (created) return created;
     }
-    throw new Error("could not allocate an invite code");
+    throw new Error("could not allocate an invite or join code");
   },
 });
 
 /**
  * The rota khatma's join code, drawing and storing one when it has none (a
  * khatma created before join codes). For mutations: `by_joinCode` is checked
- * inside the transaction, so a drawn code is never taken.
+ * inside the transaction, so a drawn code is never taken. A join code is not a
+ * secret: it is shared in the group and only admits a phone the organizer
+ * listed, or files a request they approve. Uniqueness comes from that
+ * in-transaction check; real secrets must still be drawn in actions (see the
+ * header of `lib/crypto.ts`).
  */
 export async function ensureJoinCode(
   ctx: MutationCtx,

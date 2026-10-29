@@ -202,10 +202,20 @@ const MAX_TEXT = 4096;
 /** Only this much of an incoming message is scanned for a code (or relayed). */
 export const MAX_SCANNED_TEXT = 500;
 
+/** A button payload is at most this long (Meta allows 256). */
+const MAX_PAYLOAD = 256;
+/** The sender's WhatsApp profile name is kept to this many characters. */
+const MAX_PROFILE_NAME = 60;
+
 export type IncomingMessage = {
   waMessageId: string;
   from: string;
+  /** The message text; for a button tap, the button's title. */
   text: string;
+  /** The tapped button's payload (a template quick reply, or an interactive reply). */
+  payload?: string;
+  /** The sender's WhatsApp profile name. */
+  profileName?: string;
 };
 
 function isObject(x: unknown): x is Record<string, unknown> {
@@ -231,9 +241,61 @@ function toMessage(
   return { waMessageId: id, from, text };
 }
 
+/** `m`'s text and button payload: a text message, or a button tap. */
+function textAndPayload(
+  m: Record<string, unknown>,
+): { text: unknown; payload?: string } | null {
+  if (m.type === "text" && isObject(m.text)) return { text: m.text.body };
+  if (m.type === "button" && isObject(m.button)) {
+    return payloadOf(m.button.text, m.button.payload);
+  }
+  if (
+    m.type === "interactive" &&
+    isObject(m.interactive) &&
+    m.interactive.type === "button_reply" &&
+    isObject(m.interactive.button_reply)
+  ) {
+    const reply = m.interactive.button_reply;
+    return payloadOf(reply.title, reply.id);
+  }
+  return null;
+}
+
+function payloadOf(
+  text: unknown,
+  payload: unknown,
+): { text: unknown; payload: string } | null {
+  return typeof payload === "string" &&
+    payload.length > 0 &&
+    payload.length <= MAX_PAYLOAD
+    ? { text: typeof text === "string" ? text : "", payload }
+    : null;
+}
+
+/** A profile name cut to length, or `undefined` when there is none. */
+function cleanProfileName(name: unknown): string | undefined {
+  if (typeof name !== "string") return undefined;
+  const cut = name.trim().slice(0, MAX_PROFILE_NAME).trim();
+  return cut === "" ? undefined : cut;
+}
+
+/** The profile names in `value.contacts`, by `wa_id`. */
+function profileNames(contacts: unknown): Map<string, string> {
+  const names = new Map<string, string>();
+  if (!Array.isArray(contacts)) return names;
+  for (const c of contacts) {
+    if (!isObject(c) || typeof c.wa_id !== "string") continue;
+    const name = isObject(c.profile) ? cleanProfileName(c.profile.name) : null;
+    if (name) names.set(c.wa_id, name);
+  }
+  return names;
+}
+
 /**
- * Text messages from a Cloud API webhook payload. Anything that isn't a
- * well-formed text message (statuses, media, malformed entries) is skipped.
+ * Messages from a Cloud API webhook payload: text, template quick-reply taps
+ * and interactive reply-button taps (their title as `text`, their payload as
+ * `payload`), each with the sender's profile name. Anything else (statuses,
+ * media, malformed entries) is skipped.
  * With `onlyPhoneNumberId`, messages addressed to any other business number
  * (`value.metadata.phone_number_id`), or with no metadata, are skipped too.
  */
@@ -258,11 +320,20 @@ export function parseIncoming(
       }
       const messages = change.value.messages;
       if (!Array.isArray(messages)) continue;
+      const names = profileNames(change.value.contacts);
       for (const m of messages) {
-        if (!isObject(m) || m.type !== "text" || !isObject(m.text)) continue;
-        const message = toMessage(m.id, m.from, m.text.body);
+        if (!isObject(m)) continue;
+        const content = textAndPayload(m);
+        if (content === null) continue;
+        const message = toMessage(m.id, m.from, content.text);
         if (message === null) continue;
-        out.push({ ...message, text: message.text.slice(0, MAX_TEXT) });
+        const profileName = names.get(message.from);
+        out.push({
+          ...message,
+          text: message.text.slice(0, MAX_TEXT),
+          ...(content.payload !== undefined && { payload: content.payload }),
+          ...(profileName !== undefined && { profileName }),
+        });
       }
     }
   }
@@ -273,9 +344,20 @@ export function parseIncoming(
 export function parseRelayed(payload: unknown): IncomingMessage | null {
   if (!isObject(payload)) return null;
   const message = toMessage(payload.waMessageId, payload.from, payload.text);
-  return message !== null && message.text.length <= MAX_SCANNED_TEXT
-    ? message
-    : null;
+  if (message === null || message.text.length > MAX_SCANNED_TEXT) return null;
+  let relayed: IncomingMessage = message;
+  if (payload.payload !== undefined) {
+    if (
+      typeof payload.payload !== "string" ||
+      payload.payload.length === 0 ||
+      payload.payload.length > MAX_PAYLOAD
+    ) {
+      return null;
+    }
+    relayed = { ...relayed, payload: payload.payload };
+  }
+  const profileName = cleanProfileName(payload.profileName);
+  return profileName === undefined ? relayed : { ...relayed, profileName };
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +371,7 @@ const textParams = (values: string[]) =>
 
 /**
  * A message payload as one readable string: the text; the text, then the
- * button as `[label] url`; or `[template name]` and its parameters joined
+ * button as `[label] url`, or each reply button as `[title] id`; or `[template name]` and its parameters joined
  * by ` | `. Dev logs print it, and tests compare it.
  */
 export function describeMessage(payload: unknown): string {
@@ -299,6 +381,13 @@ export function describeMessage(payload: unknown): string {
   if (isObject(interactive)) {
     const body = isObject(interactive.body) ? interactive.body.text : "";
     const action = isObject(interactive.action) ? interactive.action : {};
+    if (Array.isArray(action.buttons)) {
+      const lines = action.buttons.map((b: unknown) => {
+        const reply = isObject(b) && isObject(b.reply) ? b.reply : {};
+        return `\n[${String(reply.title)}] ${String(reply.id)}`;
+      });
+      return `${String(body)}${lines.join("")}`;
+    }
     const button = isObject(action.parameters) ? action.parameters : {};
     return `${String(body)}\n[${String(button.display_text)}] ${String(button.url)}`;
   }
@@ -438,6 +527,14 @@ async function postTemplate(
       parameters: textParams([message.buttonParam]),
     });
   }
+  (message.quickReplies ?? []).forEach((payload, i) => {
+    components.push({
+      type: "button",
+      sub_type: "quick_reply",
+      index: String(i),
+      parameters: [{ type: "payload", payload }],
+    });
+  });
   return await postMessage(to, {
     type: "template",
     template: { name: message.name, language: { code: "ar" }, components },
@@ -458,6 +555,39 @@ export async function sendWhatsAppLink(
       action: {
         name: "cta_url",
         parameters: { display_text: button.label, url: button.url },
+      },
+    },
+  });
+  return outcome === "sent";
+}
+
+/** WhatsApp shows at most three reply buttons, each titled with 20 characters or fewer. */
+const MAX_REPLY_BUTTONS = 3;
+const MAX_BUTTON_TITLE = 20;
+
+/**
+ * A text with up to three reply buttons (inside the 24-hour window, no
+ * template needed). A tap comes back as an incoming message holding the
+ * button's `id` as its payload.
+ */
+export async function sendWhatsAppButtons(
+  to: string,
+  body: string,
+  buttons: { id: string; title: string }[],
+): Promise<boolean> {
+  const outcome = await postMessage(to, {
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: body },
+      action: {
+        buttons: buttons.slice(0, MAX_REPLY_BUTTONS).map((b) => ({
+          type: "reply",
+          reply: {
+            id: b.id.slice(0, MAX_PAYLOAD),
+            title: b.title.slice(0, MAX_BUTTON_TITLE),
+          },
+        })),
       },
     },
   });
@@ -613,8 +743,16 @@ export async function takeIncoming(
 
 /** A message from Meta's webhook. */
 export const handleIncoming = internalAction({
-  args: { waMessageId: v.string(), from: v.string(), text: v.string() },
+  args: {
+    waMessageId: v.string(),
+    from: v.string(),
+    text: v.string(),
+    payload: v.optional(v.string()),
+    profileName: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<void> => {
+    // A button tap is no sign-in message: nothing here answers it.
+    if (args.payload !== undefined) return;
     const outcome = await takeIncoming(ctx, args);
     if (outcome === "taken") return;
     // A code we don't have may have been started on staging.
