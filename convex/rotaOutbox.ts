@@ -13,6 +13,7 @@ import {
   assignedText,
   assignedTemplate,
   completeTemplate,
+  completeText,
   coveredTemplate,
   coveredText,
   cycleTemplate,
@@ -25,7 +26,7 @@ import {
 } from "./lib/rotaTemplates";
 import { quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
-import type { TemplateMessage } from "./lib/whatsappTemplates";
+import { khatmaTitle, type TemplateMessage } from "./lib/whatsappTemplates";
 import {
   sendWhatsAppButtons,
   sendWhatsAppTemplate,
@@ -45,10 +46,11 @@ type FreeForm = { text: string; buttons?: { id: string; title: string }[] };
 const WINDOW_MS = 24 * 3_600_000;
 const STAGING_SITE = "https://stg.wirdak.app";
 
-/** Whether a participant may be sent messages Wirdak starts. */
+/** Whether a participant may be sent messages Wirdak starts: on the list, joined, not stopped or silenced. */
 function reachable(p: Participant | null): p is Participant {
   return (
     p !== null &&
+    p.removedAt == null &&
     p.joinedAt != null &&
     p.stoppedAt == null &&
     p.silencedAt == null
@@ -110,6 +112,14 @@ function donePayloads(row: Doc<"rotaOutbox">, staging: boolean) {
   };
 }
 
+/** A free-form message under the khatma's title in bold, as a template has it in its header. */
+function titled(
+  khatma: { name: string | null; createdAt: number },
+  text: string,
+): string {
+  return `*${khatmaTitle(khatma)}*\n${text}`;
+}
+
 /** What a row says, as its template or, inside the 24-hour window, as free-form. */
 function compose(
   row: Doc<"rotaOutbox">,
@@ -140,7 +150,7 @@ function compose(
             ? reminderText(row.juz)
             : assignedText(row.juz, number);
       return {
-        text,
+        text: titled(khatma, text),
         buttons: [
           { id: payloads.done, title: ROTA_BUTTONS.done },
           { id: payloads.notYet, title: ROTA_BUTTONS.notYet },
@@ -149,11 +159,15 @@ function compose(
     }
     case "covered":
       return windowOpen
-        ? { text: coveredText(row.juz) }
+        ? { text: titled(khatma, coveredText(row.juz)) }
         : coveredTemplate(khatma, row.juz);
     case "complete": {
       if (row.dayId === null || row.number === null) return null;
-      if (windowOpen) return { text: duaText() };
+      if (windowOpen) {
+        return {
+          text: titled(khatma, `${completeText(number)}\n\n${duaText()}`),
+        };
+      }
       const dua = encodePayload(
         {
           action: "dua",
@@ -165,7 +179,9 @@ function compose(
       return completeTemplate(khatma, number, dua);
     }
     case "cycle":
-      return windowOpen ? { text: cycleText } : cycleTemplate(khatma);
+      return windowOpen
+        ? { text: titled(khatma, cycleText) }
+        : cycleTemplate(khatma);
   }
 }
 
@@ -208,7 +224,12 @@ export const plan = internalQuery({
             .first(),
         ),
       );
-      if (reads.every((r) => !r || r.doneAt !== null)) return null;
+      // Only a read still waiting on this participant calls for the message.
+      if (
+        !reads.some((r) => r?.readerId === participant._id && r.doneAt === null)
+      ) {
+        return null;
+      }
     }
     const now = Date.now();
     const awake = nextAwake(now, rota.timeZone, await quietHours(ctx));
@@ -229,13 +250,23 @@ export const plan = internalQuery({
   },
 });
 
-/** Marks a row sent; false when it already was sent or skipped, so the caller must not send. */
+/**
+ * Claims a row for sending: marks it sent and returns true. Returns false
+ * (so the caller must not send) when it was already sent or skipped, or when
+ * the participant is no longer reachable since `plan` (a «إيقاف» may land in
+ * between); then the row is marked skipped.
+ */
 export const markSent = internalMutation({
   args: { outboxId: v.id("rotaOutbox") },
   handler: async (ctx, args): Promise<boolean> => {
     const row = await ctx.db.get(args.outboxId);
     if (!row || row.sentAt !== null || row.skippedAt !== null) return false;
-    await ctx.db.patch(args.outboxId, { sentAt: Date.now() });
+    const now = Date.now();
+    if (!reachable(await ctx.db.get(row.participantId))) {
+      await ctx.db.patch(args.outboxId, { skippedAt: now });
+      return false;
+    }
+    await ctx.db.patch(args.outboxId, { sentAt: now });
     return true;
   },
 });

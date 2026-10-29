@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { DEFAULT_GRACE } from "./lib/grace";
 import { encodePayload } from "./lib/rotaPayload";
-import { duaText } from "./lib/rotaTemplates";
+import { completeText, duaText } from "./lib/rotaTemplates";
 import { enqueue } from "./rotaOutbox";
 import schema from "./schema";
 import { describeMessage } from "./whatsapp";
@@ -125,7 +125,7 @@ async function setup(t: T, over: Over = {}) {
         juz,
         slot: 2,
         holderId: participantId,
-        readerId: over.readDone ? participantId : null,
+        readerId: participantId,
         doneAt: over.readDone ? NOW - HOUR : null,
         doneByOrganizer: false,
         reassignedAt: null,
@@ -229,7 +229,7 @@ test("a juz' message inside the window goes as interactive buttons", async () =>
   expect(sent).toEqual([
     {
       to: "971500000002",
-      text: `الختمة ١ اليوم. قراءتك: الجزآن ٢ و٣.\n[أتممت] ${done}\n[ليس بعد] ${notYet}`,
+      text: `*ختمة العائلة*\nالختمة ١ اليوم. قراءتك: الجزآن ٢ و٣.\n[أتممت] ${done}\n[ليس بعد] ${notYet}`,
     },
   ]);
   expect((await rows(t))[0]?.sentAt).toBeGreaterThanOrEqual(NOW);
@@ -240,27 +240,19 @@ test("a juz' message outside the window goes as the template with payloads", asy
   const ids = await setup(t);
   await queue(t, ids);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
-  expect(sent).toHaveLength(1);
-  expect(sent[0]?.text).toMatch(
-    /^\[wirdak_rota_juz\] ختمة العائلة \| ١ \| الجزآن ٢ و٣/,
+  const done = encodePayload(
+    { action: "done", dayId: ids.dayId, participantId: ids.participantId },
+    false,
   );
-  const payload = (vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body;
-  const components = JSON.parse(String(payload)).template.components;
-  expect(
-    components
-      .filter((c: { sub_type?: string }) => c.sub_type === "quick_reply")
-      .map(
-        (c: { parameters: { payload: string }[] }) => c.parameters[0]?.payload,
-      ),
-  ).toEqual([
-    encodePayload(
-      { action: "done", dayId: ids.dayId, participantId: ids.participantId },
-      false,
-    ),
-    encodePayload(
-      { action: "notYet", dayId: ids.dayId, participantId: ids.participantId },
-      false,
-    ),
+  const notYet = encodePayload(
+    { action: "notYet", dayId: ids.dayId, participantId: ids.participantId },
+    false,
+  );
+  expect(sent).toEqual([
+    {
+      to: "971500000002",
+      text: `[wirdak_rota_juz] ختمة العائلة | ١ | الجزآن ٢ و٣ | ${done} | ${notYet}`,
+    },
   ]);
 });
 
@@ -270,18 +262,25 @@ test("staging marks its payloads", async () => {
   const ids = await setup(t);
   await queue(t, ids);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
-  const body = String(
-    (vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body,
+  expect(sent[0]?.text).toContain(
+    `r1|s|done|${ids.dayId}|${ids.participantId}`,
   );
-  expect(body).toContain(`r1|s|done|${ids.dayId}|${ids.participantId}`);
 });
 
-test("a completion message inside the window is the dua as plain text", async () => {
+test("a completion message inside the window is the completion line, then the dua, as plain text", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t, { windowOpen: true });
   await queue(t, ids, "complete");
   await t.finishAllScheduledFunctions(vi.runAllTimers);
-  expect(sent).toEqual([{ to: "971500000002", text: duaText() }]);
+  expect(sent).toEqual([
+    {
+      to: "971500000002",
+      text: `*ختمة العائلة*\n${completeText(1)}\n\n${duaText()}`,
+    },
+  ]);
+  expect(completeText(1)).toBe(
+    "تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ١.",
+  );
 });
 
 test("a completion message outside the window is the template with the dua button", async () => {
@@ -289,12 +288,16 @@ test("a completion message outside the window is the template with the dua butto
   const ids = await setup(t);
   await queue(t, ids, "complete");
   await t.finishAllScheduledFunctions(vi.runAllTimers);
-  expect(sent).toHaveLength(1);
-  expect(sent[0]?.text).toMatch(/^\[wirdak_rota_complete\] ختمة العائلة \| ١/);
-  const body = String(
-    (vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body,
+  const dua = encodePayload(
+    { action: "dua", dayId: ids.dayId, participantId: ids.participantId },
+    false,
   );
-  expect(body).toContain(`r1|p|dua|${ids.dayId}|${ids.participantId}`);
+  expect(sent).toEqual([
+    {
+      to: "971500000002",
+      text: `[wirdak_rota_complete] ختمة العائلة | ١ | ${dua}`,
+    },
+  ]);
 });
 
 test("covered and cycle messages go as their template, or as plain text in the window", async () => {
@@ -324,7 +327,7 @@ test("covered and cycle messages go as their template, or as plain text in the w
   expect(sent).toEqual([
     {
       to: "971500000002",
-      text: "تحديث على قراءتك: تمّت اليوم قراءة الجزأين ٢ و٣ عنك، فلم يعد عليك شيء منها.",
+      text: "*ختمة العائلة*\nتحديث على قراءتك: تمّت اليوم قراءة الجزأين ٢ و٣ عنك، فلم يعد عليك شيء منها.",
     },
   ]);
 });
@@ -375,6 +378,7 @@ test("a message in an archived khatma is skipped", async () => {
   await queue(t, ids, "cycle");
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent).toEqual([]);
+  expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);
 });
 
 test("a participant who stopped after the message was queued is skipped", async () => {
@@ -385,6 +389,79 @@ test("a participant who stopped after the message was queued is skipped", async 
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent).toEqual([]);
   expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);
+});
+
+test("a participant removed after the message was queued is skipped", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  await queue(t, ids);
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { removedAt: NOW }));
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
+  expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);
+});
+
+test("enqueue skips a participant who was removed", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { removedAt: NOW }));
+  expect(await queue(t, ids)).toBeNull();
+});
+
+test("a juz' reassigned away before delivery doesn't reach its old reader", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  await queue(t, ids);
+  await t.run(async (ctx) => {
+    const other = await ctx.db.insert("rotaParticipants", {
+      khatmaId: ids.khatmaId,
+      name: "هدى",
+      phone: "+971500000003",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+    });
+    for (const read of await ctx.db.query("rotaReads").collect()) {
+      await ctx.db.patch(read._id, { readerId: other });
+    }
+  });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
+  expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);
+});
+
+test("a juz' still waiting on the participant is sent even when another one was reassigned", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  await queue(t, ids);
+  await t.run(async (ctx) => {
+    const read = await ctx.db
+      .query("rotaReads")
+      .withIndex("by_day_juz", (q) => q.eq("dayId", ids.dayId).eq("juz", 2))
+      .unique();
+    await ctx.db.patch(read!._id, { readerId: null });
+  });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toHaveLength(1);
+});
+
+test("a stop that lands between plan and markSent stops the send", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { windowOpen: true });
+  await queue(t, ids);
+  const outboxId = (await rows(t))[0]?._id as Id<"rotaOutbox">;
+  expect(await t.query(internal.rotaOutbox.plan, { outboxId })).toMatchObject({
+    phone: PHONE,
+  });
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { stoppedAt: NOW }));
+  expect(await t.mutation(internal.rotaOutbox.markSent, { outboxId })).toBe(
+    false,
+  );
+  const [row] = await rows(t);
+  expect(row?.sentAt).toBeNull();
+  expect(row?.skippedAt).toBeGreaterThanOrEqual(NOW);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
 });
 
 test("a retried deliver sends once", async () => {

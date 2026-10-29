@@ -404,7 +404,11 @@ export function describeMessage(payload: unknown): string {
       : [];
     const params = components.flatMap((c: unknown) =>
       isObject(c) && Array.isArray(c.parameters)
-        ? c.parameters.map((p: unknown) => (isObject(p) ? String(p.text) : ""))
+        ? c.parameters.map((p: unknown) =>
+            isObject(p)
+              ? String(p.type === "payload" ? p.payload : p.text)
+              : "",
+          )
         : [],
     );
     return `[${String(template.name)}] ${params.join(" | ")}`;

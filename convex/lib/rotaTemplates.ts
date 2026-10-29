@@ -121,6 +121,10 @@ export function assignedText(juz: number[], number: number): string {
   return `تحديث على قراءتك: أُسندت إليك اليوم قراءة ${juzPhraseGenitive(juz)} في الختمة ${toArabicDigits(number)}.`;
 }
 
+export function completeText(number: number): string {
+  return `تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ${toArabicDigits(number)}.`;
+}
+
 export function coveredText(juz: number[]): string {
   return `تحديث على قراءتك: تمّت اليوم قراءة ${juzPhraseGenitive(juz)} عنك، فلم يعد عليك شيء منها.`;
 }
