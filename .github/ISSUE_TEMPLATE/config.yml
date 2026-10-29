@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Open Wirdak
+    url: https://wirdak.app/
+    about: The app itself. Most questions about using it are answered by the ؟ help button inside.
+  - name: Report a security issue
+    url: https://github.com/alilibx/wirdak/security/advisories/new
+    about: Privately, never as a public issue. See SECURITY.md.
