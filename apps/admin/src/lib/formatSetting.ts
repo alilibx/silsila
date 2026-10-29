@@ -22,7 +22,7 @@ export function formatTime(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${toArabicDigits(`${hour12}:${String(m).padStart(2, "0")}`)} ${h < 12 ? "ص" : "م"}`;
+  return `${toArabicDigits(`${hour12}:${String(m).padStart(2, "0")}`)} ${h < 12 ? t.settings.am : t.settings.pm}`;
 }
 
 /** A setting's value as an admin reads it: "٣ أيام", "22:00", "مفعّل". */

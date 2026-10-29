@@ -422,3 +422,168 @@ test("an admin's number can't be blocked", async () => {
     await t.run((ctx) => ctx.db.query("blockedPhones").collect()),
   ).toHaveLength(0);
 });
+
+test("an admin turns rotating khatmas on and off for a person, with one audit row each", async () => {
+  const t = convexTest(schema, modules);
+  const adminId = await admin(t);
+  const sara = await person(t, "+971500000002", "سارة");
+  const flag = () =>
+    t.run(async (ctx) => (await ctx.db.get(sara))?.rotaAllowed);
+
+  expect(
+    await t.query(api.adminLookup.person, {
+      adminToken: "admin",
+      personId: sara,
+    }),
+  ).toMatchObject({ rotaAllowed: false });
+  expect(
+    await t.mutation(api.adminOps.setRotaAllowed, {
+      adminToken: "admin",
+      personId: sara,
+      allowed: true,
+      note: "asked on WhatsApp",
+    }),
+  ).toEqual({ ok: true });
+  expect(await flag()).toBe(true);
+  expect(await audit(t)).toMatchObject([
+    {
+      adminId,
+      action: "person.rotaAllowed",
+      targetKind: "person",
+      targetId: sara,
+      before: { rotaAllowed: false },
+      after: { rotaAllowed: true },
+      note: "asked on WhatsApp",
+    },
+  ]);
+  expect(
+    await t.query(api.adminLookup.person, {
+      adminToken: "admin",
+      personId: sara,
+    }),
+  ).toMatchObject({ rotaAllowed: true });
+
+  await t.mutation(api.adminOps.setRotaAllowed, {
+    adminToken: "admin",
+    personId: sara,
+    allowed: false,
+  });
+  expect(await flag()).toBe(false);
+  expect(await audit(t)).toHaveLength(2);
+});
+
+test("setting rota access for a person who is gone is not_found, and needs an admin", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const sara = await person(t, "+971500000002", "سارة");
+  await t.run((ctx) => ctx.db.delete(sara));
+  expect(
+    await t.mutation(api.adminOps.setRotaAllowed, {
+      adminToken: "admin",
+      personId: sara,
+      allowed: true,
+    }),
+  ).toEqual({ error: "not_found" });
+  expect(await audit(t)).toHaveLength(0);
+  await expect(
+    t.mutation(api.adminOps.setRotaAllowed, {
+      adminToken: "member",
+      personId: sara,
+      allowed: true,
+    }),
+  ).rejects.toThrow(/not_admin/);
+});
+
+test("a rota khatma's page shows its day as counts, a pool khatma's shows no rota", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971500000001", "علي");
+  const pool = await khatma(t, ali, []);
+  const poolPage = await t.query(api.adminLookup.khatma, {
+    adminToken: "admin",
+    khatmaId: pool.khatmaId,
+  });
+  expect(poolPage).toMatchObject({ kind: "pool", rota: null });
+
+  const khatmaId = await t.run(async (ctx) => {
+    const id = await ctx.db.insert("khatmas", {
+      name: "ختمة التناوب",
+      schedule: "weekly",
+      grace: { value: 2, unit: "days" },
+      creatorPersonId: ali,
+      inviteCode: "rotaKhatma1",
+      completedRounds: 0,
+      createdAt: 0,
+      kind: "rota",
+      rota: {
+        days: { kind: "daily" },
+        firstDate: "2026-10-01",
+        endDate: null,
+        timeZone: "Asia/Dubai",
+        messages: {
+          dayAt: 480,
+          reminder: { at: 960, on: true },
+          unread: { at: 1140, on: true },
+          summary: { at: 1260, on: false },
+        },
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+      },
+    });
+    const day = async (n: number, closedAt: number | null) =>
+      await ctx.db.insert("rotaDays", {
+        khatmaId: id,
+        n,
+        number: n,
+        cycle: 1,
+        date: `2026-10-0${n}`,
+        startedAt: 0,
+        closesAt: 0,
+        completedAt: null,
+        closedAt,
+        unreadSentAt: null,
+        summarySentAt: null,
+      });
+    const closed = await day(1, 5);
+    const open = await day(2, null);
+    for (const [dayId, done] of [
+      [closed, 30],
+      [open, 27],
+    ] as const) {
+      for (let juz = 1; juz <= 30; juz++) {
+        await ctx.db.insert("rotaReads", {
+          dayId,
+          khatmaId: id,
+          juz,
+          slot: juz,
+          holderId: null,
+          readerId: null,
+          doneAt: juz <= done ? 1 : null,
+          doneByOrganizer: false,
+          reassignedAt: null,
+        });
+      }
+    }
+    return id;
+  });
+  const page = await t.query(api.adminLookup.khatma, {
+    adminToken: "admin",
+    khatmaId,
+  });
+  expect(page).toMatchObject({
+    kind: "rota",
+    rota: {
+      days: { kind: "daily" },
+      firstDate: "2026-10-01",
+      endDate: null,
+      pausedAt: null,
+      archivedAt: null,
+      number: 2,
+      cycle: 1,
+      dayOpen: true,
+      doneToday: 27,
+      total: 30,
+    },
+  });
+});

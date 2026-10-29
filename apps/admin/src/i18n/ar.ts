@@ -151,6 +151,8 @@ export const ar = {
     on: "مفعّل",
     off: "متوقف",
     empty: "—",
+    am: "ص",
+    pm: "م",
     seconds: (n: number) => `${toArabicDigits(n)} ثانية`,
     errors: {
       wrong_type: "القيمة ليست من النوع الصحيح.",
@@ -318,8 +320,31 @@ export const ar = {
     statuses: { active: "عضو", blocked: "محظور", former: "سابق" },
     helpStatuses: { open: "مفتوح", answered: "تم الرد", closed: "مغلق" },
     notFound: "غير موجود.",
+    kind: "النوع",
+    kindRota: "بالتناوب",
+    readingDays: "أيام القراءة",
+    daily: "كل يوم",
+    weekly: (days: string) => `كل أسبوع: ${days}`,
+    everyTwoWeeks: (days: string) => `كل أسبوعين: ${days}`,
+    monthly: (days: string) => `أيام الشهر: ${days}`,
+    listSeparator: "، ",
+    startsOn: "تبدأ",
+    endsOn: "تنتهي",
+    rotaNumber: (number: string, cycle: string) =>
+      `الختمة ${number} · الدورة ${cycle}`,
+    rotaProgress: (done: string, total: string) => `${done} / ${total} اليوم`,
+    rotaNoDay: "لم يبدأ أول يوم بعد",
+    rotaPaused: "متوقفة مؤقتاً",
+    rotaArchived: "مؤرشفة",
   },
   ops: {
+    rotaAllowed: "يمكنه إنشاء ختمة بالتناوب",
+    rotaAllowOn: "السماح بالختمة بالتناوب",
+    rotaAllowOnBody:
+      "يستطيع هذا الشخص إنشاء ختمات بالتناوب. تصله رسائلها على واتساب.",
+    rotaAllowOff: "إيقاف الختمة بالتناوب",
+    rotaAllowOffBody:
+      "لا يستطيع إنشاء ختمات جديدة بالتناوب. تبقى ختماته الحالية كما هي.",
     signOutAll: "إنهاء كل الجلسات",
     signOutAllBody:
       "يخرج هذا الشخص من كل أجهزته الآن، ويتوقف وصول التنبيهات إليها.",

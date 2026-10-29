@@ -5,6 +5,8 @@ import { normalizeAdminPhone } from "./admins";
 import { adminQuery } from "./lib/adminSession";
 import { isBlocked } from "./lib/blocked";
 import { JUZ_COUNT } from "./lib/juz";
+import { ROTA_SIZE } from "./lib/rota";
+import { lastRotaDay } from "./lib/rotaPlace";
 import { membersByJoin } from "./organizer";
 import { roundAssignments } from "./rounds";
 
@@ -18,6 +20,31 @@ async function activeCount(ctx: QueryCtx, khatmaId: Id<"khatmas">) {
     .withIndex("by_khatma", (q) => q.eq("khatmaId", khatmaId))
     .collect();
   return members.filter((m) => m.status === "active").length;
+}
+
+/** A rota khatma's settings and where its latest reading day stands, as counts. */
+async function rotaFacts(ctx: QueryCtx, k: Doc<"khatmas">) {
+  if (k.kind !== "rota" || !k.rota) return null;
+  const day = await lastRotaDay(ctx, k._id);
+  const open = day !== null && day.closedAt === null;
+  const reads = open
+    ? await ctx.db
+        .query("rotaReads")
+        .withIndex("by_day_juz", (q) => q.eq("dayId", day._id))
+        .collect()
+    : [];
+  return {
+    days: k.rota.days,
+    firstDate: k.rota.firstDate,
+    endDate: k.rota.endDate,
+    pausedAt: k.rota.pausedAt,
+    archivedAt: k.rota.archivedAt,
+    number: day?.number ?? null,
+    cycle: day?.cycle ?? null,
+    dayOpen: open,
+    doneToday: reads.filter((r) => r.doneAt !== null).length,
+    total: ROTA_SIZE,
+  };
 }
 
 /** Khatmas by exact invite code first, then by a word of the name (spec 8). */
@@ -123,6 +150,8 @@ export const khatma = adminQuery({
       .take(200);
     return {
       name: k.name,
+      kind: k.kind === "rota" ? ("rota" as const) : ("pool" as const),
+      rota: await rotaFacts(ctx, k),
       inviteCode: k.inviteCode,
       schedule: k.schedule,
       grace: k.grace,
@@ -177,6 +206,7 @@ export const person = adminQuery({
       displayName: p.displayName,
       phone: p.phone,
       timeZone: p.timeZone,
+      rotaAllowed: p.rotaAllowed === true,
       verifiedAt: p.verifiedAt,
       lastSeenAt: p.lastSeenAt,
       khatmas,

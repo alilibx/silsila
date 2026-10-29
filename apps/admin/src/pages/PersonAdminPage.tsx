@@ -3,14 +3,14 @@ import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@web/components/Button";
 import { formatDate } from "@web/lib/format";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { opsError, withNote } from "../lib/opsError";
 
-type Op = "signOutAll" | "block" | "unblock";
+type Op = "signOutAll" | "block" | "unblock" | "rotaAllowOn" | "rotaAllowOff";
 
 /** A person's account for an admin: never their reading (spec 8). */
 export function PersonAdminPage() {
@@ -20,6 +20,8 @@ export function PersonAdminPage() {
   const signOutAll = useMutation(api.adminOps.signOutEverywhere);
   const block = useMutation(api.adminOps.blockPhone);
   const unblock = useMutation(api.adminOps.unblockPhone);
+  const setRotaAllowed = useMutation(api.adminOps.setRotaAllowed);
+  const rotaLabelId = useId();
   const [op, setOp] = useState<Op | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -35,9 +37,16 @@ export function PersonAdminPage() {
           ? await signOutAll(withNote({ adminToken, personId }, note))
           : which === "block"
             ? await block(withNote({ adminToken, phone: person.phone }, note))
-            : await unblock(
-                withNote({ adminToken, phone: person.phone }, note),
-              );
+            : which === "unblock"
+              ? await unblock(
+                  withNote({ adminToken, phone: person.phone }, note),
+                )
+              : await setRotaAllowed(
+                  withNote(
+                    { adminToken, personId, allowed: which === "rotaAllowOn" },
+                    note,
+                  ),
+                );
       setMessage("error" in res ? opsError(String(res.error)) : t.ops.done);
     } catch {
       setMessage(opsError("generic"));
@@ -107,6 +116,26 @@ export function PersonAdminPage() {
           </ul>
         </section>
       )}
+
+      <section className="flex items-center justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 py-3">
+        <span id={rotaLabelId}>{t.ops.rotaAllowed}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={p.rotaAllowed}
+          aria-labelledby={rotaLabelId}
+          onClick={() => setOp(p.rotaAllowed ? "rotaAllowOff" : "rotaAllowOn")}
+          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
+            p.rotaAllowed ? "bg-green" : "bg-line"
+          }`}
+        >
+          <span
+            className={`absolute top-1 size-6 rounded-full bg-white transition-all ${
+              p.rotaAllowed ? "start-7" : "start-1"
+            }`}
+          />
+        </button>
+      </section>
 
       {message && <p role="status">{message}</p>}
       <Button variant="ghost" onClick={() => setOp("signOutAll")}>
