@@ -1,7 +1,248 @@
-/* The website's theme (colors, fonts, pattern), plus what the panel reuses as Tailwind sources. */
-@import "../../web/src/styles.css";
+@import "tailwindcss";
+@import "tw-animate-css";
+/* The website's screens the rota pages still render (plan 2 rebuilds them). */
 @source "../../web/src/components";
 @source "../../web/src/features/khatma";
 @source "../../web/src/features/rota";
 @source "../../web/src/pages/RotaCreatePage.tsx";
 @source "../../web/src/pages/RotaSettingsPage.tsx";
+
+@custom-variant dark (&:is(.dark *));
+
+/* The console theme: deep-green sidebar, near-white work area, dense tables. */
+:root {
+  --background: #fbfcfb;
+  --foreground: #16211d;
+  --card: #ffffff;
+  --card-foreground: #16211d;
+  --popover: #ffffff;
+  --popover-foreground: #16211d;
+  --primary: #1f5a45;
+  --primary-foreground: #f6fbf8;
+  --secondary: #eef2ef;
+  --secondary-foreground: #1c2924;
+  --muted: #f1f4f2;
+  --muted-foreground: #5c6a64;
+  --accent: #eaf1ed;
+  --accent-foreground: #133a2d;
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --border: #e1e6e3;
+  --input: #d5dcd8;
+  --ring: #1f5a45;
+  --radius: 0.5rem;
+  --saffron: #b97c14;
+  --saffron-soft: #fbf0d9;
+  --saffron-ink: #5e4108;
+  --good: #17834a;
+  --good-soft: #e3f4ea;
+  --bad-soft: #fbe9e7;
+  --info: #2b6390;
+  --info-soft: #e5eff7;
+  --chart-1: #1f5a45;
+  --sidebar: #133a2d;
+  --sidebar-foreground: #dbe7e1;
+  --sidebar-primary: #d9a93f;
+  --sidebar-primary-foreground: #133a2d;
+  --sidebar-accent: #1c4c3b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #21503f;
+  --sidebar-ring: #d9a93f;
+}
+
+.dark {
+  --background: #0f1513;
+  --foreground: #e6ece9;
+  --card: #151d1a;
+  --card-foreground: #e6ece9;
+  --popover: #18211d;
+  --popover-foreground: #e6ece9;
+  --primary: #5fbb96;
+  --primary-foreground: #0d2a20;
+  --secondary: #1e2925;
+  --secondary-foreground: #e6ece9;
+  --muted: #1b2421;
+  --muted-foreground: #97a69f;
+  --accent: #213029;
+  --accent-foreground: #e6ece9;
+  --destructive: #ef7a70;
+  --destructive-foreground: #2a0d0a;
+  --border: #27332e;
+  --input: #2f3d37;
+  --ring: #5fbb96;
+  --saffron: #e0b050;
+  --saffron-soft: #33280f;
+  --saffron-ink: #f3d596;
+  --good: #63c98f;
+  --good-soft: #14291d;
+  --bad-soft: #351714;
+  --info: #84b6dc;
+  --info-soft: #152633;
+  --chart-1: #5fbb96;
+  --sidebar: #0c1311;
+  --sidebar-foreground: #c8d5cf;
+  --sidebar-primary: #d9a93f;
+  --sidebar-primary-foreground: #133a2d;
+  --sidebar-accent: #18231f;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1e2925;
+  --sidebar-ring: #d9a93f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-saffron: var(--saffron);
+  --color-saffron-soft: var(--saffron-soft);
+  --color-saffron-ink: var(--saffron-ink);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-chart-1: var(--chart-1);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Readex Pro", "Noto Sans Arabic", system-ui, sans-serif;
+  --font-display: "Aref Ruqaa", "Readex Pro", serif;
+  --font-quran: "Amiri Quran", serif;
+  /* The website's token names, until plan 2 rebuilds the rota pages. */
+  --color-paper: var(--background);
+  --color-paper-2: var(--muted);
+  --color-ink: var(--foreground);
+  --color-ink-soft: var(--muted-foreground);
+  --color-line: var(--border);
+  --color-green: var(--primary);
+  --color-green-deep: var(--primary);
+  --color-gold: var(--sidebar-primary);
+  --color-wa: var(--good);
+  --radius-ui: var(--radius-xl);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 350;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Phone numbers stay left-to-right inside Arabic text. */
+.ltr-text {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.page-gutter {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* What the rota pages need from the website's theme, until plan 2 rebuilds them. */
+.dark .bg-white {
+  background-color: var(--card);
+}
+
+.dark .bg-green {
+  background-color: #2a7459;
+}
+
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes toast-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
+@layer utilities {
+  .animate-sheet-fade {
+    animation: sheet-fade 0.2s ease both;
+  }
+
+  .animate-sheet-up {
+    animation: sheet-up 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  }
+
+  /* The undo countdown. It carries real information, so reduced motion keeps it. */
+  .animate-toast-shrink {
+    animation: toast-shrink linear both;
+  }
+}

@@ -1,10 +1,14 @@
 import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { Direction } from "radix-ui";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { ErrorBoundary } from "@web/components/ErrorBoundary";
 import { App } from "./App";
+import { applyStoredTheme } from "./lib/theme";
 import "./styles.css";
+
+applyStoredTheme();
 
 const root = createRoot(document.getElementById("root")!);
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
@@ -24,7 +28,9 @@ if (!convexUrl) {
       <ErrorBoundary>
         <ConvexProvider client={convex}>
           <BrowserRouter>
-            <App />
+            <Direction.Provider dir="rtl">
+              <App />
+            </Direction.Provider>
           </BrowserRouter>
         </ConvexProvider>
       </ErrorBoundary>

@@ -41,6 +41,7 @@ export default defineConfig({
           alias: {
             "@convex": fileURLToPath(new URL("./convex", import.meta.url)),
             "@web": fileURLToPath(new URL("./apps/web/src", import.meta.url)),
+            "@": fileURLToPath(new URL("./apps/admin/src", import.meta.url)),
           },
         },
         test: {
