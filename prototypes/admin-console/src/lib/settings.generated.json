@@ -1,0 +1,1049 @@
+{
+ "groups": [
+  {
+   "key": "switches",
+   "label": "المفاتيح",
+   "intro": "مفاتيح تؤثر في الموقع كله فوراً: الصيانة والإعلان والتحديث الإجباري."
+  },
+  {
+   "key": "pace",
+   "label": "الوتيرة والمهلة",
+   "intro": "كم يحتفظ القارئ بجزئه، وكيف تُحسب وتيرته، وكيف تُوزَّع الأجزاء."
+  },
+  {
+   "key": "notifications",
+   "label": "التنبيهات وساعات الهدوء",
+   "intro": "متى تصل التنبيهات إلى القرّاء والمشرفين، ومتى تتوقف."
+  },
+  {
+   "key": "help",
+   "label": "طلبات المساعدة",
+   "intro": "حدود طلبات المساعدة، ومتى تُغلق وتُحذف."
+  },
+  {
+   "key": "limits",
+   "label": "الحدود",
+   "intro": "حدود تحمي الموقع من الإساءة ومن رسائل واتساب المكلفة. ارفعها فقط إذا اصطدم بها مستخدمون حقيقيون."
+  },
+  {
+   "key": "sessions",
+   "label": "الجلسات والاحتفاظ",
+   "intro": "صلاحية رموز الدخول، والمنظّم البديل، والاحتفاظ بالملاحظات."
+  },
+  {
+   "key": "rota",
+   "label": "الختمة بالتناوب",
+   "intro": "القيم التي تبدأ بها كل ختمة بالتناوب، وحدودها. تبقى الأوقات بهذا الترتيب وخارج ساعات الهدوء."
+  }
+ ],
+ "rows": [
+  {
+   "key": "maintenanceMode",
+   "group": "switches",
+   "section": "general",
+   "sectionLabel": "عام",
+   "label": "وضع الصيانة",
+   "what": "يُظهر شريط الصيانة في الموقع ويوقف كل الأفعال.",
+   "why": "يبقى متوقفاً إلا أثناء صيانة أو عطل. شغّله قبل تغيير قد يُفسد البيانات، وأطفئه فور الانتهاء.",
+   "spec": {
+    "kind": "bool",
+    "group": "switches"
+   },
+   "value": false,
+   "defaultValue": false
+  },
+  {
+   "key": "maintenanceMessage",
+   "group": "switches",
+   "section": "general",
+   "sectionLabel": "عام",
+   "label": "رسالة الصيانة",
+   "what": "النص الذي يظهر في شريط الصيانة.",
+   "why": "إذا تُرك فارغاً ظهر نص الموقع الجاهز. اكتب نصاً خاصاً إن أردت ذكر السبب أو موعد العودة.",
+   "spec": {
+    "kind": "text",
+    "maxLength": 200,
+    "group": "switches"
+   },
+   "value": null,
+   "defaultValue": null
+  },
+  {
+   "key": "announcement",
+   "group": "switches",
+   "section": "general",
+   "sectionLabel": "عام",
+   "label": "إعلان أعلى الموقع",
+   "what": "رسالة تظهر أعلى كل صفحات الموقع حتى يخفيها الزائر.",
+   "why": "فارغ يعني لا إعلان. استعمله للأخبار المهمة فقط كي لا يعتاد الناس تجاهله.",
+   "spec": {
+    "kind": "text",
+    "maxLength": 200,
+    "group": "switches"
+   },
+   "value": null,
+   "defaultValue": null
+  },
+  {
+   "key": "minClientVersion",
+   "group": "switches",
+   "section": "general",
+   "sectionLabel": "عام",
+   "label": "أقل إصدار مسموح للموقع",
+   "what": "الموقع المفتوح بإصدار أقدم من هذا يعيد التحميل مرة ليأخذ الإصدار الجديد.",
+   "why": "فارغ لا يُجبر أحداً. استعمله بعد إصدار يصلح خللاً مهماً، واكتب رقمه (مثل 0.5.1).",
+   "spec": {
+    "kind": "version",
+    "group": "switches"
+   },
+   "value": null,
+   "defaultValue": null
+  },
+  {
+   "key": "graceDefaults",
+   "group": "pace",
+   "section": "grace",
+   "sectionLabel": "مهلة الجزء",
+   "label": "المهلة الافتراضية لكل جدول",
+   "what": "كم يحتفظ القارئ بجزئه قبل أن يسأله وِردك، لكل جدول. تبدأ بها كل ختمة جديدة.",
+   "why": "كل مدة تناسب طول جدولها: ٦ ساعات للختمة اليومية وأسبوع للشهرية. لا يُحسب منها إلا ما خارج ساعات الهدوء، ويستطيع المنظّم تغييرها لختمته.",
+   "spec": {
+    "kind": "grace",
+    "group": "pace"
+   },
+   "value": {
+    "daily": {
+     "value": 6,
+     "unit": "hours"
+    },
+    "every3days": {
+     "value": 1,
+     "unit": "days"
+    },
+    "weekly": {
+     "value": 2,
+     "unit": "days"
+    },
+    "biweekly": {
+     "value": 4,
+     "unit": "days"
+    },
+    "monthly": {
+     "value": 7,
+     "unit": "days"
+    },
+    "none": {
+     "value": 7,
+     "unit": "days"
+    }
+   },
+   "defaultValue": {
+    "daily": {
+     "value": 6,
+     "unit": "hours"
+    },
+    "every3days": {
+     "value": 1,
+     "unit": "days"
+    },
+    "weekly": {
+     "value": 2,
+     "unit": "days"
+    },
+    "biweekly": {
+     "value": 4,
+     "unit": "days"
+    },
+    "monthly": {
+     "value": 7,
+     "unit": "days"
+    },
+    "none": {
+     "value": 7,
+     "unit": "days"
+    }
+   }
+  },
+  {
+   "key": "graceNoticeFraction",
+   "group": "pace",
+   "section": "grace",
+   "sectionLabel": "مهلة الجزء",
+   "label": "تنبيه «قاربت المهلة» عند بقاء",
+   "what": "يصل القارئ تنبيه «قاربت المهلة» حين يبقى هذا الجزء من مهلته.",
+   "why": "الربع يعطي وقتاً كافياً للرد: ساعة ونصف في الختمة اليومية، ونحو يومين في الشهرية.",
+   "spec": {
+    "kind": "number",
+    "min": 0.05,
+    "max": 0.75,
+    "group": "pace"
+   },
+   "value": 0.25,
+   "defaultValue": 0.25
+  },
+  {
+   "key": "defaultPaceMs",
+   "group": "pace",
+   "section": "pace",
+   "sectionLabel": "الوتيرة",
+   "label": "الوتيرة الافتراضية",
+   "what": "المدة التي يُفترض أن يُنهي فيها القارئ جزءه قبل أن تُعرف وتيرته الحقيقية.",
+   "why": "ثلاثة أيام وتيرة مريحة لمعظم القرّاء الجدد، فلا يصلهم تذكير مبكر. يجب أن تقع بين أقل وتيرة وأعلاها.",
+   "spec": {
+    "kind": "duration",
+    "min": 86400000,
+    "max": 1209600000,
+    "group": "pace"
+   },
+   "value": 259200000,
+   "defaultValue": 259200000
+  },
+  {
+   "key": "paceMinMs",
+   "group": "pace",
+   "section": "pace",
+   "sectionLabel": "الوتيرة",
+   "label": "أقل وتيرة",
+   "what": "أسرع وتيرة تُحسب لأي قارئ مهما أسرع.",
+   "why": "يوم واحد يمنع قراءة سريعة استثنائية من تبكير تذكيراته القادمة.",
+   "spec": {
+    "kind": "duration",
+    "min": 3600000,
+    "max": 604800000,
+    "group": "pace"
+   },
+   "value": 86400000,
+   "defaultValue": 86400000
+  },
+  {
+   "key": "paceMaxMs",
+   "group": "pace",
+   "section": "pace",
+   "sectionLabel": "الوتيرة",
+   "label": "أعلى وتيرة",
+   "what": "أبطأ وتيرة تُحسب لأي قارئ مهما تأخّر.",
+   "why": "أسبوع يضمن أن يصل التذكير خلال مدة معقولة حتى للقارئ البطيء.",
+   "spec": {
+    "kind": "duration",
+    "min": 86400000,
+    "max": 2592000000,
+    "group": "pace"
+   },
+   "value": 604800000,
+   "defaultValue": 604800000
+  },
+  {
+   "key": "paceSampleSize",
+   "group": "pace",
+   "section": "pace",
+   "sectionLabel": "الوتيرة",
+   "label": "عدد القراءات في حساب الوتيرة",
+   "what": "عدد آخر القراءات التي تُحسب منها وتيرة القارئ، بأخذ الوسيط.",
+   "why": "خمس قراءات تعكس عادته الحالية، والوسيط يتجاهل قراءة شاذة واحدة.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 20,
+    "group": "pace"
+   },
+   "value": 5,
+   "defaultValue": 5
+  },
+  {
+   "key": "paceMinFinishes",
+   "group": "pace",
+   "section": "pace",
+   "sectionLabel": "الوتيرة",
+   "label": "قراءات قبل إظهار الوتيرة",
+   "what": "عدد القراءات المحسوبة قبل أن يعتمد وِردك وتيرة القارئ بدل الافتراضية.",
+   "why": "ثلاث قراءات أقل عدد يعطي وسيطاً له معنى.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 20,
+    "group": "pace"
+   },
+   "value": 3,
+   "defaultValue": 3
+  },
+  {
+   "key": "paceMinCountedMs",
+   "group": "pace",
+   "section": "pace",
+   "sectionLabel": "الوتيرة",
+   "label": "أقصر قراءة تُحسب في الوتيرة",
+   "what": "القراءة الأقصر من هذه المدة لا تدخل في حساب الوتيرة.",
+   "why": "قراءة جزء كامل تأخذ عادة أكثر من ٢٠ دقيقة. ما هو أسرع غالباً جزء قُرئ قبل أخذه.",
+   "spec": {
+    "kind": "duration",
+    "min": 0,
+    "max": 7200000,
+    "group": "pace"
+   },
+   "value": 1200000,
+   "defaultValue": 1200000
+  },
+  {
+   "key": "rotationLookbackRounds",
+   "group": "pace",
+   "section": "reading",
+   "sectionLabel": "التوزيع والتراجع",
+   "label": "جولات تُحسب في تدوير الأجزاء",
+   "what": "عند أخذ جزء، يتجنّب وِردك اقتراح جزء قرأه الشخص في هذا العدد من الجولات الأخيرة.",
+   "why": "ثلاث جولات تكفي ليتنقّل القارئ بين أجزاء مختلفة دون أن تضيق الخيارات. صفر يقترح دائماً أصغر جزء متاح.",
+   "spec": {
+    "kind": "int",
+    "min": 0,
+    "max": 10,
+    "group": "pace"
+   },
+   "value": 3,
+   "defaultValue": 3
+  },
+  {
+   "key": "undoWindowMs",
+   "group": "pace",
+   "section": "reading",
+   "sectionLabel": "التوزيع والتراجع",
+   "label": "مهلة التراجع عن «أنهيت»",
+   "what": "المدة التي يظهر فيها زر التراجع بعد الضغط على «أنهيت».",
+   "why": "عشر ثوانٍ تكفي لتدارك ضغطة خاطئة دون تأخير الإنجاز.",
+   "spec": {
+    "kind": "duration",
+    "min": 3000,
+    "max": 60000,
+    "group": "pace"
+   },
+   "value": 10000,
+   "defaultValue": 10000
+  },
+  {
+   "key": "completionDelayMs",
+   "group": "pace",
+   "section": "reading",
+   "sectionLabel": "التوزيع والتراجع",
+   "label": "انتظار قبل إعلان اكتمال الختمة",
+   "what": "بعد آخر «أنهيت» في الجولة، ينتظر وِردك هذه المدة قبل إعلان اكتمال الختمة.",
+   "why": "تساوي مهلة التراجع، فلا تُعلَن ختمة ثم يتراجع قارئ عن آخر جزء فيها.",
+   "spec": {
+    "kind": "duration",
+    "min": 0,
+    "max": 60000,
+    "group": "pace"
+   },
+   "value": 10000,
+   "defaultValue": 10000
+  },
+  {
+   "key": "quietStartHour",
+   "group": "notifications",
+   "section": "quiet",
+   "sectionLabel": "ساعات الهدوء",
+   "label": "بداية ساعات الهدوء",
+   "what": "من هذه الساعة لا تصل تنبيهات ويتوقف عدّاد المهلة، بتوقيت كل قارئ.",
+   "why": "العاشرة مساءً وقت نوم معظم الناس. ما يتأجل من تنبيهات يصل صباحاً.",
+   "spec": {
+    "kind": "hour",
+    "group": "notifications"
+   },
+   "value": 22,
+   "defaultValue": 22
+  },
+  {
+   "key": "quietEndHour",
+   "group": "notifications",
+   "section": "quiet",
+   "sectionLabel": "ساعات الهدوء",
+   "label": "نهاية ساعات الهدوء",
+   "what": "من هذه الساعة تعود التنبيهات ويستأنف عدّاد المهلة.",
+   "why": "السابعة صباحاً وقت استيقاظ معظم الناس. لا يمكن أن تساوي ساعة البداية.",
+   "spec": {
+    "kind": "hour",
+    "group": "notifications"
+   },
+   "value": 7,
+   "defaultValue": 7
+  },
+  {
+   "key": "reminderPaceMultiple",
+   "group": "notifications",
+   "section": "readers",
+   "sectionLabel": "تنبيهات القرّاء",
+   "label": "التذكير بعد (أضعاف الوتيرة)",
+   "what": "يصل القارئ تذكير حين يمضي على جزئه وتيرته مضروبة في هذا الرقم.",
+   "why": "مرة ونصف تعطي القارئ وقته المعتاد وزيادة قبل أي تذكير، فلا يشعر بالاستعجال.",
+   "spec": {
+    "kind": "number",
+    "min": 1.1,
+    "max": 5,
+    "group": "notifications"
+   },
+   "value": 1.5,
+   "defaultValue": 1.5
+  },
+  {
+   "key": "nudgeCooldownMs",
+   "group": "notifications",
+   "section": "readers",
+   "sectionLabel": "تنبيهات القرّاء",
+   "label": "أقل مدة بين تذكيرين",
+   "what": "أقل مدة بين تذكيرين أو دعوتين يصلان العضو نفسه.",
+   "why": "تذكير واحد في اليوم يكفي. أكثر منه يدفع الناس إلى إيقاف التنبيهات.",
+   "spec": {
+    "kind": "duration",
+    "min": 3600000,
+    "max": 604800000,
+    "group": "notifications"
+   },
+   "value": 86400000,
+   "defaultValue": 86400000
+  },
+  {
+   "key": "openForHelpBatchMs",
+   "group": "notifications",
+   "section": "readers",
+   "sectionLabel": "تنبيهات القرّاء",
+   "label": "تجميع تنبيهات «متاح للمساعدة»",
+   "what": "الأجزاء التي تُتاح للمساعدة خلال هذه المدة تُجمع في تنبيه واحد.",
+   "why": "ساعة تجمع الأجزاء التي تُتاح معاً في رسالة واحدة بدل سيل من التنبيهات.",
+   "spec": {
+    "kind": "duration",
+    "min": 0,
+    "max": 21600000,
+    "group": "notifications"
+   },
+   "value": 3600000,
+   "defaultValue": 3600000
+  },
+  {
+   "key": "summaryHour",
+   "group": "notifications",
+   "section": "admins",
+   "sectionLabel": "تنبيهات المشرفين",
+   "label": "ساعة الملخص الصباحي (بتوقيت دبي)",
+   "what": "ساعة وصول الملخص الصباحي إلى المشرفين، بتوقيت دبي.",
+   "why": "الثامنة صباحاً بداية يوم العمل.",
+   "spec": {
+    "kind": "hour",
+    "group": "notifications"
+   },
+   "value": 8,
+   "defaultValue": 8
+  },
+  {
+   "key": "milestonePushSpacingMs",
+   "group": "notifications",
+   "section": "admins",
+   "sectionLabel": "تنبيهات المشرفين",
+   "label": "أقل مدة بين تنبيهي إنجاز",
+   "what": "أقل مدة بين تنبيهي إنجاز يصلان المشرفين.",
+   "why": "دقيقة تمنع وصول عدة تنبيهات معاً حين تُتجاوز أكثر من علامة في وقت واحد.",
+   "spec": {
+    "kind": "duration",
+    "min": 10000,
+    "max": 3600000,
+    "group": "notifications"
+   },
+   "value": 60000,
+   "defaultValue": 60000
+  },
+  {
+   "key": "helpRequestsPerPersonPerDay",
+   "group": "help",
+   "section": "helpLimits",
+   "sectionLabel": "الحدود",
+   "label": "طلبات مساعدة لكل شخص / يوم",
+   "what": "عدد طلبات المساعدة التي يفتحها شخص مسجّل في اليوم.",
+   "why": "يكفي لمن لديه أكثر من مشكلة، ويحمي صندوق المساعدة من التكرار.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 50,
+    "group": "help"
+   },
+   "value": 5,
+   "defaultValue": 5
+  },
+  {
+   "key": "helpRequestsPerVisitorPerDay",
+   "group": "help",
+   "section": "helpLimits",
+   "sectionLabel": "الحدود",
+   "label": "طلبات مساعدة لكل زائر / يوم",
+   "what": "عدد طلبات المساعدة التي يفتحها زائر لم يسجّل الدخول، في اليوم.",
+   "why": "أقل من حد المسجّل لأن الزائر مجهول وإساءة الاستخدام منه أسهل.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 50,
+    "group": "help"
+   },
+   "value": 3,
+   "defaultValue": 3
+  },
+  {
+   "key": "helpRequestsPerIpPerDay",
+   "group": "help",
+   "section": "helpLimits",
+   "sectionLabel": "الحدود",
+   "label": "طلبات مساعدة لكل IP / يوم",
+   "what": "عدد طلبات المساعدة من عنوان IP واحد في اليوم.",
+   "why": "أعلى من حد الشخص لأن أهل بيت أو مسجد قد يتشاركون عنواناً واحداً.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 500,
+    "group": "help"
+   },
+   "value": 10,
+   "defaultValue": 10
+  },
+  {
+   "key": "helpMessagesPerHour",
+   "group": "help",
+   "section": "helpLimits",
+   "sectionLabel": "الحدود",
+   "label": "رسائل المساعدة / ساعة",
+   "what": "عدد الرسائل والمرفقات في محادثات المساعدة لكل شخص أو زائر في الساعة.",
+   "why": "يكفي لمحادثة طبيعية، ويوقف الإغراق بالرسائل أو الملفات.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 200,
+    "group": "help"
+   },
+   "value": 20,
+   "defaultValue": 20
+  },
+  {
+   "key": "helpAutoCloseMs",
+   "group": "help",
+   "section": "helpRetention",
+   "sectionLabel": "الإغلاق والحذف",
+   "label": "إغلاق تلقائي بعد الرد بلا جواب",
+   "what": "الطلب الذي رددنا عليه ولم يرد صاحبه يُغلق تلقائياً بعد هذه المدة.",
+   "why": "أسبوعان وقت كافٍ لمن يريد المتابعة، ويبقى صندوق المساعدة نظيفاً.",
+   "spec": {
+    "kind": "duration",
+    "min": 86400000,
+    "max": 7776000000,
+    "group": "help"
+   },
+   "value": 1209600000,
+   "defaultValue": 1209600000
+  },
+  {
+   "key": "helpAttachmentRetentionMs",
+   "group": "help",
+   "section": "helpRetention",
+   "sectionLabel": "الإغلاق والحذف",
+   "label": "الاحتفاظ بالصور والتسجيلات بعد الإغلاق",
+   "what": "الصور والتسجيلات الصوتية تُحذف بعد إغلاق الطلب بهذه المدة.",
+   "why": "شهر يكفي للرجوع إليها إن عاد الطلب، ولا نحتفظ بملفات شخصية أطول من الحاجة.",
+   "spec": {
+    "kind": "duration",
+    "min": 86400000,
+    "max": 31536000000,
+    "group": "help"
+   },
+   "value": 2592000000,
+   "defaultValue": 2592000000
+  },
+  {
+   "key": "helpRetentionMs",
+   "group": "help",
+   "section": "helpRetention",
+   "sectionLabel": "الإغلاق والحذف",
+   "label": "الاحتفاظ بالمحادثة بعد الإغلاق",
+   "what": "المحادثة كلها تُحذف بعد إغلاقها بهذه المدة.",
+   "why": "ستة أشهر تكفي لفهم المشكلات المتكررة، ثم تُحذف حفاظاً على الخصوصية.",
+   "spec": {
+    "kind": "duration",
+    "min": 2592000000,
+    "max": 63072000000,
+    "group": "help"
+   },
+   "value": 15552000000,
+   "defaultValue": 15552000000
+  },
+  {
+   "key": "maxMembers",
+   "group": "limits",
+   "section": "khatmaUse",
+   "sectionLabel": "استخدام الختمات",
+   "label": "أقصى عدد أعضاء في الختمة",
+   "what": "أكبر عدد من الأعضاء في ختمة واحدة.",
+   "why": "ضعف عدد الأجزاء: يجد كل عضو جزءاً في جولة من كل جولتين تقريباً، ويبقى المنظّم قادراً على متابعتهم.",
+   "spec": {
+    "kind": "int",
+    "min": 2,
+    "max": 500,
+    "group": "limits"
+   },
+   "value": 60,
+   "defaultValue": 60
+  },
+  {
+   "key": "createsPerPersonPerDay",
+   "group": "limits",
+   "section": "khatmaUse",
+   "sectionLabel": "استخدام الختمات",
+   "label": "ختمات جديدة لكل شخص / يوم",
+   "what": "عدد الختمات الجديدة التي ينشئها شخص واحد في اليوم.",
+   "why": "يكفي لمنظّم يبدأ عدة مجموعات، ويمنع إغراق الموقع بختمات وهمية.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 100,
+    "group": "limits"
+   },
+   "value": 5,
+   "defaultValue": 5
+  },
+  {
+   "key": "newMembersPerKhatmaPerHour",
+   "group": "limits",
+   "section": "khatmaUse",
+   "sectionLabel": "استخدام الختمات",
+   "label": "أعضاء جدد لكل ختمة / ساعة",
+   "what": "عدد الأعضاء الجدد الذين ينضمّون إلى ختمة واحدة في الساعة.",
+   "why": "يكفي لمشاركة الرابط في مجموعة واتساب كبيرة، ويُبطئ من يستغل رابطاً مسرّباً.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 500,
+    "group": "limits"
+   },
+   "value": 30,
+   "defaultValue": 30
+  },
+  {
+   "key": "poolActionsPerPersonPerMinute",
+   "group": "limits",
+   "section": "khatmaUse",
+   "sectionLabel": "استخدام الختمات",
+   "label": "أخذ وإنهاء الأجزاء لكل شخص / دقيقة",
+   "what": "عدد مرات أخذ الأجزاء وإنهائها والتراجع والإرجاع لشخص واحد في الدقيقة.",
+   "why": "القارئ يحتاج فعلاً أو اثنين. عشرة تمنع النقر المتكرر والبرامج الآلية من العبث بالجولة.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 100,
+    "group": "limits"
+   },
+   "value": 10,
+   "defaultValue": 10
+  },
+  {
+   "key": "nameChangesPerPersonPerHour",
+   "group": "limits",
+   "section": "khatmaUse",
+   "sectionLabel": "استخدام الختمات",
+   "label": "تغيير الاسم لكل شخص / ساعة",
+   "what": "عدد مرات تغيير الاسم لشخص واحد في الساعة.",
+   "why": "تصحيح الاسم يحتاج مرة أو مرتين. الحد يمنع التلاعب بالأسماء أمام المجموعة.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 100,
+    "group": "limits"
+   },
+   "value": 10,
+   "defaultValue": 10
+  },
+  {
+   "key": "verifyStartPerClientPer10Min",
+   "group": "limits",
+   "section": "signInAbuse",
+   "sectionLabel": "حماية الدخول عبر واتساب",
+   "label": "بدء التحقق لكل جهاز / ١٠ دقائق",
+   "what": "كم مرة يبدأ جهاز واحد الدخول عبر واتساب خلال ١٠ دقائق.",
+   "why": "من يحاول أكثر من خمس مرات في عشر دقائق يحتاج غالباً إلى مساعدة لا إلى محاولة أخرى.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 100,
+    "group": "limits"
+   },
+   "value": 5,
+   "defaultValue": 5
+  },
+  {
+   "key": "verifyStartPerIpPer10Min",
+   "group": "limits",
+   "section": "signInAbuse",
+   "sectionLabel": "حماية الدخول عبر واتساب",
+   "label": "بدء التحقق لكل عنوان IP / ١٠ دقائق",
+   "what": "كم مرة يبدأ عنوان IP واحد الدخول عبر واتساب خلال ١٠ دقائق.",
+   "why": "أعلى من حد الجهاز لأن شبكات الجوال وواي فاي البيوت تضع أشخاصاً كثيرين على عنوان واحد.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 1000,
+    "group": "limits"
+   },
+   "value": 30,
+   "defaultValue": 30
+  },
+  {
+   "key": "verifyPerPhonePerHour",
+   "group": "limits",
+   "section": "signInAbuse",
+   "sectionLabel": "حماية الدخول عبر واتساب",
+   "label": "رسائل التحقق لكل رقم / ساعة",
+   "what": "عدد رسائل التحقق عبر واتساب التي تصل رقماً واحداً في الساعة.",
+   "why": "يحمي صاحب الرقم من رسائل لم يطلبها، ويترك مجالاً لمن أخطأ عدة مرات.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 100,
+    "group": "limits"
+   },
+   "value": 10,
+   "defaultValue": 10
+  },
+  {
+   "key": "verifyGlobalPerMinute",
+   "group": "limits",
+   "section": "signInAbuse",
+   "sectionLabel": "حماية الدخول عبر واتساب",
+   "label": "بدء التحقق للجميع / دقيقة",
+   "what": "سقف بدء الدخول عبر واتساب للجميع معاً في الدقيقة.",
+   "why": "صمّام أمان ضد هجوم واسع يرفع فاتورة واتساب. ١٢٠ أعلى بكثير من الاستخدام العادي، فارفعه فقط قبل حملة دعوات كبيرة.",
+   "spec": {
+    "kind": "int",
+    "min": 10,
+    "max": 10000,
+    "group": "limits"
+   },
+   "value": 120,
+   "defaultValue": 120
+  },
+  {
+   "key": "previewPerIpPerMinute",
+   "group": "limits",
+   "section": "links",
+   "sectionLabel": "الروابط",
+   "label": "معاينات الروابط لكل IP / دقيقة",
+   "what": "عدد معاينات روابط الدعوة لكل عنوان IP في الدقيقة.",
+   "why": "مشاركة الرابط في عدة مجموعات تحتاج القليل. الحد يوقف من يحاول تخمين روابط الدعوة.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 1000,
+    "group": "limits"
+   },
+   "value": 30,
+   "defaultValue": 30
+  },
+  {
+   "key": "handoffRedeemGlobalPerMinute",
+   "group": "limits",
+   "section": "links",
+   "sectionLabel": "الروابط",
+   "label": "تفعيل تطبيق الشاشة الرئيسية / دقيقة",
+   "what": "عدد مرات نقل الدخول إلى تطبيق الشاشة الرئيسية، للجميع معاً في الدقيقة.",
+   "why": "صمّام أمان ضد تخمين روابط النقل. ٦٠ أعلى بكثير من الاستخدام العادي.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 1000,
+    "group": "limits"
+   },
+   "value": 60,
+   "defaultValue": 60
+  },
+  {
+   "key": "verificationTtlMs",
+   "group": "sessions",
+   "section": "signInCodes",
+   "sectionLabel": "رموز الدخول",
+   "label": "صلاحية رمز التحقق",
+   "what": "المدة التي يبقى فيها رمز الدخول المرسل عبر واتساب صالحاً.",
+   "why": "عشر دقائق تكفي لفتح واتساب ونسخ الرمز مع شبكة بطيئة، وتبقى قصيرة بما يحمي الحساب.",
+   "spec": {
+    "kind": "duration",
+    "min": 120000,
+    "max": 1800000,
+    "group": "sessions"
+   },
+   "value": 600000,
+   "defaultValue": 600000
+  },
+  {
+   "key": "pinMaxAttempts",
+   "group": "sessions",
+   "section": "signInCodes",
+   "sectionLabel": "رموز الدخول",
+   "label": "محاولات الرمز المسموحة",
+   "what": "عدد المرات التي يُكتب فيها رمز خاطئ قبل أن يبدأ الشخص من جديد.",
+   "why": "خمس محاولات تغطي أخطاء الكتابة العادية، وتجعل تخمين رمز من ستة أرقام شبه مستحيل.",
+   "spec": {
+    "kind": "int",
+    "min": 3,
+    "max": 10,
+    "group": "sessions"
+   },
+   "value": 5,
+   "defaultValue": 5
+  },
+  {
+   "key": "handoffTtlMs",
+   "group": "sessions",
+   "section": "signInCodes",
+   "sectionLabel": "رموز الدخول",
+   "label": "صلاحية رابط تطبيق الشاشة الرئيسية",
+   "what": "مدة صلاحية رابط نقل الدخول إلى تطبيق الشاشة الرئيسية.",
+   "why": "نصف ساعة تكفي لإضافة الموقع إلى الشاشة الرئيسية وفتحه، ولا يبقى الرابط صالحاً طويلاً إن تسرّب.",
+   "spec": {
+    "kind": "duration",
+    "min": 300000,
+    "max": 7200000,
+    "group": "sessions"
+   },
+   "value": 1800000,
+   "defaultValue": 1800000
+  },
+  {
+   "key": "organizerInactiveMs",
+   "group": "sessions",
+   "section": "organizer",
+   "sectionLabel": "المنظّم البديل",
+   "label": "غياب المنظّم قبل التسليم التلقائي",
+   "what": "إذا غاب المنظّم هذه المدة، ينتقل دوره تلقائياً إلى عضو نشط.",
+   "why": "شهر غياب طويل بما يكفي ليكون حقيقياً، وقصير بما يكفي كي لا تتوقف الختمة.",
+   "spec": {
+    "kind": "duration",
+    "min": 604800000,
+    "max": 15552000000,
+    "group": "sessions"
+   },
+   "value": 2592000000,
+   "defaultValue": 2592000000
+  },
+  {
+   "key": "successorActiveMs",
+   "group": "sessions",
+   "section": "organizer",
+   "sectionLabel": "المنظّم البديل",
+   "label": "نشاط المنظّم البديل خلال",
+   "what": "لا يُختار المنظّم البديل إلا من عضو فتح وِردك خلال هذه المدة.",
+   "why": "أسبوع يضمن أن البديل ما زال مشاركاً فعلاً.",
+   "spec": {
+    "kind": "duration",
+    "min": 86400000,
+    "max": 2592000000,
+    "group": "sessions"
+   },
+   "value": 604800000,
+   "defaultValue": 604800000
+  },
+  {
+   "key": "notesRetentionMs",
+   "group": "sessions",
+   "section": "notes",
+   "sectionLabel": "الملاحظات",
+   "label": "الاحتفاظ بالملاحظات بعد قراءتها",
+   "what": "الملاحظة التي قرأها صاحبها تُحذف بعد هذه المدة.",
+   "why": "شهر يسمح بالرجوع إليها عند السؤال، ثم لا تعود مفيدة.",
+   "spec": {
+    "kind": "duration",
+    "min": 86400000,
+    "max": 31536000000,
+    "group": "sessions"
+   },
+   "value": 2592000000,
+   "defaultValue": 2592000000
+  },
+  {
+   "key": "notesUnclearedCapMs",
+   "group": "sessions",
+   "section": "notes",
+   "sectionLabel": "الملاحظات",
+   "label": "أقصى عمر لملاحظة غير مقروءة",
+   "what": "الملاحظة التي لم تُقرأ تُحذف حين يبلغ عمرها هذه المدة.",
+   "why": "حد أمان كي لا تتراكم ملاحظات قديمة في حسابات مهجورة.",
+   "spec": {
+    "kind": "duration",
+    "min": 2592000000,
+    "max": 63072000000,
+    "group": "sessions"
+   },
+   "value": 15552000000,
+   "defaultValue": 15552000000
+  },
+  {
+   "key": "rotaDayAt",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "وقت رسالة ختمة اليوم",
+   "what": "الوقت الافتراضي لرسالة جزء اليوم إلى كل مشارك، بتوقيت الختمة. يغيّره المنظّم لختمته.",
+   "why": "الثامنة صباحاً تترك اليوم كله للقراءة وتقع بعد ساعات الهدوء. يُغلق يوم القراءة في هذا الوقت من اليوم التالي.",
+   "spec": {
+    "kind": "time",
+    "group": "rota"
+   },
+   "value": 480,
+   "defaultValue": 480
+  },
+  {
+   "key": "rotaReminderAt",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "وقت تذكير القراءة",
+   "what": "الوقت الافتراضي لتذكير من لم يُتمّ جزءه بعد.",
+   "why": "الرابعة عصراً تترك وقتاً كافياً للقراءة قبل المساء.",
+   "spec": {
+    "kind": "time",
+    "group": "rota"
+   },
+   "value": 960,
+   "defaultValue": 960
+  },
+  {
+   "key": "rotaReminderOn",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "تذكير القراءة مفعّل",
+   "what": "هل يصل التذكير في الختمات الجديدة.",
+   "why": "مفعّل لأن تذكيراً واحداً في اليوم يرفع عدد من يُتمّون أجزاءهم.",
+   "spec": {
+    "kind": "bool",
+    "group": "rota"
+   },
+   "value": true,
+   "defaultValue": true
+  },
+  {
+   "key": "rotaUnreadAt",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "وقت قائمة الأجزاء غير المقروءة",
+   "what": "الوقت الافتراضي لقائمة الأجزاء غير المقروءة التي تصل المنظّم.",
+   "why": "السابعة مساءً تترك للمنظّم وقتاً ليُسند جزءاً أو يقرأه بنفسه قبل نهاية اليوم.",
+   "spec": {
+    "kind": "time",
+    "group": "rota"
+   },
+   "value": 1140,
+   "defaultValue": 1140
+  },
+  {
+   "key": "rotaUnreadOn",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "قائمة الأجزاء غير المقروءة مفعّلة",
+   "what": "هل تصل قائمة الأجزاء غير المقروءة إلى المنظّم في الختمات الجديدة.",
+   "why": "مفعّلة لأنها ما يحتاجه المنظّم كي لا يفوت جزء.",
+   "spec": {
+    "kind": "bool",
+    "group": "rota"
+   },
+   "value": true,
+   "defaultValue": true
+  },
+  {
+   "key": "rotaSummaryAt",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "وقت ملخص اليوم",
+   "what": "الوقت الافتراضي لملخص اليوم الذي يصل المنظّم.",
+   "why": "التاسعة مساءً آخر ساعة قبل ساعات الهدوء.",
+   "spec": {
+    "kind": "time",
+    "group": "rota"
+   },
+   "value": 1260,
+   "defaultValue": 1260
+  },
+  {
+   "key": "rotaSummaryOn",
+   "group": "rota",
+   "section": "rotaTimes",
+   "sectionLabel": "أوقات الرسائل",
+   "label": "ملخص اليوم مفعّل",
+   "what": "هل يصل ملخص اليوم إلى المنظّم في الختمات الجديدة.",
+   "why": "متوقف لأن قائمة غير المقروءة تكفي معظم المنظّمين، ولكل رسالة واتساب كلفة.",
+   "spec": {
+    "kind": "bool",
+    "group": "rota"
+   },
+   "value": false,
+   "defaultValue": false
+  },
+  {
+   "key": "rotaMaxActivePerOrganizer",
+   "group": "rota",
+   "section": "rotaLimits",
+   "sectionLabel": "الحدود",
+   "label": "أقصى عدد ختمات بالتناوب نشطة لكل منظّم",
+   "what": "أقصى عدد ختمات بالتناوب نشطة يديرها منظّم واحد في الوقت نفسه.",
+   "why": "ختمة يومية من ٣٠ شخصاً ترسل ٣٠ رسالة واتساب على الأقل كل يوم. ختمتان تكفيان وتحميان رقمنا من الكلفة والحظر.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 20,
+    "group": "rota"
+   },
+   "value": 2,
+   "defaultValue": 2
+  },
+  {
+   "key": "rotaMaxSlotsPerPerson",
+   "group": "rota",
+   "section": "rotaLimits",
+   "sectionLabel": "الحدود",
+   "label": "أقصى عدد أجزاء لكل قارئ في الختمة بالتناوب",
+   "what": "أقصى عدد أجزاء يحملها قارئ واحد في ختمة بالتناوب.",
+   "why": "ثلاثة تسمح لمجموعة صغيرة بإكمال الأجزاء الثلاثين دون أن يُثقَل قارئ واحد.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 30,
+    "group": "rota"
+   },
+   "value": 3,
+   "defaultValue": 3
+  },
+  {
+   "key": "rotaSilenceNoticeDays",
+   "group": "rota",
+   "section": "rotaSilence",
+   "sectionLabel": "الصمت",
+   "label": "أيام صمت المشارك قبل تنبيه المنظّم",
+   "what": "إذا لم يردّ مشارك على رسائل جزئه هذا العدد من أيام القراءة المتتالية، يصل المنظّم تنبيه باسمه.",
+   "why": "ثلاثة أيام تفرّق بين انشغال عابر وانقطاع حقيقي، فيعرف المنظّم من يسأل عنه.",
+   "spec": {
+    "kind": "int",
+    "min": 1,
+    "max": 30,
+    "group": "rota"
+   },
+   "value": 3,
+   "defaultValue": 3
+  },
+  {
+   "key": "rotaSilenceStopDays",
+   "group": "rota",
+   "section": "rotaSilence",
+   "sectionLabel": "الصمت",
+   "label": "أيام صمت المشارك قبل إيقاف رسائله",
+   "what": "إذا لم يردّ مشارك هذا العدد من أيام القراءة المتتالية، نوقف رسائل واتساب إليه ونخبر المنظّم. أي رسالة منه تعيدها.",
+   "why": "من لا يردّ أسبوعاً لا يقرأ الرسائل غالباً. إيقافها يوفّر الكلفة ويحمي رقمنا من البلاغات.",
+   "spec": {
+    "kind": "int",
+    "min": 2,
+    "max": 60,
+    "group": "rota"
+   },
+   "value": 7,
+   "defaultValue": 7
+  }
+ ]
+}
