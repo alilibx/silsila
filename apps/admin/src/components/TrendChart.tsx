@@ -43,7 +43,9 @@ export function TrendChart({ points, format, label, period }: Props) {
     .map((p) => p.value)
     .filter((v): v is number => v !== null);
   if (values.length === 0) {
-    return <p className="py-8 text-center text-muted-foreground">{t.stats.noData}</p>;
+    return (
+      <p className="py-8 text-center text-muted-foreground">{t.stats.noData}</p>
+    );
   }
   const max = Math.max(...values, 0) || 1;
   const width = points.length * SLOT;
@@ -103,7 +105,9 @@ export function TrendChart({ points, format, label, period }: Props) {
                     HEIGHT - Math.max(1, (p.value / max) * (HEIGHT - 4)),
                     BAR,
                   )}
-                  fill={i === active ? "var(--sidebar-primary)" : "var(--chart-1)"}
+                  fill={
+                    i === active ? "var(--sidebar-primary)" : "var(--chart-1)"
+                  }
                 />
               )}
               <rect

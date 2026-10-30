@@ -1,7 +1,9 @@
+import { PageHeader } from "../components/PageHeader";
+import { Input } from "@/components/ui/input";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button } from "@web/components/Button";
-import { Sheet } from "@web/components/Sheet";
+import { Button } from "@/components/ui/button";
+import { AdminSheet } from "../components/AdminSheet";
 import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { t } from "../i18n/ar";
@@ -45,13 +47,11 @@ export function AdminsPage() {
   if (admins === undefined) return null;
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">
-        {t.admins.title}
-      </h1>
+      <PageHeader title={t.admins.title} />
       {error !== null && (
         <p
           role="alert"
-          className="rounded-ui bg-saffron-soft p-3 text-saffron-ink"
+          className="rounded-lg bg-saffron-soft p-3 text-saffron-ink"
         >
           {error}
         </p>
@@ -60,11 +60,11 @@ export function AdminsPage() {
         {admins.map((admin) => (
           <li
             key={admin.adminId}
-            className="flex items-center justify-between rounded-ui border-2 border-line bg-card px-4 py-3"
+            className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
           >
             <span dir="ltr">{admin.phone}</span>
             {admin.isMe ? (
-              <span className="text-sm text-green-deep">{t.admins.you}</span>
+              <span className="text-sm text-primary">{t.admins.you}</span>
             ) : (
               <button
                 type="button"
@@ -87,20 +87,23 @@ export function AdminsPage() {
         }}
       >
         <label htmlFor={phoneId}>{t.admins.phoneLabel}</label>
-        <input
+        <Input
           id={phoneId}
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           inputMode="tel"
           dir="ltr"
-          className="rounded-ui border-2 border-line bg-white p-3"
+          className="rounded-lg border bg-card p-3"
         />
         <Button type="submit" disabled={busy || phone.trim() === ""}>
           {t.admins.add}
         </Button>
       </form>
       {removing !== null && (
-        <Sheet title={t.admins.confirmTitle} onClose={() => setRemoving(null)}>
+        <AdminSheet
+          title={t.admins.confirmTitle}
+          onClose={() => setRemoving(null)}
+        >
           <p className="mb-4">{t.admins.confirmBody}</p>
           <div className="flex flex-col gap-2">
             <Button
@@ -113,11 +116,11 @@ export function AdminsPage() {
             >
               {t.admins.confirmRemove}
             </Button>
-            <Button variant="ghost" onClick={() => setRemoving(null)}>
+            <Button variant="outline" onClick={() => setRemoving(null)}>
               {t.admins.cancel}
             </Button>
           </div>
-        </Sheet>
+        </AdminSheet>
       )}
     </div>
   );
