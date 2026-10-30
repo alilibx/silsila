@@ -1,20 +1,20 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { toArabicDigits } from "@convex/lib/digits";
+import type { PeopleView as View } from "@convex/lib/rotaOps";
 import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
 import { JoinRequests } from "./JoinRequests";
+import { SavedPicker } from "./SavedPicker";
 import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate } from "./format";
 
-type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
 type Person = View["participants"][number];
 
 const peopleErrors: Record<string, string> = t.rota.peopleErrors;
@@ -37,17 +37,18 @@ function PersonSheet({
   juz: number;
   onClose: () => void;
 }) {
-  const moveJuz = useMutation(api.rota.moveJuz);
-  const giveJuz = useMutation(api.rota.giveJuz);
-  const freeJuz = useMutation(api.rota.freeJuz);
-  const removeParticipant = useMutation(api.rota.removeParticipant);
+  const backend = useRotaBackend(inviteCode);
+  const moveJuz = useMutation(backend.moveJuz);
+  const giveJuz = useMutation(backend.giveJuz);
+  const freeJuz = useMutation(backend.freeJuz);
+  const removeParticipant = useMutation(backend.removeParticipant);
   const holderOf = (n: number) => view.rows[n - 1]?.participant ?? null;
   const others = view.rows.filter((row) => row.juz !== juz);
   const free = others.find((row) => row.participant === null);
   const [target, setTarget] = useState(free?.juz ?? others[0]?.juz ?? juz);
   const [confirming, setConfirming] = useState(false);
   const { busy, error, run } = useRotaCall(peopleErrors);
-  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+  const args = backend.authArgs();
   const nextFree = view.freeJuz[0];
   const canGive = nextFree !== undefined && person.juz.length < view.maxSlots;
   const swapWith = holderOf(target);
@@ -174,13 +175,16 @@ function PersonSheet({
             </span>
           </Button>
         ) : (
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => setConfirming(true)}
-          >
-            {t.rota.remove}
-          </Button>
+          // A khatma keeps its organizer, whoever is looking at it.
+          !person.isOrganizer && (
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setConfirming(true)}
+            >
+              {t.rota.remove}
+            </Button>
+          )
         )}
       </div>
       <ErrorLine error={error} />
@@ -200,9 +204,22 @@ function EmptyRowSheet({
   juz: number;
   onClose: () => void;
 }) {
-  const giveJuz = useMutation(api.rota.giveJuz);
+  const backend = useRotaBackend(inviteCode);
+  const giveJuz = useMutation(backend.giveJuz);
+  const saved = useQuery(backend.saved, backend.scope);
+  const [picking, setPicking] = useState(false);
   const { busy, error, run } = useRotaCall(peopleErrors);
   const listId = useId();
+  if (picking) {
+    return (
+      <SavedPicker
+        inviteCode={inviteCode}
+        juz={juz}
+        onClose={() => setPicking(false)}
+        onAdded={onClose}
+      />
+    );
+  }
   return (
     <Sheet title={t.rota.readerTitle(juz)} onClose={onClose}>
       <p className="mb-4 leading-relaxed text-ink-soft">
@@ -214,6 +231,13 @@ function EmptyRowSheet({
         variant="primary"
         onAdded={onClose}
       />
+      {saved && saved.length > 0 && (
+        <div className="mt-4">
+          <Button variant="ghost" onClick={() => setPicking(true)}>
+            {t.rota.savedFrom}
+          </Button>
+        </div>
+      )}
       {view.participants.length > 0 && (
         <>
           <h3 id={listId} className="mt-6 font-medium">
@@ -229,8 +253,7 @@ function EmptyRowSheet({
                     void run(
                       () =>
                         giveJuz({
-                          sessionToken: getSessionToken() ?? undefined,
-                          inviteCode,
+                          ...backend.authArgs(),
                           participantId: person.id,
                           juz,
                         }),
@@ -263,12 +286,22 @@ type Open =
   | { kind: "add"; juz: number }
   | { kind: "person"; juz: number; participantId: Id<"rotaParticipants"> };
 
-/** The organizer's People screen: the 30 ajza' of the next khatma and who reads each. */
-export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
-  const sessionToken = useSessionToken();
-  const view = useQuery(api.rota.people, { sessionToken, inviteCode });
+/**
+ * The organizer's People screen: the 30 ajza' of the next khatma and who reads each. Once the
+ * khatma is archived it is only a list: nothing to press, add or send.
+ */
+export function PeoplePanel({
+  inviteCode,
+  archived,
+}: {
+  inviteCode: string;
+  archived: boolean;
+}) {
+  const backend = useRotaBackend(inviteCode);
+  const view = useQuery(backend.people, backend.scope);
   const [open, setOpen] = useState<Open | null>(null);
-  useEnsureJoinLink(inviteCode, view?.joinLink);
+  // An archived khatma refuses a new join link, and has no use for one.
+  useEnsureJoinLink(inviteCode, archived ? undefined : view?.joinLink);
 
   if (view === undefined) {
     return (
@@ -295,7 +328,7 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
           : t.rota.nextBanner(view.target.number, date)}
       </p>
 
-      <JoinRequests inviteCode={inviteCode} view={view} />
+      {!archived && <JoinRequests inviteCode={inviteCode} view={view} />}
 
       <ol className="mt-4 grid gap-2">
         {view.rows.map((row) => {
@@ -303,48 +336,58 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
           // The second juz' someone holds says so, so one person's rows read as a pair.
           const second = holder !== null && seen.has(holder.id);
           if (holder) seen.add(holder.id);
+          const look = `flex min-h-14 min-w-[12rem] flex-1 items-center gap-3 rounded-ui border-2 px-4 py-2 text-start ${
+            holder
+              ? "border-line bg-card"
+              : "border-dashed border-[#8A7D62] bg-transparent text-ink-soft"
+          }`;
+          const content = (
+            <>
+              <span className="w-7 shrink-0 text-center font-semibold text-green-deep">
+                {toArabicDigits(row.juz)}
+              </span>
+              {holder ? (
+                <>
+                  <span className="font-medium">
+                    {holder.isMe ? t.rota.me : holder.name}
+                  </span>
+                  {second && (
+                    <span className="ms-auto rounded-full bg-saffron-soft px-3 py-0.5 text-base font-semibold text-saffron-ink">
+                      {t.rota.secondJuz}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="font-medium text-green">
+                  {archived ? t.rota.noReader : t.rota.addReader(row.juz)}
+                </span>
+              )}
+            </>
+          );
           return (
             <li key={row.juz} className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setOpen(
-                    holder
-                      ? {
-                          kind: "person",
-                          juz: row.juz,
-                          participantId: holder.id,
-                        }
-                      : { kind: "add", juz: row.juz },
-                  )
-                }
-                className={`flex min-h-14 min-w-[12rem] flex-1 items-center gap-3 rounded-ui border-2 px-4 py-2 text-start ${
-                  holder
-                    ? "border-line bg-card"
-                    : "border-dashed border-[#8A7D62] bg-transparent text-ink-soft"
-                }`}
-              >
-                <span className="w-7 shrink-0 text-center font-semibold text-green-deep">
-                  {toArabicDigits(row.juz)}
-                </span>
-                {holder ? (
-                  <>
-                    <span className="font-medium">
-                      {holder.isMe ? t.rota.me : holder.name}
-                    </span>
-                    {second && (
-                      <span className="ms-auto rounded-full bg-saffron-soft px-3 py-0.5 text-base font-semibold text-saffron-ink">
-                        {t.rota.secondJuz}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="font-medium text-green">
-                    {t.rota.addReader(row.juz)}
-                  </span>
-                )}
-              </button>
-              {holder && !second && (
+              {archived ? (
+                <div className={look}>{content}</div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpen(
+                      holder
+                        ? {
+                            kind: "person",
+                            juz: row.juz,
+                            participantId: holder.id,
+                          }
+                        : { kind: "add", juz: row.juz },
+                    )
+                  }
+                  className={look}
+                >
+                  {content}
+                </button>
+              )}
+              {!archived && holder && !second && (
                 <JoinChip
                   person={holder}
                   isMe={holder.isMe}
@@ -358,13 +401,15 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
         })}
       </ol>
 
-      <div className="mt-5">
-        <ShareJoinLink
-          title={view.title}
-          daysKind={view.daysKind}
-          joinLink={view.joinLink}
-        />
-      </div>
+      {!archived && (
+        <div className="mt-5">
+          <ShareJoinLink
+            title={view.title}
+            daysKind={view.daysKind}
+            joinLink={view.joinLink}
+          />
+        </div>
+      )}
 
       {open?.kind === "add" && (
         <EmptyRowSheet

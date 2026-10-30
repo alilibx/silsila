@@ -10,6 +10,18 @@ import { Sheet } from "./Sheet";
 
 type Khatmas = FunctionReturnType<typeof api.khatmas.mine>;
 
+/** The khatmas to jump to: archived ones are read-only, and have no place in the switcher. */
+export function switchable(khatmas: Khatmas): Khatmas {
+  return khatmas.filter((khatma) => !khatma.archived);
+}
+
+/** Whether there is another active khatma to switch to from the one on screen. */
+export function canSwitch(khatmas: Khatmas, currentCode: string): boolean {
+  return switchable(khatmas).some(
+    (khatma) => khatma.inviteCode !== currentCode,
+  );
+}
+
 type Props = {
   khatmas: Khatmas;
   /** The khatma on screen: marked, and tapping it only closes the sheet. */
@@ -22,7 +34,7 @@ export function SwitchKhatmaSheet({ khatmas, currentCode, onClose }: Props) {
   return (
     <Sheet title={t.nav.switchTitle} onClose={onClose}>
       <ul className="grid gap-2.5">
-        {khatmas.map((khatma) => (
+        {switchable(khatmas).map((khatma) => (
           <li key={khatma.inviteCode}>
             <Row
               khatma={khatma}

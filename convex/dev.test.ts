@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { DEFAULT_GRACE } from "./lib/grace";
 import { getSetting } from "./lib/settings";
 import schema from "./schema";
@@ -137,5 +137,38 @@ test("dev:rotaPayload builds the participant's payload for the open day, in dev 
   vi.stubEnv("WIRDAK_ENV", "prod");
   await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
     /only when WIRDAK_ENV is dev/,
+  );
+});
+
+test("dev:adminSession refuses outside dev and writes nothing", async () => {
+  const t = convexTest(schema, modules);
+  vi.stubEnv("WIRDAK_ENV", "prod");
+  await expect(
+    t.action(internal.dev.adminSession, { phone: "+971500000123" }),
+  ).rejects.toThrow(/only when WIRDAK_ENV is dev/);
+  await expect(
+    t.mutation(internal.dev.insertAdminSession, {
+      phone: "+971500000123",
+      tokenHash: "a",
+      alertTokenHash: "b",
+    }),
+  ).rejects.toThrow(/only when WIRDAK_ENV is dev/);
+  expect(await t.run((ctx) => ctx.db.query("admins").collect())).toEqual([]);
+});
+
+test("dev:adminSession signs an admin in, one row per phone", async () => {
+  const t = convexTest(schema, modules);
+  vi.stubEnv("WIRDAK_ENV", "dev");
+  const phone = "+971500000123";
+
+  const first = await t.action(internal.dev.adminSession, { phone });
+  const second = await t.action(internal.dev.adminSession, { phone });
+
+  expect(first).not.toBe(second);
+  expect(await t.query(api.adminAuth.me, { adminToken: first })).toMatchObject({
+    phone,
+  });
+  expect(await t.run((ctx) => ctx.db.query("admins").collect())).toHaveLength(
+    1,
   );
 });

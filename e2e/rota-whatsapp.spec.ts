@@ -8,17 +8,9 @@ import {
   rotaPayload,
   simulateIncoming,
   test,
+  today,
   verifyInSheet,
 } from "./support";
-
-/** Today's date in the browser's time zone as `YYYY-MM-DD` (the backend uses the same zone). */
-function today(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 /** The join message inside the setup screen's share link, which wraps the join link in its text. */
 function joinTextFrom(shareHref: string): string {

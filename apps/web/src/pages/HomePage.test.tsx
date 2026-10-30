@@ -166,6 +166,62 @@ describe("HomePage", () => {
     expect(without).not.toHaveTextContent("رسالة جديدة");
   });
 
+  describe("archived khatmas", () => {
+    const archivedSection = () =>
+      screen.getByText(t.home.archived).closest("details") as HTMLElement;
+
+    it("lists them below the active ones in a collapsed «المؤرشفة» section", () => {
+      m.mine = [
+        card({ archived: true, inviteCode: "OLD", name: "ختمة قديمة" }),
+        card(),
+      ];
+      renderHome();
+      const section = archivedSection();
+      expect(section).not.toHaveAttribute("open");
+      const old = within(section)
+        .getAllByRole("link", { hidden: true })
+        .find((l) => l.getAttribute("href") === "/j/OLD");
+      expect(old).toHaveTextContent("ختمة قديمة");
+      // The active khatma is outside it, and comes first.
+      const active = screen
+        .getAllByRole("link")
+        .find((l) => l.getAttribute("href") === "/j/AAA")!;
+      expect(section).not.toContainElement(active);
+      expect(
+        active.compareDocumentPosition(section) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("an archived card shows no note dot and no held juz'", () => {
+      m.mine = [
+        card({ archived: true, inviteCode: "OLD", hasNote: true, holding: 4 }),
+      ];
+      renderHome();
+      const old = within(archivedSection())
+        .getAllByRole("link", { hidden: true })
+        .find((l) => l.getAttribute("href") === "/j/OLD")!;
+      expect(old).not.toHaveTextContent("رسالة جديدة");
+      expect(old).not.toHaveTextContent("جزؤك");
+    });
+
+    it("has no section when nothing is archived", () => {
+      m.mine = [card()];
+      renderHome();
+      expect(screen.queryByText(t.home.archived)).toBeNull();
+    });
+
+    it("only archived khatmas: still the empty state and the plain create button", () => {
+      m.mine = [card({ archived: true })];
+      renderHome();
+      expect(screen.getByText(/لا توجد ختمات بعد/)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "ابدأ ختمة جديدة" }),
+      ).toBeInTheDocument();
+      expect(archivedSection()).toBeInTheDocument();
+    });
+  });
+
   it("links to create, and leaves settings to the bottom bar", () => {
     m.mine = [card()];
     renderHome();

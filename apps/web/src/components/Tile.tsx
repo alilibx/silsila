@@ -2,7 +2,12 @@ import type { TileView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import { t } from "../i18n/ar";
 
-type Props = { tile: TileView; onTake: (juz: number) => void };
+type Props = {
+  tile: TileView;
+  onTake: (juz: number) => void;
+  /** An archived khatma: nothing can be taken. */
+  readOnly?: boolean;
+};
 
 const base =
   "relative flex min-h-24 w-full flex-col items-center justify-between rounded-2xl border-2 px-2 pt-2.5 pb-2 text-center font-sans disabled:cursor-default";
@@ -14,7 +19,7 @@ const chip =
   "max-w-full rounded-full px-1 py-0.5 text-base leading-snug font-semibold";
 
 /** One juz'. Only open tiles can be pressed. The state is always a word; reader names show on "reading" tiles only. */
-export function Tile({ tile, onTake }: Props) {
+export function Tile({ tile, onTake, readOnly = false }: Props) {
   const { juz, name, state, readerName, isMine } = tile;
   const number = toArabicDigits(juz);
   // A done tile never shows a name, whatever the data says.
@@ -32,9 +37,12 @@ export function Tile({ tile, onTake }: Props) {
     .filter(Boolean)
     .join(t.common.listSeparator);
 
+  // An open tile of an archived khatma looks like the others: nothing invites a press.
   const look =
     state === "open"
-      ? "border-dashed border-[#8A7D62] bg-card text-ink hover:border-green focus-visible:border-green"
+      ? readOnly
+        ? "border-dashed border-[#8A7D62] bg-card text-ink"
+        : "border-dashed border-[#8A7D62] bg-card text-ink hover:border-green focus-visible:border-green"
       : state === "reading"
         ? "border-saffron bg-saffron-soft text-ink"
         : "border-green bg-green text-[#F4EEDD]";
@@ -51,7 +59,7 @@ export function Tile({ tile, onTake }: Props) {
   return (
     <button
       type="button"
-      disabled={state !== "open"}
+      disabled={state !== "open" || readOnly}
       aria-label={label}
       onClick={() => onTake(juz)}
       className={`${base} ${look} ${mine}`}

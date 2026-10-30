@@ -61,6 +61,8 @@ function HomeContent({
   mine: Mine;
   onSignIn: () => void;
 }) {
+  const active = mine.filter((khatma) => !khatma.archived);
+  const archived = mine.filter((khatma) => khatma.archived);
   return (
     <main className="mx-auto max-w-xl p-5">
       <header className="mb-3.5">
@@ -75,13 +77,13 @@ function HomeContent({
             {t.home.hello(me.displayName)}
           </h1>
           <h2 className="mb-3 text-ink-soft">{t.pages.home}</h2>
-          {mine.length === 0 ? (
+          {active.length === 0 ? (
             <p className="mb-5 rounded-ui border border-line bg-card p-4 leading-relaxed">
               {t.home.empty}
             </p>
           ) : (
             <ul className="grid gap-3">
-              {mine.map((khatma) => (
+              {active.map((khatma) => (
                 <li key={khatma.inviteCode}>
                   <KhatmaCard khatma={khatma} />
                 </li>
@@ -92,15 +94,32 @@ function HomeContent({
             <Link
               to="/new"
               className={buttonClass(
-                mine.length === 0 ? "primary" : "ghost",
-                mine.length === 0
+                active.length === 0 ? "primary" : "ghost",
+                active.length === 0
                   ? ""
                   : "border-dashed font-semibold text-green",
               )}
             >
-              {mine.length === 0 ? t.home.startNewPlain : t.home.startNew}
+              {active.length === 0 ? t.home.startNewPlain : t.home.startNew}
             </Link>
           </div>
+          {archived.length > 0 && (
+            <details className="mt-8">
+              <summary className="flex min-h-14 cursor-pointer items-center gap-2 text-xl font-semibold text-ink-soft">
+                {t.home.archived}
+                <span className="rounded-full bg-paper-2 px-3 py-0.5 text-base font-medium">
+                  {toArabicDigits(archived.length)}
+                </span>
+              </summary>
+              <ul className="mt-2 grid gap-3">
+                {archived.map((khatma) => (
+                  <li key={khatma.inviteCode}>
+                    <KhatmaCard khatma={khatma} />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </>
       ) : (
         <>
@@ -163,7 +182,7 @@ function KhatmaCard({ khatma }: { khatma: Card }) {
           <span>{t.schedules[khatma.schedule]}</span>
         </span>
       )}
-      {khatma.hasNote && (
+      {!khatma.archived && khatma.hasNote && (
         <span className="mt-2 flex items-center gap-2 text-base font-semibold text-green-deep">
           <span
             aria-hidden="true"
@@ -172,7 +191,7 @@ function KhatmaCard({ khatma }: { khatma: Card }) {
           {t.notes.newMessage}
         </span>
       )}
-      {khatma.holding !== null && (
+      {!khatma.archived && khatma.holding !== null && (
         <span className="mt-2 inline-block rounded-full bg-saffron-soft px-3 py-1 text-base font-semibold text-saffron-ink">
           {t.home.yours(toArabicDigits(khatma.holding), heldName ?? "")}
         </span>

@@ -5,9 +5,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button, buttonClass } from "../components/Button";
 import { InstallStepsSheet } from "../components/InstallStepsSheet";
+import { Sheet } from "../components/Sheet";
 import { SwitchRow } from "../components/SwitchRow";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
+import { ErrorLine } from "../features/rota/ErrorLine";
+import { useRotaCall } from "../features/rota/useRotaCall";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { formatDate } from "../lib/format";
 import {
@@ -17,7 +20,11 @@ import {
   pushBlocked,
   pushSupport,
 } from "../lib/push";
-import { clearSessionToken, useSessionToken } from "../lib/session";
+import {
+  clearSessionToken,
+  getSessionToken,
+  useSessionToken,
+} from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
 
 const headingClass = "mt-8 mb-3 text-xl font-semibold";
@@ -112,6 +119,7 @@ function SignedInSettings({
         <span dir="ltr">{maskedPhone}</span>
       </p>
       <MyNumbers />
+      <SavedPeople />
       <DevicePush />
       <WhatsAppNotes on={whatsappNotes} />
       <Devices />
@@ -141,6 +149,103 @@ function MyNumbers() {
         )}
       </div>
     </section>
+  );
+}
+
+const savedErrors: Record<string, string> = t.settings.savedErrors;
+
+/** The people the person added to their rotating khatmas, with the way to forget one. */
+function SavedPeople() {
+  const sessionToken = useSessionToken();
+  const people = useQuery(api.people.savedPeople, { sessionToken });
+  const [removing, setRemoving] = useState<
+    NonNullable<typeof people>[number] | null
+  >(null);
+  if (!people || people.length === 0) return null;
+  return (
+    <section aria-labelledby="saved-heading">
+      <h2 id="saved-heading" className={headingClass}>
+        {t.settings.savedHeading}
+      </h2>
+      <p className="mb-3 leading-relaxed text-ink-soft">
+        {t.settings.savedHint}
+      </p>
+      <ul className="grid gap-3">
+        {people.map((person) => (
+          <li
+            key={person.id}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-ui border border-line bg-card p-4"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">{person.name}</span>
+              {person.phone === null ? (
+                <span className="block text-base text-ink-soft">
+                  {t.settings.savedHidden}
+                </span>
+              ) : (
+                <span
+                  dir="ltr"
+                  className="block text-start text-base text-ink-soft"
+                >
+                  {person.phone}
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              aria-label={t.settings.savedRemoveLabel(person.name)}
+              onClick={() => setRemoving(person)}
+              className={buttonClass("ghost", "!w-auto")}
+            >
+              {t.settings.savedRemove}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {removing && (
+        <RemoveSavedSheet person={removing} onClose={() => setRemoving(null)} />
+      )}
+    </section>
+  );
+}
+
+/** Asks before forgetting someone; they stay in the khatmas they are in. */
+function RemoveSavedSheet({
+  person,
+  onClose,
+}: {
+  person: { id: Id<"rotaContacts">; name: string };
+  onClose: () => void;
+}) {
+  const removeSaved = useMutation(api.rota.removeSaved);
+  const { busy, error, run } = useRotaCall(savedErrors);
+  return (
+    <Sheet title={t.settings.savedRemoveTitle(person.name)} onClose={onClose}>
+      <p className="leading-relaxed text-ink-soft">
+        {t.settings.savedRemoveBody}
+      </p>
+      <div className="mt-5 grid gap-3">
+        <Button
+          disabled={busy}
+          onClick={() =>
+            void run(
+              () =>
+                removeSaved({
+                  sessionToken: getSessionToken() ?? undefined,
+                  contactId: person.id,
+                }),
+              onClose,
+            )
+          }
+        >
+          {t.settings.savedRemoveConfirm}
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          {t.settings.savedRemoveCancel}
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+    </Sheet>
   );
 }
 

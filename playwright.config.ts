@@ -3,9 +3,9 @@ import type { Throttle } from "./e2e/throttle";
 
 /**
  * End-to-end tests against the LOCAL anonymous Convex backend (no cloud project, no login, no
- * real WhatsApp) and a production build of the web app served by `vite preview`, so the tests
- * see the bundle people download. `bun run e2e` starts both, runs every spec on every project
- * below, and stops both. `bun run e2e --project=iphone-se` runs one.
+ * real WhatsApp) and production builds of the web and admin apps served by `vite preview`, so the
+ * tests see the bundle people download. `bun run e2e` starts all three, runs every spec on every
+ * project below, and stops them. `bun run e2e --project=iphone-se` runs one.
  *
  * The projects cover the three browser engines people use (WebKit for every iPhone browser,
  * Chromium for Android and desktop Chrome, Gecko for Firefox) at phone, tablet, and desktop
@@ -18,6 +18,7 @@ import type { Throttle } from "./e2e/throttle";
  * false: stop `bun run dev` first, or the ports are busy and the run refuses to start.
  */
 const WEB_PORT = 5173; // the verification endpoint's CORS allows http://localhost:5173 only
+const ADMIN_PORT = 5174; // the admin site's usual port (apps/admin/vite.config.ts)
 const CONVEX_PORT = 3210;
 const CONVEX_SITE_PORT = 3211;
 
@@ -31,6 +32,10 @@ const SLOW_MOBILE: Throttle = {
 
 /** Specs that only mean something on a throttled project. */
 const SLOW_ONLY = "**/load.spec.ts";
+/** A smoke test of the admin site, which admins use on a desktop: one browser is enough. */
+const DESKTOP_CHROME_ONLY = "**/admin-rota.spec.ts";
+/** What every project skips but the one that spec is for. */
+const NOT_HERE = [SLOW_ONLY, DESKTOP_CHROME_ONLY];
 
 export default defineConfig({
   testDir: "./e2e",
@@ -59,21 +64,21 @@ export default defineConfig({
     {
       name: "iphone-se",
       use: { ...devices["iPhone SE (3rd gen)"] },
-      testIgnore: SLOW_ONLY,
+      testIgnore: NOT_HERE,
     },
     {
       name: "iphone-pro-max",
       use: { ...devices["iPhone 15 Pro Max"] },
-      testIgnore: SLOW_ONLY,
+      testIgnore: NOT_HERE,
     },
     {
       name: "android-small",
       use: { ...devices["Moto G4"] },
-      testIgnore: SLOW_ONLY,
+      testIgnore: NOT_HERE,
     },
-    { name: "pixel-7", use: { ...devices["Pixel 7"] }, testIgnore: SLOW_ONLY },
+    { name: "pixel-7", use: { ...devices["Pixel 7"] }, testIgnore: NOT_HERE },
     // Tablet and desktop, one per engine.
-    { name: "ipad", use: { ...devices["iPad Mini"] }, testIgnore: SLOW_ONLY },
+    { name: "ipad", use: { ...devices["iPad Mini"] }, testIgnore: NOT_HERE },
     {
       name: "desktop-chrome",
       use: { ...devices["Desktop Chrome"] },
@@ -82,17 +87,18 @@ export default defineConfig({
     {
       name: "desktop-firefox",
       use: { ...devices["Desktop Firefox"] },
-      testIgnore: SLOW_ONLY,
+      testIgnore: NOT_HERE,
     },
     {
       name: "desktop-safari",
       use: { ...devices["Desktop Safari"] },
-      testIgnore: SLOW_ONLY,
+      testIgnore: NOT_HERE,
     },
     // A cheap Android phone on a slow network. Throttling needs Chromium's DevTools protocol.
     {
       name: "slow-android",
       use: { ...devices["Moto G4"] },
+      testIgnore: DESKTOP_CHROME_ONLY,
       metadata: { throttle: SLOW_MOBILE },
       timeout: 300_000,
       expect: { timeout: 30_000 },
@@ -119,6 +125,16 @@ export default defineConfig({
         VITE_CONVEX_SITE_URL: `http://127.0.0.1:${CONVEX_SITE_PORT}`,
       },
       url: `http://localhost:${WEB_PORT}`,
+      timeout: 180_000,
+      reuseExistingServer: false,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
+    },
+    {
+      // The admin site's production build, on the same local backend.
+      command: `bun run vite build && bun run vite preview --host localhost --port ${ADMIN_PORT} --strictPort`,
+      cwd: "apps/admin",
+      env: { VITE_CONVEX_URL: `http://127.0.0.1:${CONVEX_PORT}` },
+      url: `http://localhost:${ADMIN_PORT}`,
       timeout: 180_000,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },

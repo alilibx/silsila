@@ -12,7 +12,7 @@ import { randomToken } from "./lib/crypto";
 import { isValidGrace, graceValidator, type Grace } from "./lib/grace";
 import { JUZ, JUZ_COUNT } from "./lib/juz";
 import { paceDays, personPace } from "./lib/pace";
-import { khatmaByInviteCode } from "./lib/khatma";
+import { isArchived, khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { khatmaJoinLink } from "./lib/rotaJoin";
 import { lastRotaDay } from "./lib/rotaPlace";
@@ -60,6 +60,7 @@ export type KhatmaView = {
   roundNumber: number;
   targetEndAt: number | null;
   completedRounds: number;
+  archived: boolean;
   memberCount: number;
   lastCompleted: { roundNumber: number; participants: number } | null;
   inviterName: string | null;
@@ -271,7 +272,12 @@ export const view = sessionQuery({
   ): Promise<
     | KhatmaView
     | { notFound: true }
-    | { rota: true; name: string | null; joinLink: string | null }
+    | {
+        rota: true;
+        name: string | null;
+        joinLink: string | null;
+        archived: boolean;
+      }
   > => {
     const khatma = await khatmaByInviteCode(ctx, args.inviteCode);
     if (khatma?.kind === "rota") {
@@ -279,6 +285,7 @@ export const view = sessionQuery({
         rota: true,
         name: khatma.name,
         joinLink: khatmaJoinLink(khatma, env("WHATSAPP_PUBLIC_NUMBER")),
+        archived: isArchived(khatma),
       };
     }
     if (!khatma || !khatma.currentRoundId) return { notFound: true };
@@ -342,6 +349,7 @@ export const view = sessionQuery({
       roundNumber: round.number,
       targetEndAt: round.targetEndAt,
       completedRounds: khatma.completedRounds,
+      archived: isArchived(khatma),
       memberCount: active.length,
       lastCompleted: await lastCompletedRound(ctx, khatma._id),
       inviterName,
@@ -506,6 +514,7 @@ export const mine = sessionQuery({
             ? null
             : (heldAssignment(assignments, personId)?.juz ?? null),
           hasNote: note !== null,
+          archived: isArchived(khatma),
         };
       }),
     );

@@ -424,6 +424,20 @@ test("the nightly rollup stores yesterday's active khatma count", async () => {
   expect((await rows(t)).find((r) => r.day === D)?.activeKhatmas).toBe(1);
 });
 
+test("the nightly active khatma count skips an archived khatma", async () => {
+  const t = convexTest(schema, modules);
+  const { k } = await seed(t);
+  await t.run(async (ctx) => {
+    const round = await ctx.db.query("rounds").first();
+    await ctx.db.patch(round!._id, { lastFinishedAt: noon(D) });
+    await ctx.db.patch(k, { archivedAt: noon(D) });
+  });
+  await t.mutation(internal.stats.rollupDay, { day: D - 1 });
+  vi.setSystemTime(noon(D + 1));
+  await t.mutation(internal.stats.rollupYesterday, {});
+  expect((await rows(t)).find((r) => r.day === D)?.activeKhatmas).toBe(0);
+});
+
 // ---------------------------------------------------------------------------
 // PR review fixes
 
@@ -460,4 +474,35 @@ test("a rerun keeps a stored sign-in count when only one of the day's counters w
     signInsStarted: 4,
     signInsCompleted: 3,
   });
+});
+
+test("a day's row counts the rotating khatma days completed in it", async () => {
+  const t = convexTest(schema, modules);
+  const p = await person(t, noon(D), "+971500000001");
+  const k = await khatma(t, noon(D) + 1000, p);
+  const rotaDay = (n: number, completedAt: number | null) =>
+    t.run((ctx) =>
+      ctx.db.insert("rotaDays", {
+        khatmaId: k,
+        n,
+        number: n,
+        cycle: 1,
+        date: "2026-10-20",
+        startedAt: dayStart(D),
+        closesAt: dayStart(D + 1),
+        completedAt,
+        closedAt: null,
+        unreadSentAt: null,
+        summarySentAt: null,
+      }),
+    );
+  await rotaDay(1, noon(D) + 2000);
+  await rotaDay(2, noon(D) + 3000);
+  await rotaDay(3, noon(D + 1));
+  await rotaDay(4, null);
+
+  await t.mutation(internal.stats.rollupDay, { day: D });
+  await t.mutation(internal.stats.rollupDay, { day: D + 1 });
+
+  expect((await rows(t)).map((r) => r.rotaDaysCompleted)).toEqual([2, 1]);
 });

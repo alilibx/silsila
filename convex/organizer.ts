@@ -11,7 +11,7 @@ import {
 import { activeMembership } from "./khatmas";
 import { randomToken } from "./lib/crypto";
 import { graceValidator, isValidGrace, type Grace } from "./lib/grace";
-import { khatmaByInviteCode } from "./lib/khatma";
+import { isArchived, khatmaByInviteCode } from "./lib/khatma";
 import { scheduleValidator, type Schedule } from "./lib/schedule";
 import type { SessionContext } from "./lib/session";
 import { sessionMutation, sessionQuery } from "./lib/session";
@@ -36,6 +36,8 @@ export type OrganizerSettings = {
     isOrganizer: boolean;
   }[];
   blocked: { memberId: Id<"members">; displayName: string }[];
+  /** An archived khatma can only be read, and deleted. */
+  archived: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -67,15 +69,33 @@ export async function requireOrganizer(
   return found;
 }
 
+/** Refuses a change to an archived khatma, which stays read-only. */
+function refuseArchived(khatma: Doc<"khatmas">): void {
+  if (isArchived(khatma)) throw new ConvexError({ code: "archived" });
+}
+
 /**
- * `requireOrganizer` for the pool khatma's own controls (settings, invite
+ * `requireOrganizer` for a change to the khatma: `archived` once it is archived.
+ * Reading it, archiving and deleting it use `requireOrganizer` instead.
+ */
+async function requireLiveOrganizer(
+  ctx: QueryCtx & SessionContext,
+  inviteCode: string,
+): Promise<{ person: Doc<"people">; khatma: Doc<"khatmas"> }> {
+  const found = await requireOrganizer(ctx, inviteCode);
+  refuseArchived(found.khatma);
+  return found;
+}
+
+/**
+ * `requireLiveOrganizer` for the pool khatma's own controls (settings, invite
  * reset, handover), which a rota khatma doesn't have: `forbidden` there too.
  */
 async function requirePoolOrganizer(
   ctx: QueryCtx & SessionContext,
   inviteCode: string,
 ): Promise<{ person: Doc<"people">; khatma: Doc<"khatmas"> }> {
-  const found = await requireOrganizer(ctx, inviteCode);
+  const found = await requireLiveOrganizer(ctx, inviteCode);
   if (found.khatma.kind === "rota") {
     throw new ConvexError({ code: "forbidden" });
   }
@@ -135,6 +155,7 @@ export const settings = sessionQuery({
       suggestedGrace: (await getSetting(ctx, "graceDefaults"))[khatma.schedule],
       members,
       blocked,
+      archived: isArchived(khatma),
     };
   },
 });
@@ -180,6 +201,7 @@ export const activeMemberCount = internalQuery({
     if (!found || found.khatma.kind === "rota") {
       throw new ConvexError({ code: "forbidden" });
     }
+    refuseArchived(found.khatma);
     return (await membersByJoin(ctx, found.khatma._id)).filter(
       (m) => m.status === "active",
     ).length;
@@ -205,6 +227,7 @@ export const applyInviteReset = internalMutation({
     if (!found || found.khatma.kind === "rota") {
       throw new ConvexError({ code: "forbidden" });
     }
+    refuseArchived(found.khatma);
     const { khatma } = found;
 
     if (
@@ -250,6 +273,7 @@ export async function resetInviteCode(
 /**
  * Makes `member` the organizer and tells them; with `previous`, tells the
  * old organizer too. Shared by the organizer, the 30-day sweep and admins.
+ * Only an admin reaches an archived khatma here, and that sends nothing.
  */
 export async function handOverTo(
   ctx: MutationCtx,
@@ -258,6 +282,7 @@ export async function handOverTo(
   previous: Doc<"people"> | null,
 ): Promise<void> {
   await ctx.db.patch(khatma._id, { creatorPersonId: member.personId });
+  if (isArchived(khatma)) return;
   await notify(ctx, {
     personId: member.personId,
     khatmaId: khatma._id,
@@ -325,7 +350,7 @@ export const removeMember = sessionMutation({
     ctx,
     args,
   ): Promise<{ ok: true } | { ok: false; reason: "self" | "not_member" }> => {
-    const { khatma } = await requireOrganizer(ctx, args.inviteCode);
+    const { khatma } = await requireLiveOrganizer(ctx, args.inviteCode);
     const member = await otherMember(ctx, khatma, args.memberId, "active");
     if (typeof member === "string") return { ok: false, reason: member };
 
@@ -375,7 +400,7 @@ async function clearPersonNotes(
 export const unblock = sessionMutation({
   args: { inviteCode: v.string(), memberId: v.id("members") },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
-    const { khatma } = await requireOrganizer(ctx, args.inviteCode);
+    const { khatma } = await requireLiveOrganizer(ctx, args.inviteCode);
     const member = await ctx.db.get(args.memberId);
     if (
       !member ||
@@ -409,7 +434,7 @@ export const handOver = sessionMutation({
 
 /**
  * Daily: pages through every khatma and schedules a handover check for each
- * one whose organizer has been away longer than `organizerInactiveMs`.
+ * one not archived whose organizer has been away longer than `organizerInactiveMs`.
  * Paginated, and one mutation per khatma, like the behind sweep.
  */
 export const autoHandoverSweep = internalMutation({
@@ -421,7 +446,7 @@ export const autoHandoverSweep = internalMutation({
     const cutoff = Date.now() - (await getSetting(ctx, "organizerInactiveMs"));
     for (const khatma of page.page) {
       // a rota khatma keeps its organizer: readers are not members to hand it to
-      if (khatma.kind === "rota") continue;
+      if (khatma.kind === "rota" || isArchived(khatma)) continue;
       const organizer = await ctx.db.get(khatma.creatorPersonId);
       if (organizer && organizer.lastSeenAt >= cutoff) continue;
       await ctx.scheduler.runAfter(0, internal.organizer.autoHandover, {
@@ -445,7 +470,7 @@ export const autoHandover = internalMutation({
   args: { khatmaId: v.id("khatmas") },
   handler: async (ctx, args) => {
     const khatma = await ctx.db.get(args.khatmaId);
-    if (!khatma || khatma.kind === "rota") return;
+    if (!khatma || khatma.kind === "rota" || isArchived(khatma)) return;
     const now = Date.now();
     const organizer = await ctx.db.get(khatma.creatorPersonId);
     if (

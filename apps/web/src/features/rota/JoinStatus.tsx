@@ -1,15 +1,15 @@
-import { api } from "@convex/_generated/api";
 import type { ReadingDaysKind } from "@convex/lib/rota";
 import { useMutation } from "convex/react";
 import { useEffect, useRef } from "react";
 import { buttonClass } from "../../components/Button";
 import { t } from "../../i18n/ar";
 import { waLink, waShareLink } from "../../lib/whatsapp";
-import { getSessionToken } from "../../lib/session";
+import { useRotaBackend } from "./backend";
 
-/** What the People screens know of someone's WhatsApp: the fields `api.rota.people` adds. */
+/** What the People screens know of someone's WhatsApp: the fields the People view adds. */
 export type JoinState = {
-  phone: string;
+  /** Null for someone imported from a pool khatma: there is no chat to open. */
+  phone: string | null;
   joined: boolean;
   stopped: boolean;
   silenced: boolean;
@@ -86,7 +86,7 @@ export function JoinChip({
     );
   }
   const waiting = `${chip} bg-saffron-soft text-saffron-ink`;
-  if (joinLink === null) {
+  if (joinLink === null || (!isMe && person.phone === null)) {
     return (
       <span className={`${waiting} min-h-9`}>{t.rota.notJoinedShort}</span>
     );
@@ -95,7 +95,7 @@ export function JoinChip({
   const href = isMe
     ? joinLink
     : waLink(
-        person.phone.replace(/\D/g, ""),
+        (person.phone ?? "").replace(/\D/g, ""),
         t.rota.shareMessage(title, joinLink, daysKind),
       );
   return (
@@ -119,13 +119,12 @@ export function useEnsureJoinLink(
   /** Undefined while the People query loads. */
   joinLink: string | null | undefined,
 ) {
-  const ensure = useMutation(api.rota.ensureJoinLink);
+  const backend = useRotaBackend(inviteCode);
+  const ensure = useMutation(backend.ensureJoinLink);
   const asked = useRef(false);
   useEffect(() => {
     if (joinLink !== null || asked.current) return;
     asked.current = true;
-    ensure({ sessionToken: getSessionToken() ?? undefined, inviteCode }).catch(
-      () => {},
-    );
-  }, [ensure, inviteCode, joinLink]);
+    ensure(backend.authArgs()).catch(() => {});
+  }, [backend, ensure, joinLink]);
 }

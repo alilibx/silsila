@@ -6,7 +6,8 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { endGraceIfDue, isHeld } from "./grace";
-import { randomToken } from "./lib/crypto";
+import { ADMIN_SESSION_TTL_MS } from "./lib/adminSession";
+import { randomToken, sha256Hex } from "./lib/crypto";
 import { encodePayload } from "./lib/rotaPayload";
 import { SETTING_DEFAULTS } from "./lib/settings";
 import { isDev, isStaging } from "./whatsapp";
@@ -81,6 +82,58 @@ export const allowRota = internalMutation({
       .unique();
     if (!person) throw new Error("no such person");
     await ctx.db.patch(person._id, { rotaAllowed: true });
+  },
+});
+
+/** Dev-only: the admin with this number, made if there is none, and a session for them. */
+export const insertAdminSession = internalMutation({
+  args: {
+    phone: v.string(),
+    tokenHash: v.string(),
+    alertTokenHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    if (!isDev()) {
+      throw new Error("insertAdminSession runs only when WIRDAK_ENV is dev");
+    }
+    const { phone, tokenHash, alertTokenHash } = args;
+    const now = Date.now();
+    const found = await ctx.db
+      .query("admins")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique();
+    const adminId =
+      found?._id ??
+      (await ctx.db.insert("admins", { phone, addedBy: null, addedAt: now }));
+    await ctx.db.insert("adminSessions", {
+      adminId,
+      tokenHash,
+      alertTokenHash,
+      deviceLabel: "dev",
+      createdAt: now,
+      expiresAt: now + ADMIN_SESSION_TTL_MS,
+    });
+  },
+});
+
+/**
+ * Dev-only: signs in as the admin with this number (one is made if there is
+ * none) and returns the session token, so a test needn't go through the admin
+ * sign-in: `bun run convex run dev:adminSession '{"phone":"+971501234567"}'`.
+ */
+export const adminSession = internalAction({
+  args: { phone: v.string() },
+  handler: async (ctx, args): Promise<string> => {
+    if (!isDev()) {
+      throw new Error("adminSession runs only when WIRDAK_ENV is dev");
+    }
+    const adminToken = randomToken(32);
+    await ctx.runMutation(internal.dev.insertAdminSession, {
+      phone: args.phone,
+      tokenHash: await sha256Hex(adminToken),
+      alertTokenHash: await sha256Hex(randomToken(32)),
+    });
+    return adminToken;
   },
 });
 

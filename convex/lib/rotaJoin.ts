@@ -1,6 +1,7 @@
 import type { Doc } from "../_generated/dataModel";
 import { CODE_ALPHABET, randomCode } from "./crypto";
 import { normalizeDigits } from "./digits";
+import { isArchived } from "./khatma";
 import { khatmaTitle } from "./whatsappTemplates";
 
 /** A rota khatma's join code is this many symbols of `CODE_ALPHABET`. */
@@ -60,13 +61,15 @@ export function joinLink(
 }
 
 /**
- * A rota khatma's join link, or null while it has no join code or the public
- * business number is not set (nothing to link to).
+ * A rota khatma's join link, or null while it has no join code, the public
+ * business number is not set (nothing to link to), or it is archived (nobody
+ * can join an archived khatma).
  */
 export function khatmaJoinLink(
-  khatma: Pick<Doc<"khatmas">, "name" | "createdAt" | "joinCode">,
+  khatma: Doc<"khatmas">,
   publicNumber: string | undefined,
 ): string | null {
+  if (isArchived(khatma)) return null;
   if (!publicNumber || khatma.joinCode === undefined) return null;
   return joinLink(publicNumber, khatmaTitle(khatma), khatma.joinCode);
 }

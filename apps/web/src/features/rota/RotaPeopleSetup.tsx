@@ -1,4 +1,4 @@
-import { api } from "@convex/_generated/api";
+import type { PeopleView as View } from "@convex/lib/rotaOps";
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -6,42 +6,45 @@ import { toArabicDigits } from "@convex/lib/digits";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
+import { useRotaBackend, type RotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
+import { SavedPicker } from "./SavedPicker";
 import { StepBar } from "./StepBar";
 import { useRotaCall } from "./useRotaCall";
 
 const giveErrors: Record<string, string> = t.rota.giveErrors;
-
-type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
 
 /** Who reads each leftover juz' too: one juz' at a time, until none is left. */
 function GiveJuzSheet({
   inviteCode,
   view,
   onClose,
+  onStart,
 }: {
   inviteCode: string;
   view: View;
   onClose: () => void;
+  onStart: () => void;
 }) {
-  const give = useMutation(api.rota.giveJuz);
+  const backend = useRotaBackend(inviteCode);
+  const give = useMutation(backend.giveJuz);
   const { busy, error, run } = useRotaCall(giveErrors);
   const juz = view.freeJuz[0];
   // Everyone has a reader now, so there is nothing left to ask.
   if (juz === undefined) return null;
 
-  const choose = (participantId: View["participants"][number]["id"]) =>
-    run(() =>
+  const choose = (participantId: View["participants"][number]["id"]) => {
+    onStart();
+    return run(() =>
       give({
-        sessionToken: getSessionToken() ?? undefined,
-        inviteCode,
+        ...backend.authArgs(),
         participantId,
         juz,
       }),
     );
+  };
 
   return (
     <Sheet title={t.rota.giveTitle(juz)} onClose={onClose}>
@@ -72,33 +75,192 @@ function GiveJuzSheet({
   );
 }
 
-/** Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. */
-export function RotaPeopleSetup() {
-  const { inviteCode = "" } = useParams();
+const importErrors: Record<string, string> = t.rota.importErrors;
+
+type Pool = { inviteCode: string; title: string; memberCount: number };
+
+/**
+ * Ways to fill the ajza' without typing: the members of one of the organizer's pool khatmas
+ * (names only, their numbers stay hidden), or people saved from earlier khatmas. Shows only what
+ * applies, and nothing when neither does and there is no import result or error to read.
+ * `onStart` runs when the organizer starts adding a saved person.
+ */
+function BringPeopleInList({
+  inviteCode,
+  pools,
+  busy = false,
+  error = null,
+  result = null,
+  onBringIn,
+  onStart,
+}: {
+  inviteCode: string;
+  pools?: Pool[] | undefined;
+  busy?: boolean;
+  error?: string | null;
+  result?: string | null;
+  onBringIn?: (sourceInviteCode: string) => void;
+  onStart?: () => void;
+}) {
+  const backend = useRotaBackend(inviteCode);
+  const saved = useQuery(backend.saved, backend.scope);
+  const [picking, setPicking] = useState(false);
+
+  const hasPools = pools !== undefined && pools.length > 0;
+  const hasSaved = saved !== undefined && saved !== null && saved.length > 0;
+  // An import takes its pool off the list, but what it did stays to be read.
+  if (!hasPools && !hasSaved && !result && !error) return null;
+
+  return (
+    <section className="mb-5 grid gap-3">
+      {hasPools &&
+        pools.map((pool) => (
+          <button
+            key={pool.inviteCode}
+            type="button"
+            disabled={busy}
+            onClick={() => onBringIn?.(pool.inviteCode)}
+            className="min-h-14 w-full rounded-ui border-2 border-gold bg-[#FBF1D9] px-4 py-3 text-start disabled:opacity-50"
+          >
+            <span className="block font-medium">
+              {t.rota.importTitle(pool.title)}
+            </span>
+            <span className="block text-base text-ink-soft">
+              {t.rota.importCount(pool.memberCount)}
+            </span>
+          </button>
+        ))}
+      {hasPools && (
+        <p className="text-base text-ink-soft">{t.rota.importHint}</p>
+      )}
+      {hasSaved && (
+        <Button variant="ghost" onClick={() => setPicking(true)}>
+          {t.rota.savedFrom}
+        </Button>
+      )}
+      <ErrorLine error={error} />
+      <p role="status" className="font-medium text-green empty:hidden">
+        {result}
+      </p>
+      {picking && (
+        <SavedPicker
+          inviteCode={inviteCode}
+          onClose={() => setPicking(false)}
+          onStart={onStart}
+        />
+      )}
+    </section>
+  );
+}
+
+/** The list with the organizer's pool khatmas in it, for a backend that can read them. */
+function BringPoolMembersIn({
+  inviteCode,
+  importable,
+  importMembers,
+  result,
+  onResult,
+}: {
+  inviteCode: string;
+  importable: NonNullable<RotaBackend["importable"]>;
+  importMembers: NonNullable<RotaBackend["importMembers"]>;
+  result: string | null;
+  onResult: (result: string | null) => void;
+}) {
+  const backend = useRotaBackend(inviteCode);
+  const pools = useQuery(importable, backend.scope);
+  const bring = useMutation(importMembers);
+  const { busy, error, run } = useRotaCall(importErrors);
+
+  const bringIn = (sourceInviteCode: string) => {
+    onResult(null);
+    return run(async () => {
+      const done = await bring({ ...backend.authArgs(), sourceInviteCode });
+      if ("ok" in done) onResult(t.rota.importResult(done.added, done.skipped));
+      return done;
+    });
+  };
+
+  return (
+    <BringPeopleInList
+      inviteCode={inviteCode}
+      pools={pools}
+      busy={busy}
+      error={error}
+      result={result}
+      onBringIn={(code) => void bringIn(code)}
+      onStart={() => onResult(null)}
+    />
+  );
+}
+
+function BringPeopleIn({
+  inviteCode,
+  result,
+  onResult,
+}: {
+  inviteCode: string;
+  result: string | null;
+  onResult: (result: string | null) => void;
+}) {
+  const { importable, importMembers } = useRotaBackend(inviteCode);
+  return importable && importMembers ? (
+    <BringPoolMembersIn
+      inviteCode={inviteCode}
+      importable={importable}
+      importMembers={importMembers}
+      result={result}
+      onResult={onResult}
+    />
+  ) : (
+    <BringPeopleInList inviteCode={inviteCode} onStart={() => onResult(null)} />
+  );
+}
+
+/**
+ * Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. Whoever
+ * has no People view, and anyone on an archived khatma, is sent to `khatmaPath`, where «تمّ» goes too.
+ */
+export function RotaPeopleSetupContent({
+  inviteCode,
+  khatmaPath,
+}: {
+  inviteCode: string;
+  khatmaPath: string;
+}) {
   const navigate = useNavigate();
-  const sessionToken = useSessionToken();
-  const view = useQuery(api.rota.people, { sessionToken, inviteCode });
-  const finishSetup = useMutation(api.rota.finishSetup);
+  const backend = useRotaBackend(inviteCode);
+  const view = useQuery(backend.people, backend.scope);
+  const finishSetup = useMutation(backend.finishSetup);
   const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
-  const khatmaPath = `/j/${encodeURIComponent(inviteCode)}`;
-  useEnsureJoinLink(inviteCode, view?.joinLink);
+  // What the last import did: it stays until the organizer starts something else.
+  const [importResult, setImportResult] = useState<string | null>(null);
+  useEnsureJoinLink(inviteCode, view?.archived ? undefined : view?.joinLink);
 
-  if (view === undefined) return <main className="mx-auto max-w-xl p-5" />;
-  // Only the organizer sets people up.
-  if (view === null) {
+  if (view === undefined) return null;
+  // Only the organizer sets people up, and an archived khatma is read-only.
+  if (view === null || view.archived) {
     return <Navigate to={khatmaPath} replace />;
   }
 
   return (
-    <main className="mx-auto max-w-xl p-5">
+    <>
       <h1 className="font-display text-4xl leading-tight text-green-deep">
         {t.rota.setupTitle}
       </h1>
       <StepBar step={2} />
 
       <div className="mt-5">
-        <AddPersonForm inviteCode={inviteCode} />
+        <BringPeopleIn
+          inviteCode={inviteCode}
+          result={importResult}
+          onResult={setImportResult}
+        />
+        <AddPersonForm
+          inviteCode={inviteCode}
+          onStart={() => setImportResult(null)}
+        />
       </div>
 
       <ol
@@ -160,11 +322,7 @@ export function RotaPeopleSetup() {
           disabled={finishing.busy}
           onClick={() =>
             void finishing.run(
-              () =>
-                finishSetup({
-                  sessionToken: getSessionToken() ?? undefined,
-                  inviteCode,
-                }),
+              () => finishSetup(backend.authArgs()),
               () => void navigate(khatmaPath),
             )
           }
@@ -179,8 +337,22 @@ export function RotaPeopleSetup() {
           inviteCode={inviteCode}
           view={view}
           onClose={() => setGiving(false)}
+          onStart={() => setImportResult(null)}
         />
       )}
+    </>
+  );
+}
+
+/** The organizer's setup of the khatma in the address. */
+export function RotaPeopleSetup() {
+  const { inviteCode = "" } = useParams();
+  return (
+    <main className="mx-auto max-w-xl p-5">
+      <RotaPeopleSetupContent
+        inviteCode={inviteCode}
+        khatmaPath={`/j/${encodeURIComponent(inviteCode)}`}
+      />
     </main>
   );
 }

@@ -12,6 +12,7 @@ import type { KhatmaView } from "@convex/khatmas";
 import { t } from "../i18n/ar";
 import { makeTiles, makeView } from "../test/fixtures";
 import { KhatmaPage } from "./KhatmaPage";
+import { startDelete } from "../features/khatma/deleting";
 import { NotFoundPage } from "./NotFoundPage";
 
 const useQuery = vi.fn();
@@ -25,8 +26,17 @@ vi.mock("../lib/session", () => ({
   clearSessionToken: () => clearSessionToken(),
 }));
 vi.mock("./RotaKhatmaPage", () => ({
-  RotaKhatmaPage: ({ inviteCode }: { inviteCode: string }) => (
-    <p>rota page {inviteCode}</p>
+  RotaKhatmaPage: ({
+    inviteCode,
+    archived,
+  }: {
+    inviteCode: string;
+    archived: boolean;
+  }) => (
+    <p>
+      rota page {inviteCode}
+      {archived ? " archived" : ""}
+    </p>
   ),
 }));
 vi.mock("../features/verify/VerifySheet", () => ({
@@ -94,6 +104,24 @@ describe("KhatmaPage", () => {
     useQuery.mockReturnValue({ rota: true });
     renderAt("/j/ROTA");
     expect(screen.getByText("rota page ROTA")).toBeInTheDocument();
+    expect(screen.queryByText(/لم يعد يعمل/)).toBeNull();
+  });
+
+  it("tells the rotating khatma's page whether it is archived", () => {
+    useQuery.mockReturnValue({ rota: true, archived: true });
+    renderAt("/j/ROTA");
+    expect(screen.getByText("rota page ROTA archived")).toBeInTheDocument();
+  });
+
+  it("while a delete runs, a khatma whose link just died shows neither not-found nor the page", () => {
+    useQuery.mockReturnValue({ notFound: true });
+    void startDelete(
+      "DEAD",
+      () => new Promise(() => {}),
+      () => {},
+    );
+    renderAt("/j/DEAD");
+    expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
     expect(screen.queryByText(/لم يعد يعمل/)).toBeNull();
   });
 
@@ -343,6 +371,131 @@ describe("KhatmaPage", () => {
     });
   });
 
+  describe("archived", () => {
+    const archivedView = (over: Partial<KhatmaView["me"]> = {}) =>
+      makeView({
+        archived: true,
+        me: { ...makeView().me, suggestion: 3, ...over },
+      });
+
+    it("says so, and offers no way to take, finish or release", () => {
+      useQuery.mockReturnValue(archivedView({ holding: 5 }));
+      render(
+        <MemoryRouter initialEntries={["/j/CODE?tab=mine"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole("note")).toHaveTextContent(t.archive.banner);
+      for (const name of [t.card.take, t.card.finish, t.card.release]) {
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      }
+    });
+
+    it("the pool shows no tile that can be pressed", () => {
+      useQuery.mockReturnValue(archivedView());
+      render(
+        <MemoryRouter initialEntries={["/j/CODE?tab=pool"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole("note")).toHaveTextContent(t.archive.banner);
+      const tiles = screen
+        .getAllByRole("button")
+        .filter((b) => b.getAttribute("aria-label")?.includes(t.tile.open));
+      expect(tiles.length).toBeGreaterThan(0);
+      for (const tile of tiles) expect(tile).toBeDisabled();
+    });
+
+    it("the group tab drops invite, remind and the notifications switch, but keeps settings for the organizer", () => {
+      useQuery.mockReturnValue(makeView({ archived: true, isOrganizer: true }));
+      render(
+        <MemoryRouter initialEntries={["/j/CODE?tab=group"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      for (const name of [t.share.inviteButton, t.share.remindButton]) {
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      }
+      expect(screen.queryByRole("switch")).toBeNull();
+      expect(
+        screen.getByRole("link", { name: t.khatmaSettings.link }),
+      ).toHaveAttribute("href", "/j/CODE/settings");
+    });
+
+    it("open tiles are inert and the «N open» count is gone", () => {
+      useQuery.mockReturnValue(archivedView());
+      render(
+        <MemoryRouter initialEntries={["/j/CODE?tab=pool"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.queryByText(t.khatma.openCount("٣٠"))).toBeNull();
+      const tile = screen
+        .getAllByRole("button")
+        .find((b) => b.getAttribute("aria-label")?.includes(t.tile.open))!;
+      expect(tile.className).not.toMatch(/hover:|focus-visible:/);
+    });
+
+    it("a visitor sees the banner but not the invitation or the verify hint", () => {
+      useQuery.mockReturnValue(
+        makeView({
+          archived: true,
+          inviterName: "سارة",
+          me: {
+            ...makeView().me,
+            signedIn: false,
+            isMember: false,
+            suggestion: 3,
+          },
+        }),
+      );
+      render(
+        <MemoryRouter initialEntries={["/j/CODE"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText(t.archive.banner)).toBeInTheDocument();
+      expect(screen.queryByText(/سارة/)).toBeNull();
+      expect(
+        screen.queryByText(t.khatma.verifyHint, { exact: false }),
+      ).toBeNull();
+    });
+
+    it("a visitor sees the banner and no take button", () => {
+      useQuery.mockReturnValue(
+        makeView({
+          archived: true,
+          me: { ...makeView().me, isMember: false, suggestion: 3 },
+        }),
+      );
+      render(
+        <MemoryRouter initialEntries={["/j/CODE"]}>
+          <Routes>
+            <Route path="/j/:inviteCode" element={<KhatmaPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText(t.archive.banner)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: t.card.take })).toBeNull();
+    });
+
+    it("an active khatma has no banner", () => {
+      useQuery.mockReturnValue(makeView());
+      renderAt("/j/CODE");
+      expect(screen.queryByText(t.archive.banner)).toBeNull();
+    });
+  });
+
   describe("tabs", () => {
     function Where() {
       const { search } = useLocation();
@@ -511,6 +664,28 @@ describe("KhatmaPage", () => {
       expect(
         within(sheet).getByRole("link", { name: /ختمة العائلة/ }),
       ).toHaveAttribute("aria-current", "page");
+    });
+
+    it("an archived khatma isn't counted: with only an archived other, no switch button", () => {
+      useQuery.mockReturnValue(member());
+      useMine.mockReturnValue([cards[0], { ...cards[1], archived: true }]);
+      renderTabs("/j/CODE");
+      expect(
+        screen.queryByRole("button", { name: t.nav.switchKhatma }),
+      ).toBeNull();
+    });
+
+    it("on an archived khatma, the switch button still reaches the active ones", async () => {
+      useQuery.mockReturnValue(makeView({ archived: true }));
+      useMine.mockReturnValue([{ ...cards[0], archived: true }, cards[1]]);
+      renderTabs("/j/CODE");
+      await userEvent.click(
+        screen.getByRole("button", { name: t.nav.switchKhatma }),
+      );
+      const sheet = screen.getByRole("dialog", { name: t.nav.switchTitle });
+      expect(within(sheet).getAllByRole("link", { name: /ختمة/ })).toHaveLength(
+        2,
+      );
     });
 
     it("hides the switch button with one khatma", () => {

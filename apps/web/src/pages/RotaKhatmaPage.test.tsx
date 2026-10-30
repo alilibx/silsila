@@ -27,6 +27,8 @@ const m = vi.hoisted(() => ({
   mine: [] as unknown,
   me: null as unknown,
   joinLink: null as string | null,
+  /** What the khatma's public view says about being archived. */
+  archived: false,
   notes: [] as unknown,
   fns: {
     reassign: vi.fn(),
@@ -42,7 +44,10 @@ const m = vi.hoisted(() => ({
     declineJoinRequest: vi.fn(),
     finishSetup: vi.fn(),
     dismiss: vi.fn(),
+    archive: vi.fn(),
+    remove: vi.fn(),
   },
+  startAgain: vi.fn(),
 }));
 
 vi.mock("../lib/session", () => ({
@@ -66,6 +71,8 @@ vi.mock("convex/react", async () => {
       if (name === "rota:today") return m.today;
       if (name === "rota:settings") return m.settings;
       if (name === "rota:people") return m.people;
+      // Nobody saved and no pool khatma to bring from: the plain add form.
+      if (name === "rota:saved" || name === "rota:importable") return [];
       if (name === "khatmas:mine") return m.mine;
       if (name === "sessions:me") return m.me;
       if (name === "notes:forKhatma") return m.notes;
@@ -73,6 +80,7 @@ vi.mock("convex/react", async () => {
     },
     useMutation: (ref: never) =>
       m.fns[getFunctionName(ref).split(":")[1] as keyof typeof m.fns],
+    useAction: () => m.startAgain,
   };
 });
 
@@ -194,6 +202,8 @@ function renderAt(url = "/j/CODE") {
     <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route path="/j/:inviteCode" element={<Page />} />
+        <Route path="/j/:inviteCode/setup" element={<p>setup page</p>} />
+        <Route path="/" element={<p>home page</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -203,6 +213,7 @@ function Page() {
     <RotaKhatmaPage
       inviteCode="CODE"
       name="ختمة العائلة"
+      archived={m.archived}
       joinLink={m.joinLink}
     />
   );
@@ -224,7 +235,9 @@ beforeEach(() => {
   m.mine = [];
   m.me = { displayName: "علي" };
   m.joinLink = JOIN_LINK;
+  m.archived = false;
   m.notes = [];
+  m.startAgain.mockReset().mockResolvedValue({ inviteCode: "NEWCODE" });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -660,6 +673,241 @@ describe("page", () => {
     expect(screen.getByRole("list")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "اليوم" }));
     expect(screen.getByText("٢٧ / ٣٠")).toBeInTheDocument();
+  });
+});
+
+describe("an archived khatma", () => {
+  beforeEach(() => {
+    m.today = todayView({ archived: true });
+    m.settings = { ...settings, archived: true };
+  });
+
+  it("says its days have ended, paused or not, and never promises a next one", () => {
+    m.today = todayView({
+      archived: true,
+      paused: true,
+      day: null,
+      tiles: [],
+      next: { number: 13, date: null },
+    });
+    m.people = { ...peopleView(roster), target: { number: 13, date: null } };
+    const { unmount } = renderAt();
+    expect(screen.getByText(t.rota.ended)).toBeInTheDocument();
+    expect(screen.queryByText(t.rota.pausedBanner)).toBeNull();
+    unmount();
+    renderAt("/j/CODE?tab=people");
+    expect(screen.getByText(t.rota.nextBanner(13, null))).toBeInTheDocument();
+  });
+
+  it("says so once, on Today and on People", () => {
+    const { unmount } = renderAt();
+    expect(screen.getAllByText(t.archive.banner)).toHaveLength(1);
+    unmount();
+    renderAt("/j/CODE?tab=people");
+    expect(screen.getAllByText(t.archive.banner)).toHaveLength(1);
+  });
+
+  it("offers to start again with the same people, and to delete", () => {
+    renderAt();
+    expect(
+      screen.getByRole("button", { name: t.archive.restart }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: t.archive.delete }),
+    ).toBeEnabled();
+  });
+
+  it("an active khatma offers neither", () => {
+    m.today = todayView();
+    m.settings = settings;
+    renderAt();
+    expect(screen.queryByText(t.archive.banner)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: t.archive.restart }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: t.archive.delete })).toBeNull();
+  });
+
+  it("start again asks for the first day, then opens the setup of the new khatma", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.restart }));
+    const sheet = screen.getByRole("dialog", { name: t.archive.restartTitle });
+    // Tuesday the 10th, noon in the khatma's zone: tomorrow is Wednesday the 11th.
+    expect(sheet).toHaveTextContent("غداً، الأربعاء ١١ نوفمبر");
+    await user.click(
+      within(sheet).getByRole("button", { name: t.archive.restartConfirm }),
+    );
+    expect(m.startAgain).toHaveBeenCalledWith({
+      ...args,
+      firstDate: "2026-11-11",
+    });
+    expect(await screen.findByText("setup page")).toBeInTheDocument();
+  });
+
+  it("delete asks first, then goes home", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.delete }));
+    expect(m.fns.remove).not.toHaveBeenCalled();
+    await user.click(
+      screen.getByRole("button", { name: t.archive.deleteConfirm }),
+    );
+    expect(m.fns.remove).toHaveBeenCalledWith(args);
+    expect(await screen.findByText("home page")).toBeInTheDocument();
+  });
+
+  it("Today: no tile opens", () => {
+    renderAt();
+    for (const tile of within(grid()).getAllByRole("button")) {
+      expect(tile).toBeDisabled();
+    }
+  });
+
+  it("People: the readers show, but nothing can be pressed, added or shared", () => {
+    m.people = peopleView(roster, undefined, {
+      requests: [
+        {
+          id: "q1",
+          name: "نور",
+          phoneMasked: "+971 50 ••• 0009",
+          createdAt: 1,
+        },
+      ],
+    });
+    renderAt("/j/CODE?tab=people");
+    const rows = within(
+      document.querySelector("ol") as HTMLElement,
+    ).getAllByRole("listitem");
+    expect(rows).toHaveLength(30);
+    expect(rows[1]).toHaveTextContent("مريم");
+    expect(
+      within(document.querySelector("ol") as HTMLElement).queryAllByRole(
+        "button",
+      ),
+    ).toHaveLength(0);
+    expect(screen.queryByText(/أضف قارئاً/)).toBeNull();
+    expect(screen.queryByRole("link", { name: t.rota.shareJoin })).toBeNull();
+    expect(screen.queryByText(t.rota.requestsHeading)).toBeNull();
+    expect(screen.queryByRole("link", { name: t.rota.notJoined })).toBeNull();
+  });
+
+  it("People: no join link is asked for", () => {
+    m.people = peopleView(roster);
+    (m.people as { joinLink: string | null }).joinLink = null;
+    renderAt("/j/CODE?tab=people");
+    expect(m.fns.ensureJoinLink).not.toHaveBeenCalled();
+  });
+
+  it("delete keeps showing «جارٍ الحذف» while it runs, however the queries turn out", async () => {
+    let finish: (value: { ok: true }) => void = () => {};
+    m.fns.remove.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    const view = renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.delete }));
+    await user.click(
+      screen.getByRole("button", { name: t.archive.deleteConfirm }),
+    );
+    expect(m.fns.remove).toHaveBeenCalledWith(args);
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+    // The delete lands: both queries turn null before the move home.
+    m.today = null;
+    m.settings = null;
+    view.rerender(
+      <MemoryRouter initialEntries={["/j/CODE"]}>
+        <Routes>
+          <Route path="/j/:inviteCode" element={<Page />} />
+          <Route path="/" element={<p>home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+    expect(screen.queryByText(t.rota.whatsappOnly)).toBeNull();
+    expect(screen.queryByText("home page")).toBeNull();
+    finish({ ok: true });
+    expect(await screen.findByText("home page")).toBeInTheDocument();
+  });
+
+  it("a failed delete gives the page back, with the reason under the buttons", async () => {
+    m.fns.remove.mockResolvedValue({ error: "not_archived" });
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.delete }));
+    await user.click(
+      screen.getByRole("button", { name: t.archive.deleteConfirm }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.errors.not_archived ?? "",
+    );
+    expect(
+      screen.getByRole("button", { name: t.archive.delete }),
+    ).toBeEnabled();
+  });
+
+  it("the switch button counts only active khatmas", () => {
+    const card = {
+      name: "ختمة",
+      createdAt: 0,
+      done: 0,
+      holding: null,
+      hasNote: false,
+      schedule: "daily",
+    };
+    m.mine = [
+      { ...card, inviteCode: "CODE", kind: "rota", archived: true },
+      { ...card, inviteCode: "OLD", archived: true },
+    ];
+    const { unmount } = renderAt();
+    expect(
+      screen.queryByRole("button", { name: t.nav.switchKhatma }),
+    ).toBeNull();
+    unmount();
+    m.mine = [
+      { ...card, inviteCode: "CODE", kind: "rota", archived: true },
+      { ...card, inviteCode: "OTHER" },
+    ];
+    renderAt();
+    expect(
+      screen.getByRole("button", { name: t.nav.switchKhatma }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("an archived khatma, for anyone but the organizer", () => {
+  beforeEach(() => {
+    m.today = null;
+    m.archived = true;
+  });
+
+  it("says so, and offers no way to join", () => {
+    renderAt();
+    expect(screen.getByText(t.archive.banner)).toBeInTheDocument();
+    expect(screen.queryByText(t.rota.whatsappOnly)).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: t.rota.joinOnWhatsApp }),
+    ).toBeNull();
+  });
+
+  it("a signed-out visitor can still sign in as the organizer", () => {
+    m.me = null;
+    renderAt();
+    expect(
+      screen.getByRole("button", { name: t.rota.imOrganizer }),
+    ).toBeInTheDocument();
+  });
+
+  it("an active khatma keeps its join button", () => {
+    m.archived = false;
+    renderAt();
+    expect(
+      screen.getByRole("link", { name: t.rota.joinOnWhatsApp }),
+    ).toHaveAttribute("href", JOIN_LINK);
+    expect(screen.queryByText(t.archive.banner)).toBeNull();
   });
 });
 

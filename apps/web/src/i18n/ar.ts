@@ -253,7 +253,34 @@ export const ar = {
       maintenance: commonErrors.maintenance,
       network: commonErrors.network,
       generic: commonErrors.generic,
+      archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
     },
+  },
+  archive: {
+    banner: "هذه الختمة مؤرشفة",
+    bannerHint: "للقراءة فقط، ولا تصل منها رسائل.",
+    heading: "أرشفة الختمة",
+    hint: "عندما تنتهون منها، تتوقف الرسائل وتبقى الختمة للقراءة فقط.",
+    button: "أرشف الختمة",
+    title: "أرشفة الختمة؟",
+    body: "تتوقف الرسائل، ولا يضيع شيء: تبقى الختمة وأسماء من فيها للقراءة، وتجدها في «المؤرشفة».",
+    confirm: "نعم، أرشف الختمة",
+    archiving: "جارٍ الأرشفة",
+    restart: "ابدأ من جديد بالأشخاص أنفسهم",
+    restartTitle: "ابدأ ختمة جديدة؟",
+    restartBody:
+      "تبدأ ختمة جديدة بالأشخاص أنفسهم وأجزائهم. كلٌّ منهم يرسل رسالة الانضمام من جديد، ولا تصل الرسائل إلى من لم يرسلها.",
+    restartDate: "تبدأ الختمة الأولى",
+    restartConfirm: "ابدأ الختمة الجديدة",
+    starting: "جارٍ البدء",
+    delete: "احذف الختمة",
+    deleteTitle: "حذف الختمة؟",
+    deleteBody:
+      "لا يمكن التراجع عن الحذف. تُحذف الختمة ورابطها، ويبقى المشاركون المحفوظون عندك.",
+    deleteConfirm: "نعم، احذف الختمة",
+    deleting: "جارٍ الحذف",
+    deleteBusy: "نحذف ختمة أخرى الآن. حاول بعد ثوانٍ.",
+    cancel: "تراجع",
   },
   nav: {
     label: "التنقل",
@@ -396,6 +423,7 @@ export const ar = {
   actions: {
     errors: {
       notHolding: "ليس معك جزء الآن.",
+      archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
       /** The session ended on another device (signed out from there, say). */
       signedOut: "خرجتَ من حسابك على هذا الجهاز. سجّل دخولك من جديد لتكمل.",
       shared: {
@@ -432,6 +460,7 @@ export const ar = {
     settings: "إعداداتي",
     doneOf: (done: string, total: string) => `${done} من ${total} تمّت`,
     yours: (n: string, name: string) => `جزؤك: الجزء ${n} «${name}»`,
+    archived: "المؤرشفة",
     loadError: commonErrors.network,
   },
   create: {
@@ -514,6 +543,7 @@ export const ar = {
       not_reading_date: "هذا اليوم ليس يوم قراءة.",
       past: "هذا اليوم مضى.",
       archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
+      not_archived: "أرشِف الختمة أولاً، ثم ابدأ منها من جديد أو احذفها.",
     } as Record<string, string>,
     setupTitle: "من سيقرأ معك؟",
     personName: "الاسم",
@@ -601,7 +631,6 @@ export const ar = {
     ended: "انتهت أيام القراءة المحددة.",
     pausedBanner:
       "الختمة موقوفة الآن. لا رسائل ولا يتقدّم رقم الختمة حتى تعيد تشغيلها.",
-    archivedBanner: "هذه الختمة مؤرشفة.",
     archivedSettings: "هذه الختمة مؤرشفة، فلا يمكن تغيير إعداداتها.",
     setupNotDone: "أضف من سيقرأ معك، ثم اضغط «ابدأ الختمة».",
     startKhatma: "ابدأ الختمة",
@@ -639,6 +668,7 @@ export const ar = {
       `الختمة ${toArabicDigits(number)}${date ? ` يوم ${date}` : ""}. هذا جزء كل مشارك فيها، ويتقدّم كلٌّ منهم جزءاً في كل ختمة.`,
     addReader: (juz: number) => `+ أضف قارئاً للجزء ${toArabicDigits(juz)}`,
     secondJuz: "جزء ثانٍ",
+    noReader: "بلا قارئ",
     readerTitle: (juz: number) => `قارئ الجزء ${toArabicDigits(juz)}`,
     walk: (juz: number, number: number) => {
       // Each khatma moves a reader up one juz', and after 30 it goes back to 1.
@@ -665,9 +695,40 @@ export const ar = {
     cancel: "تراجع",
     peopleErrors: {
       not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
-      is_me: "لا يمكنك إزالة نفسك من الختمة.",
+      is_me: "لا يمكن إزالة منظّم الختمة منها.",
       juz_taken: "هذا الجزء له قارئ الآن.",
       too_many: "لا يمكنه أن يقرأ أكثر من هذا.",
+    } as Record<string, string>,
+    // Saved participants and pool members
+    savedFrom: "من ختمات سابقة",
+    savedTitle: "من ختمات سابقة",
+    savedHint: "اختر من أضفتَهم من قبل.",
+    savedInKhatma: "في الختمة",
+    savedErrors: {
+      no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
+      juz_taken: "هذا الجزء له قارئ. حاول مرة أخرى.",
+      already_added: "هذا الشخص مضاف في الختمة.",
+      not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
+    } as Record<string, string>,
+    importTitle: (title: string) => `أضف أعضاء ${title}`,
+    importCount: (n: number) =>
+      `${counted(n, { one: "عضو واحد", two: "عضوان", few: "أعضاء", many: "عضواً" })}، بالأسماء فقط`,
+    importHint: "لا ترى أرقامهم، وكلٌّ منهم ينضمّ بنفسه من رابط الانضمام.",
+    importResult: (added: number, skipped: number) => {
+      const people = (n: number) =>
+        counted(n, {
+          one: "شخصاً واحداً",
+          two: "شخصين",
+          few: "أشخاص",
+          many: "شخصاً",
+        });
+      const first = added > 0 ? `أضفنا ${people(added)}.` : "لم نضف أحداً.";
+      return skipped > 0
+        ? `${first} تركنا ${people(skipped)}، لأنهم في الختمة أو لأن الأجزاء اكتملت.`
+        : first;
+    },
+    importErrors: {
+      not_found: "لم نجد تلك الختمة. أعد تحميل الصفحة.",
     } as Record<string, string>,
     // Settings
     pauseHeading: "الإيقاف",
@@ -751,6 +812,19 @@ export const ar = {
     signedOutOthers: "سجّلنا خروج الأجهزة الأخرى.",
     signedOutOne: "سجّلنا خروج ذلك الجهاز.",
     numbers: "أرقامي",
+    savedHeading: "مشاركوني",
+    savedHint: "من أضفتَهم إلى ختماتك بالتناوب. تجدهم عند إضافة قارئ جديد.",
+    savedHidden: "مخفي",
+    savedRemove: "احذف",
+    savedRemoveLabel: (name: string) => `احذف ${name}`,
+    savedRemoveTitle: (name: string) => `احذف ${name} من مشاركيك؟`,
+    savedRemoveBody:
+      "يبقى في الختمات التي هو فيها الآن. فقط لا يظهر في قائمتك بعد اليوم.",
+    savedRemoveConfirm: "نعم، احذفه",
+    savedRemoveCancel: "تراجع",
+    savedErrors: {
+      not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
+    } as Record<string, string>,
     /** Whole juz' read: `جزءاً واحداً`, `جزأين`, `٤ أجزاء`, `١٢ جزءاً`. */
     juzRead: (n: number) =>
       `قرأتَ ${counted(n, {

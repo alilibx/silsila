@@ -1,7 +1,8 @@
 import { convexTest, type TestConvexForDataModel } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
+import { sha256Hex } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
 import type { RotaMessages } from "./lib/rota";
 import { joinText } from "./lib/rotaJoin";
@@ -1060,4 +1061,326 @@ test("what production places is never relayed", async () => {
   await send(t, STRANGER, "السلام عليكم");
   expect(relayed).toEqual([]);
   expect(sent).toHaveLength(5);
+});
+
+// ---------------------------------------------------------------------------
+// A khatma an admin set up, waiting for its organizer
+
+/** The khatma's organizer as a participant on slot 1, and a session for them; no `members` row. */
+async function pendingKhatma(t: T) {
+  const s = await setup(t, [{ slot: 1, phone: ORGANIZER, joinedAt: null }]);
+  const sessionToken = "organizer-session";
+  const inviteCode = "pendingCode1";
+  const tokenHash = await sha256Hex(sessionToken);
+  await t.run(async (ctx) => {
+    const khatma = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      inviteCode,
+      rota: { ...khatma!.rota!, pendingOrganizer: true },
+    });
+    await ctx.db.patch(s.participants[0]!, { personId: s.personId });
+    await ctx.db.insert("sessions", {
+      personId: s.personId,
+      tokenHash,
+      alertTokenHash: "alert",
+      deviceLabel: "test",
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+    });
+  });
+  return { ...s, sessionToken, inviteCode };
+}
+
+const pendingState = (t: T, khatmaId: Id<"khatmas">) =>
+  t.run(async (ctx) => ({
+    pending: (await ctx.db.get(khatmaId))?.rota?.pendingOrganizer,
+    members: await ctx.db
+      .query("members")
+      .withIndex("by_khatma", (q) => q.eq("khatmaId", khatmaId))
+      .collect(),
+    notes: await ctx.db.query("notes").collect(),
+    requests: await ctx.db.query("rotaJoinRequests").collect(),
+  }));
+
+test("a stranger's join on a waiting khatma files a request, and makes nobody organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+
+  await send(t, STRANGER, joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+  expect(state.requests.map((r) => r.phone)).toEqual([`+${STRANGER}`]);
+  expect(state.notes.map((n) => n.kind)).toEqual(["rotaJoinRequest"]);
+  expect(
+    await t.query(api.rota.people, {
+      sessionToken: s.sessionToken,
+      inviteCode: s.inviteCode,
+    }),
+  ).toBeNull();
+});
+
+test("a blocked organizer's join on a waiting khatma doesn't make them its organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  await t.run(async (ctx) => {
+    const admin = await ctx.db.insert("admins", {
+      phone: "+971500000099",
+      addedBy: null,
+      addedAt: 0,
+    });
+    await ctx.db.insert("blockedPhones", {
+      phone: ORGANIZER,
+      blockedBy: admin,
+      at: 0,
+      note: null,
+    });
+  });
+
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+  expect(state.notes).toEqual([]);
+});
+
+test("a listed reader's join on a waiting khatma joins them, and makes them no organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("rotaParticipants", {
+      khatmaId: s.khatmaId,
+      name: "قارئ",
+      phone: "+971500000200",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+    });
+  });
+
+  await send(t, "971500000200", joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+});
+
+test("the organizer's own number takes the khatma up, and only then does it answer them", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  const args = { sessionToken: s.sessionToken, inviteCode: s.inviteCode };
+  expect(await t.query(api.rota.people, args)).toBeNull();
+
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(false);
+  expect(state.members).toHaveLength(1);
+  expect(state.members[0]).toMatchObject({
+    personId: s.personId,
+    status: "active",
+  });
+  expect(state.notes.map((n) => [n.kind, n.personId])).toEqual([
+    ["nowOrganizer", s.personId],
+  ]);
+  expect(state.requests).toEqual([]);
+
+  // On top of the usual join: they are welcomed, and joined.
+  expect(sent.map((m) => m.to)).toEqual([ORGANIZER.slice(1)]);
+  const view = await t.query(api.rota.people, args);
+  expect(view?.participants[0]).toMatchObject({ isMe: true, joined: true });
+
+  // A second join is an ordinary join.
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+  const again = await pendingState(t, s.khatmaId);
+  expect(again.members).toHaveLength(1);
+  expect(again.notes).toHaveLength(1);
+});
+
+test("an archived waiting khatma only says it has ended", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  await t.run(async (ctx) => {
+    const khatma = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...khatma!.rota!, archivedAt: 1 },
+    });
+  });
+
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+  expect(sent[0]?.body).toContain(endedText);
+});
+
+// ---------------------------------------------------------------------------
+// Members of an archived khatma
+
+/** Archives the khatma as its organizer would: it stops, and its day closes. */
+async function archiveOf(t: T, s: Setup) {
+  await t.run(async (ctx) => {
+    const khatma = (await ctx.db.get(s.khatmaId))!;
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...khatma.rota!, archivedAt: Date.now() },
+    });
+    const days = await ctx.db
+      .query("rotaDays")
+      .withIndex("by_khatma_n", (q) => q.eq("khatmaId", s.khatmaId))
+      .collect();
+    for (const day of days) {
+      await ctx.db.patch(day._id, { closedAt: Date.now() });
+    }
+  });
+}
+
+const windowOf = (t: T, phone: string) =>
+  t.run((ctx) =>
+    ctx.db
+      .query("waContacts")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique(),
+  );
+
+test("someone only on archived khatmas hears that it ended, for a typed reply or any other text", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }], { name: "ختمة العائلة" });
+  await startDay(t, s);
+  await archiveOf(t, s);
+
+  for (const text of ["تم", "ليس بعد", "دعاء", "كيف الحال"]) {
+    await send(t, phoneOf(0), text);
+  }
+
+  const ended = `*ختمة العائلة*\n${endedText}`;
+  expect(sent.map((m) => m.body)).toEqual([ended, ended, ended, ended]);
+});
+
+test("with several archived khatmas the reply names the newest", async () => {
+  const t = convexTest(schema, modules);
+  const phone = "+971500000100";
+  const old = await setup(t, [{ slot: 1, phone }], {
+    name: "القديمة",
+    joinCode: "OLD234",
+  });
+  const newest = await setup(t, [{ slot: 1, phone }], {
+    name: "الأحدث",
+    joinCode: "NEW234",
+    organizerId: old.personId,
+  });
+  await t.run((ctx) => ctx.db.patch(newest.khatmaId, { createdAt: 5 }));
+  await archiveOf(t, newest);
+  await archiveOf(t, old);
+
+  await send(t, phoneOf(0), "تم");
+
+  expect(sent.map((m) => m.body)).toEqual([`*الأحدث*\n${endedText}`]);
+});
+
+test("a live khatma alongside an archived one keeps the usual replies", async () => {
+  const t = convexTest(schema, modules);
+  const phone = "+971500000100";
+  const archived = await setup(t, [{ slot: 1, phone }], { joinCode: "OLD234" });
+  await setup(t, [{ slot: 1, phone }], {
+    joinCode: "NEW234",
+    organizerId: archived.personId,
+  });
+  await archiveOf(t, archived);
+
+  await send(t, phoneOf(0), "كيف الحال");
+
+  expect(sent.map((m) => m.body)).toEqual([helpText]);
+});
+
+test("«إيقاف» from someone only on archived khatmas still stops them", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+
+  await send(t, phoneOf(0), "إيقاف");
+
+  expect(sent.map((m) => m.body)).toEqual([stopText]);
+  expect((await participant(t, s.participants[0]!)).stoppedAt).toBe(Date.now());
+});
+
+test("a tap on an old button of an archived khatma says the day is closed", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  const day = await startDay(t, s);
+  await archiveOf(t, s);
+
+  await send(t, phoneOf(0), "", {
+    payload: tap("done", day._id, s.participants[0]!),
+  });
+
+  expect(sent.map((m) => m.body)).toEqual([`*ختمة*\n${closedText}`]);
+});
+
+test("what may be a sign-in code from someone only on archived khatmas is left alone", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+
+  const result = await t.mutation(internal.rotaInbound.handle, {
+    phone: `+${phoneOf(0)}`,
+    text: "ABCD-EFGH-JK",
+    mayBeSignIn: true,
+    now: Date.now(),
+  });
+
+  expect(result).toEqual({ kind: "none" });
+});
+
+test("someone never joined to an archived khatma gets no ended reply", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1, joinedAt: null }]);
+  await archiveOf(t, s);
+
+  await send(t, phoneOf(0), "تم");
+
+  expect(sent.map((m) => m.body)).toEqual([helpText]);
+});
+
+test("a message from a phone only on archived khatmas opens no window", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+  const phone = `+${phoneOf(0)}`;
+
+  await send(t, phoneOf(0), "تم");
+  await send(t, phoneOf(0), "", { media: true });
+
+  expect(await windowOf(t, phone)).toBeNull();
+});
+
+test("a window already open isn't refreshed by a phone only on archived khatmas", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+  const phone = `+${phoneOf(0)}`;
+  await t.run((ctx) =>
+    ctx.db.insert("waContacts", { phone, lastInboundAt: 1 }),
+  );
+
+  await send(t, phoneOf(0), "تم");
+
+  expect((await windowOf(t, phone))?.lastInboundAt).toBe(1);
+});
+
+test("a phone with a live khatma too still opens its window", async () => {
+  const t = convexTest(schema, modules);
+  const phone = "+971500000100";
+  const archived = await setup(t, [{ slot: 1, phone }], { joinCode: "OLD234" });
+  await setup(t, [{ slot: 1, phone }], {
+    joinCode: "NEW234",
+    organizerId: archived.personId,
+  });
+  await archiveOf(t, archived);
+
+  await send(t, phoneOf(0), "تم");
+
+  expect((await windowOf(t, phone))?.lastInboundAt).toBe(Date.now());
 });

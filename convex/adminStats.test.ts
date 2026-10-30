@@ -163,6 +163,7 @@ test("with no stats yet the dashboard shows zeros, not an error", async () => {
     ajzaToday: 0,
     ajzaAvg7: 0,
     completedThisWeek: 0,
+    rotaDaysCompletedThisWeek: 0,
     stalledKhatmas: 0,
     stalledCapped: false,
     daysPerRoundMedian: null,
@@ -200,6 +201,17 @@ test("active khatmas: a finish in the last 14 days", async () => {
   expect(o.activeKhatmasWeekAgo).toBeNull();
 });
 
+test("activeKhatmas skips archived khatmas", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const round = { startedAt: NOW - 30 * DAY, lastFinishedAt: NOW - 3 * DAY };
+  await khatmaWithRound(t, round);
+  const { khatmaId } = await khatmaWithRound(t, round);
+  expect((await overview(t)).activeKhatmas).toBe(2);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+  expect((await overview(t)).activeKhatmas).toBe(1);
+});
+
 test("stalled khatmas: an open current round, a member, and 14 quiet days", async () => {
   const t = convexTest(schema, modules);
   await admin(t);
@@ -220,6 +232,19 @@ test("stalled khatmas: an open current round, a member, and 14 quiet days", asyn
     completedAt: NOW - 15 * DAY,
   });
   expect((await overview(t)).stalledKhatmas).toBe(2);
+});
+
+test("an archived khatma is not stalled", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const quiet = { startedAt: NOW - 30 * DAY, lastFinishedAt: NOW - 15 * DAY };
+  const archived = await khatmaWithRound(t, quiet);
+  await khatmaWithRound(t, quiet);
+  expect((await overview(t)).stalledKhatmas).toBe(2);
+
+  await t.run((ctx) => ctx.db.patch(archived.khatmaId, { archivedAt: NOW }));
+
+  expect((await overview(t)).stalledKhatmas).toBe(1);
 });
 
 test("days per round is the median over the last 30 days", async () => {
@@ -316,4 +341,46 @@ test("sign-in success never reads above 100%", async () => {
     days: 7,
   });
   expect(rate.at(-1)?.value).toBe(1);
+});
+
+test("rotating khatma days completed this week: the stored days and today's live count", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  // Rows from before the figure existed have none.
+  await day(t, TODAY - 7, { rotaDaysCompleted: 50 });
+  await day(t, TODAY - 6, {});
+  await day(t, TODAY - 3, { rotaDaysCompleted: 4 });
+  await day(t, TODAY - 1, { rotaDaysCompleted: 2 });
+  await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "س",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
+    });
+    const khatmaId = await ctx.db.insert("khatmas", {
+      name: null,
+      schedule: "none",
+      grace: { value: 2, unit: "days" },
+      creatorPersonId: personId,
+      inviteCode: "rotaKhatma01",
+      completedRounds: 0,
+      createdAt: 0,
+    });
+    await ctx.db.insert("rotaDays", {
+      khatmaId,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2026-10-20",
+      startedAt: NOW - HOUR,
+      closesAt: NOW + HOUR,
+      completedAt: NOW - 1000,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+    });
+  });
+  expect((await overview(t)).rotaDaysCompletedThisWeek).toBe(7);
 });

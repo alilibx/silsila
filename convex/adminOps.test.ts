@@ -233,6 +233,7 @@ test("find a person by phone, and their page", async () => {
       inviteCode: "familyKhatma",
       isOrganizer: true,
       status: "active",
+      pending: false,
     },
   ]);
   expect(page?.blocked).toBe(false);
@@ -389,6 +390,49 @@ test("hand over moves the organizer and tells both", async () => {
   });
 });
 
+test("an admin moves an archived khatma quietly, with the usual audit row", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971500000001", "علي");
+  const sara = await person(t, "+971500000002", "سارة");
+  const { khatmaId, memberIds } = await khatma(t, ali, [sara]);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+
+  expect(
+    await t.mutation(api.adminOps.handOver, {
+      adminToken: "admin",
+      khatmaId,
+      memberId: memberIds[1]!,
+    }),
+  ).toEqual({ ok: true });
+
+  const after = await t.run(async (ctx) => ({
+    organizer: (await ctx.db.get(khatmaId))?.creatorPersonId,
+    notes: await ctx.db.query("notes").collect(),
+  }));
+  expect(after.organizer).toBe(sara);
+  expect(after.notes).toEqual([]);
+  expect((await audit(t)).at(-1)).toMatchObject({
+    action: "khatma.handOver",
+    before: ali,
+    after: sara,
+  });
+});
+
+test("an admin can reset an archived khatma's invite", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971500000001", "علي");
+  const { khatmaId } = await khatma(t, ali, []);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+
+  await t.action(api.adminOps.resetInvite, { adminToken: "admin", khatmaId });
+
+  expect((await t.run((ctx) => ctx.db.get(khatmaId)))?.inviteCode).not.toBe(
+    "familyKhatma",
+  );
+});
+
 test("members can't reach lookups or operations", async () => {
   const t = convexTest(schema, modules);
   const sara = await person(t, "+971500000002");
@@ -470,6 +514,207 @@ test("an admin turns rotating khatmas on and off for a person, with one audit ro
   });
   expect(await flag()).toBe(false);
   expect(await audit(t)).toHaveLength(2);
+});
+
+test("turning rotating khatmas on tells the person on their newest khatma, once, and not when turning off", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const sara = await person(t, "+971500000002", "سارة");
+  const organized = (name: string, inviteCode: string, createdAt: number) =>
+    t.run(async (ctx) => {
+      const khatmaId = await ctx.db.insert("khatmas", {
+        name,
+        schedule: "weekly",
+        grace: { value: 2, unit: "days" },
+        creatorPersonId: sara,
+        inviteCode,
+        completedRounds: 0,
+        createdAt,
+      });
+      await ctx.db.insert("members", {
+        khatmaId,
+        personId: sara,
+        joinedAt: createdAt,
+        status: "active",
+        notificationsOn: false,
+        lastNudgeAt: null,
+        lastCelebratedRound: 0,
+      });
+      return khatmaId;
+    });
+  const older = await organized("القديمة", "oldKhatma001", 1);
+  const newer = await organized("الجديدة", "newKhatma001", 2);
+  const archived = await organized("المؤرشفة", "arcKhatma001", 3);
+  await t.run((ctx) => ctx.db.patch(archived, { archivedAt: NOW }));
+  const notes = () => t.run((ctx) => ctx.db.query("notes").collect());
+  const set = (allowed: boolean) =>
+    t.mutation(api.adminOps.setRotaAllowed, {
+      adminToken: "admin",
+      personId: sara,
+      allowed,
+    });
+
+  await set(true);
+  expect(await notes()).toMatchObject([
+    { personId: sara, khatmaId: newer, kind: "rotaEnabled" },
+  ]);
+  expect(older).not.toBe(newer);
+
+  // Already on: switching on again says nothing new.
+  await set(true);
+  expect(await notes()).toHaveLength(1);
+  await set(false);
+  expect(await notes()).toHaveLength(1);
+});
+
+test("turning rotating khatmas on for a person with no khatma of their own sends no note", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const sara = await person(t, "+971500000002", "سارة");
+  const ali = await person(t, "+971500000001", "علي");
+  // A member of someone else's khatma is not an organizer.
+  await khatma(t, ali, [sara]);
+  expect(
+    await t.mutation(api.adminOps.setRotaAllowed, {
+      adminToken: "admin",
+      personId: sara,
+      allowed: true,
+    }),
+  ).toEqual({ ok: true });
+  expect(await t.run((ctx) => ctx.db.query("notes").collect())).toEqual([]);
+  expect(await audit(t)).toHaveLength(1);
+});
+
+test("organizers lists the creators of the newest khatmas, grouped, with a masked phone and the switch", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971501234567", "علي");
+  const sara = await person(t, "+971507654321", "سارة");
+  await t.run((ctx) => ctx.db.patch(sara, { rotaAllowed: true }));
+  const make = (creator: Id<"people">, name: string, createdAt: number) =>
+    t.run(async (ctx) => {
+      vi.setSystemTime(createdAt);
+      return await ctx.db.insert("khatmas", {
+        name,
+        schedule: "weekly",
+        grace: { value: 2, unit: "days" },
+        creatorPersonId: creator,
+        inviteCode: `code${createdAt}`.padEnd(12, "x"),
+        completedRounds: 0,
+        createdAt,
+      });
+    });
+  const first = await make(ali, "الأولى", NOW);
+  const second = await make(sara, "الثانية", NOW + 1000);
+  const third = await make(ali, "الثالثة", NOW + 2000);
+  // Ali's first khatma has two active members and one who left.
+  const layla = await person(t, "+971500000003", "ليلى", 0);
+  await t.run(async (ctx) => {
+    for (const [status, p] of [
+      ["active", ali],
+      ["active", sara],
+      ["former", layla],
+    ] as const) {
+      await ctx.db.insert("members", {
+        khatmaId: first,
+        personId: p,
+        joinedAt: 0,
+        status,
+        notificationsOn: false,
+        lastNudgeAt: null,
+        lastCelebratedRound: 0,
+      });
+    }
+  });
+
+  const res = await t.query(api.adminLookup.organizers, {
+    adminToken: "admin",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  expect(res.isDone).toBe(true);
+  expect(res.page).toEqual([
+    {
+      personId: ali,
+      displayName: "علي",
+      phoneMasked: expect.stringMatching(/4567$/),
+      rotaAllowed: false,
+      khatmas: [
+        { khatmaId: third, name: "الثالثة", memberCount: 0 },
+        { khatmaId: first, name: "الأولى", memberCount: 2 },
+      ],
+    },
+    {
+      personId: sara,
+      displayName: "سارة",
+      phoneMasked: expect.stringMatching(/4321$/),
+      rotaAllowed: true,
+      khatmas: [{ khatmaId: second, name: "الثانية", memberCount: 0 }],
+    },
+  ]);
+  expect(JSON.stringify(res)).not.toContain("+971501234567");
+});
+
+test("organizers pages by khatma, counts a rotating khatma's readers, and needs an admin", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971501234567", "علي");
+  const ids = await t.run(async (ctx) => {
+    const out: Id<"khatmas">[] = [];
+    for (let i = 0; i < 3; i++) {
+      out.push(
+        await ctx.db.insert("khatmas", {
+          name: `ختمة ${i}`,
+          schedule: "none",
+          grace: { value: 2, unit: "days" },
+          creatorPersonId: ali,
+          inviteCode: `rot${i}`.padEnd(12, "x"),
+          completedRounds: 0,
+          createdAt: i,
+          kind: "rota",
+        }),
+      );
+    }
+    // Two readers still in the newest, and one taken out.
+    for (const [name, removedAt] of [
+      ["أ", null],
+      ["ب", null],
+      ["ج", 5],
+    ] as const) {
+      await ctx.db.insert("rotaParticipants", {
+        khatmaId: out[2]!,
+        name,
+        phone: "+971500000010",
+        personId: null,
+        addedAt: 0,
+        removedAt,
+      });
+    }
+    return out;
+  });
+
+  const first = await t.query(api.adminLookup.organizers, {
+    adminToken: "admin",
+    paginationOpts: { numItems: 2, cursor: null },
+  });
+  expect(first.isDone).toBe(false);
+  expect(first.page).toHaveLength(1);
+  expect(first.page[0]?.khatmas).toEqual([
+    { khatmaId: ids[2], name: "ختمة 2", memberCount: 2 },
+    { khatmaId: ids[1], name: "ختمة 1", memberCount: 0 },
+  ]);
+  const next = await t.query(api.adminLookup.organizers, {
+    adminToken: "admin",
+    paginationOpts: { numItems: 2, cursor: first.continueCursor },
+  });
+  expect(next.isDone).toBe(true);
+  expect(next.page[0]?.khatmas.map((k) => k.khatmaId)).toEqual([ids[0]]);
+
+  await expect(
+    t.query(api.adminLookup.organizers, {
+      adminToken: "member",
+      paginationOpts: { numItems: 50, cursor: null },
+    }),
+  ).rejects.toThrow(/not_admin/);
 });
 
 test("setting rota access for a person who is gone is not_found, and needs an admin", async () => {

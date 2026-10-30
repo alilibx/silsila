@@ -25,6 +25,7 @@ export function makeView(overrides: Partial<KhatmaView> = {}): KhatmaView {
     roundNumber: 12,
     targetEndAt: null,
     completedRounds: 0,
+    archived: false,
     memberCount: 9,
     lastCompleted: null,
     inviterName: null,

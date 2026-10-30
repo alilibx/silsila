@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { isHeld } from "./grace";
 import { JUZ_COUNT } from "./lib/juz";
+import { isArchived } from "./lib/khatma";
 import { paceSettings, personPace } from "./lib/pace";
 import { getSetting } from "./lib/settings";
 import { localDayNumber, safeTimeZone } from "./lib/wakingTime";
@@ -17,7 +18,8 @@ const SWEEP_PAGE = 50;
  * The reader's one gentle reminder for a juz' held 1.5x their pace (spec 4.2).
  * Skipped when the row is no longer held, has opened for help, was reminded
  * already, when the "almost up" note went out or is due on this same local day,
- * or when the member had a nudge in the last day.
+ * when the member had a nudge in the last day, or when the khatma is archived or
+ * deleted.
  */
 export const reminderDue = internalMutation({
   args: { assignmentId: v.id("assignments") },
@@ -35,6 +37,8 @@ export const reminderDue = internalMutation({
     const person = await ctx.db.get(a.personId);
     const member = await ctx.db.get(a.memberId);
     if (!person || !member || member.status !== "active") return;
+    const khatma = await ctx.db.get(a.khatmaId);
+    if (!khatma || isArchived(khatma)) return;
 
     const now = Date.now();
     const tz = safeTimeZone(person.timeZone);
@@ -65,7 +69,7 @@ function offCooldown(
 
 /**
  * Hourly: pages through every khatma and schedules a behind check for each one
- * whose current round has a target end. Paginated, and one mutation per
+ * not archived whose current round has a target end. Paginated, and one mutation per
  * khatma, so no run reads more than a page of khatmas or one khatma's members.
  */
 export const behindSweep = internalMutation({
@@ -75,7 +79,7 @@ export const behindSweep = internalMutation({
       .query("khatmas")
       .paginate({ numItems: SWEEP_PAGE, cursor: args.cursor ?? null });
     for (const khatma of page.page) {
-      if (!khatma.currentRoundId) continue;
+      if (!khatma.currentRoundId || isArchived(khatma)) continue;
       const round = await ctx.db.get(khatma.currentRoundId);
       if (!round || round.targetEndAt === null || round.completedAt !== null) {
         continue;
@@ -101,7 +105,7 @@ export const behindCheck = internalMutation({
   args: { khatmaId: v.id("khatmas") },
   handler: async (ctx, args) => {
     const khatma = await ctx.db.get(args.khatmaId);
-    if (!khatma?.currentRoundId) return;
+    if (!khatma?.currentRoundId || isArchived(khatma)) return;
     const round = await ctx.db.get(khatma.currentRoundId);
     if (!round || round.targetEndAt === null || round.completedAt !== null) {
       return;

@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ConfirmSheet } from "../components/ConfirmSheet";
+import { RotaSwitch } from "../components/RotaSwitch";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { opsError, withNote } from "../lib/opsError";
@@ -60,7 +61,8 @@ export function PersonAdminPage() {
         {p.phone} {p.blocked && `· ${t.lookup.blocked}`}
       </p>
       <p className="text-sm text-ink-soft">
-        {t.lookup.lastSeen}: {formatDate(p.lastSeenAt)}
+        {t.lookup.lastSeen}:{" "}
+        {p.lastSeenAt === 0 ? t.lookup.neverSeen : formatDate(p.lastSeenAt)}
       </p>
 
       <section>
@@ -75,9 +77,11 @@ export function PersonAdminPage() {
                 {k.name ?? t.lookup.unnamed}
               </Link>
               <span className="text-ink-soft">
-                {k.isOrganizer
-                  ? t.lookup.organizerBadge
-                  : t.lookup.statuses[k.status]}
+                {k.pending
+                  ? t.rota.pending
+                  : k.isOrganizer
+                    ? t.lookup.organizerBadge
+                    : t.lookup.statuses[k.status]}
               </span>
             </li>
           ))}
@@ -119,22 +123,11 @@ export function PersonAdminPage() {
 
       <section className="flex items-center justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 py-3">
         <span id={rotaLabelId}>{t.ops.rotaAllowed}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={p.rotaAllowed}
-          aria-labelledby={rotaLabelId}
-          onClick={() => setOp(p.rotaAllowed ? "rotaAllowOff" : "rotaAllowOn")}
-          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-            p.rotaAllowed ? "bg-green" : "bg-line"
-          }`}
-        >
-          <span
-            className={`absolute top-1 size-6 rounded-full bg-white transition-all ${
-              p.rotaAllowed ? "start-7" : "start-1"
-            }`}
-          />
-        </button>
+        <RotaSwitch
+          checked={p.rotaAllowed}
+          labelledBy={rotaLabelId}
+          onToggle={() => setOp(p.rotaAllowed ? "rotaAllowOff" : "rotaAllowOn")}
+        />
       </section>
 
       {message && <p role="status">{message}</p>}

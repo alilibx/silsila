@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { paceDays, personPace, weekStreak } from "./lib/pace";
 import { checkRateLimit } from "./lib/rateLimit";
@@ -88,6 +88,30 @@ export const me = sessionQuery({
     const person = ctx.person;
     if (!person) return null;
     return { rotaAllowed: person.rotaAllowed === true };
+  },
+});
+
+export type SavedPerson = {
+  id: Id<"rotaContacts">;
+  name: string;
+  /** Null for someone imported from a pool khatma: the organizer never sees the number. */
+  phone: string | null;
+};
+
+/** The people the caller added to their rotating khatmas before, by name, for the settings section. */
+export const savedPeople = sessionQuery({
+  args: {},
+  handler: async (ctx): Promise<SavedPerson[]> => {
+    const person = ctx.person;
+    if (!person) return [];
+    const contacts = await ctx.db
+      .query("rotaContacts")
+      .withIndex("by_owner", (q) => q.eq("ownerPersonId", person._id))
+      .collect();
+    return contacts
+      .filter((c) => c.removedAt === undefined)
+      .map((c) => ({ id: c._id, name: c.name, phone: c.phone }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
   },
 });
 

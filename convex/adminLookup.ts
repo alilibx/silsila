@@ -1,14 +1,19 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { normalizeAdminPhone } from "./admins";
 import { adminQuery } from "./lib/adminSession";
 import { isBlocked } from "./lib/blocked";
+import { isArchived } from "./lib/khatma";
 import { JUZ_COUNT } from "./lib/juz";
 import { ROTA_SIZE } from "./lib/rota";
+import { khatmaJoinLink } from "./lib/rotaJoin";
 import { lastRotaDay } from "./lib/rotaPlace";
+import { maskPhone } from "./lib/text";
 import { membersByJoin } from "./organizer";
 import { roundAssignments } from "./rounds";
+import { env } from "./whatsapp";
 
 const MAX_RESULTS = 20;
 const MIN_QUERY = 2;
@@ -20,6 +25,16 @@ async function activeCount(ctx: QueryCtx, khatmaId: Id<"khatmas">) {
     .withIndex("by_khatma", (q) => q.eq("khatmaId", khatmaId))
     .collect();
   return members.filter((m) => m.status === "active").length;
+}
+
+/** Who is in a khatma: its active members, or a rotating khatma's readers still on the list. */
+async function memberCount(ctx: QueryCtx, k: Doc<"khatmas">) {
+  if (k.kind !== "rota") return await activeCount(ctx, k._id);
+  const readers = await ctx.db
+    .query("rotaParticipants")
+    .withIndex("by_khatma", (q) => q.eq("khatmaId", k._id))
+    .collect();
+  return readers.filter((p) => p.removedAt === null).length;
 }
 
 /** A rota khatma's settings and where its latest reading day stands, as counts. */
@@ -39,6 +54,8 @@ async function rotaFacts(ctx: QueryCtx, k: Doc<"khatmas">) {
     endDate: k.rota.endDate,
     pausedAt: k.rota.pausedAt,
     archivedAt: k.rota.archivedAt,
+    pendingOrganizer: k.rota.pendingOrganizer === true,
+    joinLink: khatmaJoinLink(k, env("WHATSAPP_PUBLIC_NUMBER")),
     number: day?.number ?? null,
     cycle: day?.cycle ?? null,
     dayOpen: open,
@@ -74,6 +91,48 @@ export const findKhatmas = adminQuery({
         members: await activeCount(ctx, k._id),
       })),
     );
+  },
+});
+
+/**
+ * The people who organize khatmas, from a page of the newest khatmas: one row
+ * per organizer on the page with their khatmas on it, and the switch for
+ * rotating khatmas. Someone with older khatmas too appears again on a later
+ * page. Phones are masked: search by number to open a person (spec 10.2).
+ */
+export const organizers = adminQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query("khatmas")
+      .order("desc")
+      .paginate(args.paginationOpts);
+    const byCreator = new Map<
+      Id<"people">,
+      { khatmaId: Id<"khatmas">; name: string | null; memberCount: number }[]
+    >();
+    for (const k of result.page) {
+      const list = byCreator.get(k.creatorPersonId) ?? [];
+      list.push({
+        khatmaId: k._id,
+        name: k.name,
+        memberCount: await memberCount(ctx, k),
+      });
+      byCreator.set(k.creatorPersonId, list);
+    }
+    const page = [];
+    for (const [personId, khatmas] of byCreator) {
+      const p = await ctx.db.get(personId);
+      if (!p) continue;
+      page.push({
+        personId,
+        displayName: p.displayName,
+        phoneMasked: maskPhone(p.phone),
+        rotaAllowed: p.rotaAllowed === true,
+        khatmas,
+      });
+    }
+    return { ...result, page };
   },
 });
 
@@ -151,6 +210,7 @@ export const khatma = adminQuery({
     return {
       name: k.name,
       kind: k.kind === "rota" ? ("rota" as const) : ("pool" as const),
+      archived: isArchived(k),
       rota: await rotaFacts(ctx, k),
       inviteCode: k.inviteCode,
       schedule: k.schedule,
@@ -166,6 +226,32 @@ export const khatma = adminQuery({
     };
   },
 });
+
+/**
+ * The rota khatmas an admin set up that wait for this person. They have no
+ * membership until the person sends the join message, only a participant row.
+ */
+async function waitingKhatmas(ctx: QueryCtx, p: Doc<"people">) {
+  const rows = await ctx.db
+    .query("rotaParticipants")
+    .withIndex("by_phone", (q) => q.eq("phone", p.phone))
+    .collect();
+  const waiting = [];
+  for (const row of rows) {
+    const k = await ctx.db.get(row.khatmaId);
+    if (k?.rota?.pendingOrganizer !== true || isArchived(k)) continue;
+    if (k.creatorPersonId !== p._id) continue;
+    waiting.push({
+      khatmaId: k._id,
+      name: k.name,
+      inviteCode: k.inviteCode,
+      isOrganizer: true,
+      status: "active" as const,
+      pending: true,
+    });
+  }
+  return waiting;
+}
 
 /** A person's account for an admin: never their reading (spec 8). */
 export const person = adminQuery({
@@ -188,11 +274,13 @@ export const person = adminQuery({
                 inviteCode: k.inviteCode,
                 isOrganizer: k.creatorPersonId === p._id,
                 status: m.status,
+                pending: false,
               }
             : null;
         }),
       )
     ).filter((k) => k !== null);
+    khatmas.push(...(await waitingKhatmas(ctx, p)));
     const sessions = await ctx.db
       .query("sessions")
       .withIndex("by_person", (q) => q.eq("personId", p._id))

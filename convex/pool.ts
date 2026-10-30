@@ -6,7 +6,7 @@ import { alertOrganizer, isHeld, scheduleGrace } from "./grace";
 import { graceTimes, graceWakingMs } from "./lib/grace";
 import { JUZ_COUNT } from "./lib/juz";
 import { personPace } from "./lib/pace";
-import { khatmaByInviteCode } from "./lib/khatma";
+import { isArchived, khatmaByInviteCode } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { getSetting, quietHours } from "./lib/settings";
 import { addWakingMs, nextAwake, safeTimeZone } from "./lib/wakingTime";
@@ -345,8 +345,8 @@ export type StillReadingResult =
 /**
  * What take, finish, undo, and release share: the signed-in person, the khatma
  * behind the invite code, its current round and the person's membership (if
- * any), after the maintenance and blocked checks and the per-person pool rate
- * limit, in that order.
+ * any), after the maintenance, archived and blocked checks and the per-person
+ * pool rate limit, in that order.
  */
 async function poolActor(
   ctx: MutationCtx & SessionContext,
@@ -368,6 +368,7 @@ async function poolActor(
   }
   const khatma = await khatmaByInviteCode(ctx, inviteCode);
   if (!khatma?.currentRoundId) throw new ConvexError({ code: "not_found" });
+  if (isArchived(khatma)) throw new ConvexError({ code: "archived" });
   const round = await ctx.db.get(khatma.currentRoundId);
   if (!round) throw new ConvexError({ code: "not_found" });
 

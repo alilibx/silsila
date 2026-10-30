@@ -196,6 +196,9 @@ export function useKhatmaActions(
       if (code === "not_signed_in") {
         clearSessionToken();
         onSignedOut();
+      } else if (code === "archived") {
+        // Archived while the page was open: the view catches up by itself.
+        showToast(t.actions.errors.archived);
       } else {
         showToast(code === null ? t.errors.network : t.errors.generic);
       }

@@ -1,9 +1,9 @@
-import { api } from "@convex/_generated/api";
 import {
   messageTimesError,
   type ReadingDays,
   type RotaMessages,
 } from "@convex/lib/rota";
+import type { SettingsView } from "@convex/lib/rotaOps";
 import { localDate } from "@convex/lib/wakingTime";
 import { useMutation, useQuery } from "convex/react";
 import { useState, type ReactNode } from "react";
@@ -11,6 +11,12 @@ import { Link, Navigate, useParams } from "react-router";
 import { Button } from "../components/Button";
 import { Sheet } from "../components/Sheet";
 import { SwitchRow } from "../components/SwitchRow";
+import {
+  ArchivedSection,
+  ArchiveSection,
+} from "../features/khatma/ArchivedActions";
+import { DeletingPage, useDeleting } from "../features/khatma/deleting";
+import { useRotaBackend } from "../features/rota/backend";
 import { DateLine } from "../features/rota/DateLine";
 import { firstReadingDay } from "../features/rota/dates";
 import { formatIsoDate, formatTime } from "../features/rota/format";
@@ -18,11 +24,7 @@ import { ReadingDaysField } from "../features/rota/ReadingDaysField";
 import { TimeField } from "../features/rota/TimeField";
 import { useRotaCall } from "../features/rota/useRotaCall";
 import { t } from "../i18n/ar";
-import { getSessionToken, useSessionToken } from "../lib/session";
 
-type Settings = NonNullable<
-  ReturnType<typeof useQuery<typeof api.rota.settings>>
->;
 type SectionId = "pause" | "messages" | "details";
 type Feedback = { section: SectionId; kind: "saved" | "error"; text: string };
 type Message = "reminder" | "unread" | "summary";
@@ -75,12 +77,15 @@ function Section({
   );
 }
 
-/** A rotating khatma's settings for its organizer: pausing, the message times, the days and the name. */
+/** The organizer's page of a rotating khatma's settings. */
 export function RotaSettingsPage() {
   const { inviteCode = "" } = useParams();
-  const sessionToken = useSessionToken();
-  const settings = useQuery(api.rota.settings, { sessionToken, inviteCode });
+  const backend = useRotaBackend(inviteCode);
+  const settings = useQuery(backend.settings, backend.scope);
+  const deleting = useDeleting(inviteCode);
 
+  // Deleted from here: the settings are about to turn null, and this page must not show that.
+  if (deleting) return <DeletingPage />;
   if (settings === undefined) {
     return (
       <main aria-busy="true" className="mx-auto max-w-xl p-5">
@@ -94,20 +99,39 @@ export function RotaSettingsPage() {
   if (settings === null) {
     return <Navigate to={khatmaPath(inviteCode)} replace />;
   }
-  return <SettingsContent settings={settings} inviteCode={inviteCode} />;
+  return (
+    <main className="mx-auto max-w-xl p-5">
+      <header className="mb-3.5">
+        <Link
+          to={khatmaPath(inviteCode)}
+          className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
+        >
+          {t.organizer.back}
+        </Link>
+      </header>
+      <RotaSettingsContent settings={settings} inviteCode={inviteCode} />
+    </main>
+  );
 }
 
-function SettingsContent({
+/**
+ * A rotating khatma's settings: pausing, the message times, the days and the name. `headingLevel`
+ * is for a page that already has its `h1`.
+ */
+export function RotaSettingsContent({
   settings,
   inviteCode,
+  headingLevel: Heading = "h1",
 }: {
-  settings: Settings;
+  settings: SettingsView;
   inviteCode: string;
+  headingLevel?: "h1" | "h2";
 }) {
-  const update = useMutation(api.rota.update);
-  const setPaused = useMutation(api.rota.setPaused);
-  const addPauseDate = useMutation(api.rota.addPauseDate);
-  const removePauseDate = useMutation(api.rota.removePauseDate);
+  const backend = useRotaBackend(inviteCode);
+  const update = useMutation(backend.update);
+  const setPaused = useMutation(backend.setPaused);
+  const addPauseDate = useMutation(backend.addPauseDate);
+  const removePauseDate = useMutation(backend.removePauseDate);
   const [name, setName] = useState(settings.name);
   const [days, setDays] = useState<ReadingDays>(settings.days);
   const [endDate, setEndDate] = useState<string | null>(settings.endDate);
@@ -122,7 +146,7 @@ function SettingsContent({
     section: SectionId;
     saved: string | null;
   } | null>(null);
-  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+  const args = backend.authArgs();
 
   const paused = settings.pausedAt !== null;
   const { quiet } = settings;
@@ -191,213 +215,209 @@ function SettingsContent({
 
   return (
     <>
-      <main className="mx-auto max-w-xl p-5">
-        <header className="mb-3.5">
-          <Link
-            to={khatmaPath(inviteCode)}
-            className="inline-flex min-h-11 items-center font-medium text-green underline underline-offset-4"
-          >
-            {t.organizer.back}
-          </Link>
-        </header>
-        <h1 className="font-display text-4xl leading-tight text-green-deep">
-          {t.khatmaSettings.link}
-        </h1>
-        {settings.archived && (
-          <p
-            role="note"
-            className="mt-4 rounded-ui border-2 border-line bg-paper-2 p-3 font-medium"
-          >
-            {t.rota.archivedSettings}
-          </p>
-        )}
+      <Heading className="font-display text-4xl leading-tight text-green-deep">
+        {t.khatmaSettings.link}
+      </Heading>
+      {settings.archived && (
+        <p
+          role="note"
+          className="mt-4 rounded-ui border-2 border-line bg-paper-2 p-3 font-medium"
+        >
+          {t.rota.archivedSettings}
+        </p>
+      )}
 
-        {/* An archived khatma is read-only: every control below is off. */}
-        <fieldset disabled={settings.archived} className="min-w-0">
-          <Section id="pause" heading={t.rota.pauseHeading} feedback={feedback}>
-            <SwitchRow
-              label={t.rota.pauseNow}
-              on={paused}
-              disabled={busy}
-              onChange={(next) =>
-                void run("pause", () => setPaused({ ...args, paused: next }))
-              }
-            />
-            <p className="mt-2 text-ink-soft">{t.rota.pauseHint}</p>
+      {/* An archived khatma is read-only: every control below is off. */}
+      <fieldset disabled={settings.archived} className="min-w-0">
+        <Section id="pause" heading={t.rota.pauseHeading} feedback={feedback}>
+          <SwitchRow
+            label={t.rota.pauseNow}
+            on={paused}
+            disabled={busy}
+            onChange={(next) =>
+              void run("pause", () => setPaused({ ...args, paused: next }))
+            }
+          />
+          <p className="mt-2 text-ink-soft">{t.rota.pauseHint}</p>
 
-            <h3 className="mt-5 font-medium">{t.rota.pauseDates}</h3>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {settings.pauseDates.map((date) => (
-                <li key={date}>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    aria-label={t.rota.removeDate(formatIsoDate(date))}
-                    onClick={() =>
-                      void run("pause", () =>
-                        removePauseDate({ ...args, date }),
-                      )
-                    }
-                    className="min-h-12 rounded-full border-2 border-saffron bg-saffron-soft px-4 font-medium text-saffron-ink disabled:opacity-50"
-                  >
-                    {formatIsoDate(date)} ×
-                  </button>
-                </li>
-              ))}
-              <li>
+          <h3 className="mt-5 font-medium">{t.rota.pauseDates}</h3>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {settings.pauseDates.map((date) => (
+              <li key={date}>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setAddingDate(true)}
-                  className="min-h-12 rounded-full border-2 border-dashed border-green px-4 font-semibold text-green disabled:opacity-50"
+                  aria-label={t.rota.removeDate(formatIsoDate(date))}
+                  onClick={() =>
+                    void run("pause", () => removePauseDate({ ...args, date }))
+                  }
+                  className="min-h-12 rounded-full border-2 border-saffron bg-saffron-soft px-4 font-medium text-saffron-ink disabled:opacity-50"
                 >
-                  {t.rota.addDate}
+                  {formatIsoDate(date)} ×
                 </button>
               </li>
-            </ul>
-            <p className="mt-2 text-base text-ink-soft">
-              {t.rota.pauseDatesHint}
-            </p>
-          </Section>
+            ))}
+            <li>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setAddingDate(true)}
+                className="min-h-12 rounded-full border-2 border-dashed border-green px-4 font-semibold text-green disabled:opacity-50"
+              >
+                {t.rota.addDate}
+              </button>
+            </li>
+          </ul>
+          <p className="mt-2 text-base text-ink-soft">
+            {t.rota.pauseDatesHint}
+          </p>
+        </Section>
 
-          <Section
-            id="messages"
-            heading={t.rota.messagesHeading}
-            feedback={feedback}
-          >
-            <p className="text-ink-soft">
-              {t.rota.messagesHint(formatTime(earliest), formatTime(latest))}
-            </p>
-            <div className="mt-3 rounded-ui border-2 border-line bg-card px-4 py-3">
-              <p className="font-medium">{t.rota.messageNames.dayAt}</p>
+        <Section
+          id="messages"
+          heading={t.rota.messagesHeading}
+          feedback={feedback}
+        >
+          <p className="text-ink-soft">
+            {t.rota.messagesHint(formatTime(earliest), formatTime(latest))}
+          </p>
+          <div className="mt-3 rounded-ui border-2 border-line bg-card px-4 py-3">
+            <p className="font-medium">{t.rota.messageNames.dayAt}</p>
+            <TimeField
+              value={messages.dayAt}
+              min={earliest}
+              max={latest}
+              disabled={busy}
+              onChange={(at) => setMessages({ ...messages, dayAt: at })}
+            />
+            <p className="mt-2 text-base text-ink-soft">{t.rota.locked}</p>
+          </div>
+          {MESSAGES.map((key) => (
+            <div
+              key={key}
+              className="mt-3 rounded-ui border-2 border-line bg-card px-4 pb-3"
+            >
+              <SwitchRow
+                label={t.rota.messageNames[key]}
+                on={messages[key].on}
+                disabled={busy}
+                onChange={(on) =>
+                  setMessages({
+                    ...messages,
+                    [key]: { ...messages[key], on },
+                  })
+                }
+              />
               <TimeField
-                value={messages.dayAt}
+                value={messages[key].at}
                 min={earliest}
                 max={latest}
                 disabled={busy}
-                onChange={(at) => setMessages({ ...messages, dayAt: at })}
-              />
-              <p className="mt-2 text-base text-ink-soft">{t.rota.locked}</p>
-            </div>
-            {MESSAGES.map((key) => (
-              <div
-                key={key}
-                className="mt-3 rounded-ui border-2 border-line bg-card px-4 pb-3"
-              >
-                <SwitchRow
-                  label={t.rota.messageNames[key]}
-                  on={messages[key].on}
-                  disabled={busy}
-                  onChange={(on) =>
-                    setMessages({
-                      ...messages,
-                      [key]: { ...messages[key], on },
-                    })
-                  }
-                />
-                <TimeField
-                  value={messages[key].at}
-                  min={earliest}
-                  max={latest}
-                  disabled={busy}
-                  onChange={(at) =>
-                    setMessages({
-                      ...messages,
-                      [key]: { ...messages[key], at },
-                    })
-                  }
-                />
-              </div>
-            ))}
-            <div className="mt-4">
-              <Button
-                disabled={busy || !messagesChanged}
-                onClick={() => void saveMessages()}
-              >
-                {t.rota.saveTimes}
-              </Button>
-            </div>
-          </Section>
-
-          <Section
-            id="details"
-            heading={t.rota.detailsHeading}
-            feedback={feedback}
-          >
-            <label htmlFor="rota-settings-name" className="block font-medium">
-              {t.rota.nameLabel}
-            </label>
-            <input
-              id="rota-settings-name"
-              type="text"
-              maxLength={60}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className={fieldClass}
-            />
-
-            <div className="mt-6">
-              <ReadingDaysField value={days} onChange={setDays} />
-            </div>
-
-            <div className="mt-4 grid gap-2.5">
-              <div className="rounded-ui border-2 border-line bg-card px-4 py-3">
-                <span className="block text-base text-ink-soft">
-                  {t.rota.startLabel}
-                </span>
-                <span className="font-medium">{formatIsoDate(start)}</span>
-              </div>
-              <DateLine
-                label={t.rota.endLabel}
-                value={endDate === null ? t.rota.noEnd : formatIsoDate(endDate)}
-                inputLabel={t.rota.endDateInput}
-                inputValue={endDate ?? ""}
-                min={earliestEnd}
-                onPick={setEndDate}
-                clearLabel={t.rota.noEnd}
-              />
-            </div>
-
-            <label
-              htmlFor="rota-settings-zone"
-              className="mt-6 block font-medium"
-            >
-              {t.rota.timeZoneLabel}
-            </label>
-            <select
-              id="rota-settings-zone"
-              dir="ltr"
-              value={timeZone}
-              onChange={(event) => setTimeZone(event.target.value)}
-              className={`${fieldClass} text-end`}
-            >
-              {timeZones(settings.timeZone).map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-base text-ink-soft">
-              {t.rota.timeZoneHint}
-            </p>
-
-            <div className="mt-4">
-              <Button
-                disabled={busy || !changed || name.trim() === ""}
-                onClick={() =>
-                  void run(
-                    "details",
-                    () => update({ ...args, ...changes }),
-                    t.organizer.saved,
-                  )
+                onChange={(at) =>
+                  setMessages({
+                    ...messages,
+                    [key]: { ...messages[key], at },
+                  })
                 }
-              >
-                {t.organizer.save}
-              </Button>
+              />
             </div>
-          </Section>
-        </fieldset>
-      </main>
+          ))}
+          <div className="mt-4">
+            <Button
+              disabled={busy || !messagesChanged}
+              onClick={() => void saveMessages()}
+            >
+              {t.rota.saveTimes}
+            </Button>
+          </div>
+        </Section>
+
+        <Section
+          id="details"
+          heading={t.rota.detailsHeading}
+          feedback={feedback}
+        >
+          <label htmlFor="rota-settings-name" className="block font-medium">
+            {t.rota.nameLabel}
+          </label>
+          <input
+            id="rota-settings-name"
+            type="text"
+            maxLength={60}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className={fieldClass}
+          />
+
+          <div className="mt-6">
+            <ReadingDaysField value={days} onChange={setDays} />
+          </div>
+
+          <div className="mt-4 grid gap-2.5">
+            <div className="rounded-ui border-2 border-line bg-card px-4 py-3">
+              <span className="block text-base text-ink-soft">
+                {t.rota.startLabel}
+              </span>
+              <span className="font-medium">{formatIsoDate(start)}</span>
+            </div>
+            <DateLine
+              label={t.rota.endLabel}
+              value={endDate === null ? t.rota.noEnd : formatIsoDate(endDate)}
+              inputLabel={t.rota.endDateInput}
+              inputValue={endDate ?? ""}
+              min={earliestEnd}
+              onPick={setEndDate}
+              clearLabel={t.rota.noEnd}
+            />
+          </div>
+
+          <label
+            htmlFor="rota-settings-zone"
+            className="mt-6 block font-medium"
+          >
+            {t.rota.timeZoneLabel}
+          </label>
+          <select
+            id="rota-settings-zone"
+            dir="ltr"
+            value={timeZone}
+            onChange={(event) => setTimeZone(event.target.value)}
+            className={`${fieldClass} text-end`}
+          >
+            {timeZones(settings.timeZone).map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-base text-ink-soft">{t.rota.timeZoneHint}</p>
+
+          <div className="mt-4">
+            <Button
+              disabled={busy || !changed || name.trim() === ""}
+              onClick={() =>
+                void run(
+                  "details",
+                  () => update({ ...args, ...changes }),
+                  t.organizer.saved,
+                )
+              }
+            >
+              {t.organizer.save}
+            </Button>
+          </div>
+        </Section>
+      </fieldset>
+
+      {/* Outside the fieldset: an archived khatma can still start again or be deleted. */}
+      {settings.archived ? (
+        <ArchivedSection
+          inviteCode={inviteCode}
+          restart={{ days: settings.days, timeZone: settings.timeZone }}
+        />
+      ) : (
+        <ArchiveSection inviteCode={inviteCode} />
+      )}
 
       {addingDate && (
         <Sheet

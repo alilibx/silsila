@@ -9,6 +9,7 @@ import {
 import { isHeld } from "./grace";
 import { onRoundCompleted } from "./hooks";
 import { JUZ_COUNT } from "./lib/juz";
+import { isArchived } from "./lib/khatma";
 import { targetEndFor } from "./lib/schedule";
 import { getSetting } from "./lib/settings";
 
@@ -91,8 +92,8 @@ export function doneCount(assignments: readonly Doc<"assignments">[]): number {
  * Completes a round once all 30 ajza' are done and `completionDelayMs` has
  * passed since the round's most recent finish, then starts the next round.
  * Safe to schedule any number of times: it is a no-op unless the round is the
- * khatma's current, still-open round, and it re-arms itself when a later
- * finish moved the deadline.
+ * current, still-open round of a khatma that isn't archived, and it re-arms
+ * itself when a later finish moved the deadline.
  */
 export const completeIfReady = internalMutation({
   args: { roundId: v.id("rounds") },
@@ -100,7 +101,7 @@ export const completeIfReady = internalMutation({
     const round = await ctx.db.get(args.roundId);
     if (!round || round.completedAt !== null) return { completed: false };
     const khatma = await ctx.db.get(round.khatmaId);
-    if (!khatma || khatma.currentRoundId !== round._id) {
+    if (!khatma || khatma.currentRoundId !== round._id || isArchived(khatma)) {
       return { completed: false };
     }
 

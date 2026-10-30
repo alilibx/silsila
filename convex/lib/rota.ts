@@ -58,6 +58,11 @@ export const rotaConfigValidator = v.object({
    * then. Null while setting up; missing on khatmas made before this field.
    */
   setupDoneAt: v.optional(v.union(v.number(), v.null())),
+  /**
+   * An admin set the khatma up on someone's behalf, and they haven't joined it
+   * yet: their own join message makes them its organizer. Missing means no.
+   */
+  pendingOrganizer: v.optional(v.boolean()),
 });
 
 export const ROTA_SIZE = 30;
@@ -98,6 +103,13 @@ function fromDayNumber(n: number): string {
 /** `date` (`YYYY-MM-DD`) moved by `n` calendar days. */
 export function addDays(date: string, n: number): string {
   return fromDayNumber(dayNumber(date) + n);
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar date written `YYYY-MM-DD`. */
+export function isDate(date: string): boolean {
+  return DATE_RE.test(date) && addDays(date, 0) === date;
 }
 
 /** Whether `date` is a reading day. Never before `firstDate`, which anchors every-two-weeks. */

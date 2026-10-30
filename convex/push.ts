@@ -163,7 +163,8 @@ export const removeGone = internalMutation({
 export const markPushed = internalMutation({
   args: { noteId: v.id("notes") },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.noteId, { pushedAt: Date.now() });
+    const note = await ctx.db.get(args.noteId);
+    if (note) await ctx.db.patch(note._id, { pushedAt: Date.now() });
   },
 });
 

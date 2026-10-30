@@ -2,8 +2,9 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { adminQuery } from "./lib/adminSession";
+import { isArchived } from "./lib/khatma";
 import { DAY_MS, dubaiDay } from "./lib/stats";
-import { dayCounts, type DayCounts } from "./stats";
+import { countActiveKhatmas, dayCounts, type DayCounts } from "./stats";
 
 const ACTIVE_DAYS = 14;
 const STALLED_DAYS = 14;
@@ -23,8 +24,9 @@ async function rows(
     .collect();
 }
 
+/** Rows from before a figure existed have none of it. */
 function sum(list: Doc<"dailyStats">[], key: keyof DayCounts): number {
-  return list.reduce((total, row) => total + row[key], 0);
+  return list.reduce((total, row) => total + (row[key] ?? 0), 0);
 }
 
 function median(values: number[]): number | null {
@@ -73,7 +75,7 @@ async function stalled(
   for (const round of quiet.slice(0, STALLED_CAP)) {
     if (round.lastFinishedAt === null && round.startedAt >= cutoff) continue;
     const khatma = await ctx.db.get(round.khatmaId);
-    if (khatma?.currentRoundId !== round._id) continue;
+    if (khatma?.currentRoundId !== round._id || isArchived(khatma)) continue;
     if (!(await hasActiveMember(ctx, khatma._id))) continue;
     count++;
   }
@@ -122,13 +124,15 @@ export const overview = adminQuery({
     );
 
     return {
-      activeKhatmas: new Set(activeRounds.map((r) => r.khatmaId)).size,
+      activeKhatmas: await countActiveKhatmas(ctx, activeRounds),
       activeKhatmasWeekAgo: weekAgo?.activeKhatmas ?? null,
       members: (latest?.totalMembers ?? 0) + live.newMembers,
       membersNewThisWeek: sum(lastSix, "newMembers") + live.newMembers,
       ajzaToday: live.ajzaFinished,
       ajzaAvg7: oneDecimal(sum(week, "ajzaFinished") / 7),
       completedThisWeek: sum(lastSix, "roundsCompleted") + live.roundsCompleted,
+      rotaDaysCompletedThisWeek:
+        sum(lastSix, "rotaDaysCompleted") + live.rotaDaysCompleted,
       stalledKhatmas: stall.count,
       stalledCapped: stall.capped,
       daysPerRoundMedian: medianDays === null ? null : oneDecimal(medianDays),

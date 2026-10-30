@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button } from "@web/components/Button";
+import { Button, buttonClass } from "@web/components/Button";
 import { t as webT } from "@web/i18n/ar";
 import { formatIsoDate } from "@web/features/rota/format";
 import { formatDate } from "@web/lib/format";
@@ -32,6 +32,17 @@ export function KhatmaAdminPage() {
   const candidates = k.members.filter(
     (m) => m.status === "active" && m.personId !== k.organizer?.personId,
   );
+
+  const joinLink = k.rota?.joinLink;
+
+  async function copyJoinLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setMessage(t.rota.copied);
+    } catch {
+      setMessage(opsError("generic"));
+    }
+  }
 
   async function run(call: () => Promise<object>) {
     setSheet(null);
@@ -71,6 +82,9 @@ export function KhatmaAdminPage() {
         <dt className="text-ink-soft">{t.lookup.openHelp}</dt>
         <dd>{formatCount(k.openHelpRequests)}</dd>
       </dl>
+      {!k.rota && k.archived && (
+        <p className="text-ink-soft">{t.lookup.rotaArchived}</p>
+      )}
 
       {k.rota && (
         <section className="rounded-ui border-2 border-line bg-card px-4 py-3">
@@ -111,6 +125,27 @@ export function KhatmaAdminPage() {
               <p className="text-ink-soft">{t.lookup.rotaPaused}</p>
             )
           )}
+          {k.rota.pendingOrganizer && (
+            <p className="mt-2 font-semibold text-saffron-ink">
+              {t.rota.pending}
+            </p>
+          )}
+          <div className="mt-3 grid gap-2">
+            <Link
+              to={`/khatmas/${khatmaId}/rota`}
+              className={buttonClass("primary", "no-underline")}
+            >
+              {t.rota.help}
+            </Link>
+            {joinLink && (
+              <Button
+                variant="ghost"
+                onClick={() => void copyJoinLink(joinLink)}
+              >
+                {t.rota.copy}
+              </Button>
+            )}
+          </div>
         </section>
       )}
 

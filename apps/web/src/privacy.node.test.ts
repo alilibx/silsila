@@ -40,7 +40,12 @@ describe("privacy policy: help requests", () => {
   it("explains help requests in Arabic, with their own retention", () => {
     const ar = section(html, "طلبات المساعدة");
     expect(ar).not.toBe("");
-    for (const words of ["صورة الشاشة", "تسجيل صوتي", "٣٠ يوماً", "١٨٠ يوماً"]) {
+    for (const words of [
+      "صورة الشاشة",
+      "تسجيل صوتي",
+      "٣٠ يوماً",
+      "١٨٠ يوماً",
+    ]) {
       expect(ar).toContain(words);
     }
   });
@@ -114,8 +119,7 @@ describe("privacy policy: rotating khatma messages", () => {
 
 describe("privacy policy: rotating khatma disclosures", () => {
   const html = readFileSync(join(WEB, "public", "privacy.html"), "utf8");
-  const flat = (heading: string) =>
-    section(html, heading).replace(/\s+/g, " ");
+  const flat = (heading: string) => section(html, heading).replace(/\s+/g, " ");
 
   it("says who sees phone numbers, with the rotating khatma exception", () => {
     const ar = flat("من يرى بياناتك");
@@ -166,5 +170,103 @@ describe("privacy policy: rotating khatma disclosures", () => {
     ]) {
       expect(en).toContain(words);
     }
+  });
+});
+
+describe("privacy policy: saved lists, imports and setting up for someone", () => {
+  const html = readFileSync(join(WEB, "public", "privacy.html"), "utf8");
+  const flat = (heading: string) => section(html, heading).replace(/\s+/g, " ");
+
+  it("explains the organizer's saved list, in Arabic and English", () => {
+    const ar = flat("ما يضيفه المنظّمون والمشرفون");
+    for (const words of [
+      "قائمة محفوظة",
+      "الأسماء والأرقام",
+      "من لم ينضمّ قط",
+      "تبقى القائمة بعد حذف الختمة",
+      "إلى أن يزيله المنظّم",
+    ]) {
+      expect(ar).toContain(words);
+    }
+    const en = flat("What organizers and admins add");
+    for (const words of [
+      "a saved list",
+      "names and numbers",
+      "people who never joined",
+      "stays after a khatma is deleted",
+      "until the organizer removes them",
+    ]) {
+      expect(en).toContain(words);
+    }
+  });
+
+  it("says a member's name can be copied without their number", () => {
+    const ar = flat("ما يضيفه المنظّمون والمشرفون");
+    for (const words of [
+      "ختمة بالحجز",
+      "ينقل اسم عضو فيها إلى ختمة بالتناوب وإلى قائمته المحفوظة",
+      "دون أن يرى رقمه",
+    ]) {
+      expect(ar).toContain(words);
+    }
+    const en = flat("What organizers and admins add");
+    for (const words of [
+      "a khatma where members take their own juz'",
+      "copy a member's name into a rotating khatma and into their saved list",
+      "without seeing the member's number",
+    ]) {
+      expect(en).toContain(words);
+    }
+  });
+
+  it("says an admin can set a rotating khatma up with someone's name and number", () => {
+    const ar = flat("ما يضيفه المنظّمون والمشرفون");
+    for (const words of [
+      "مشرفي وِردك إنشاء ختمة بالتناوب نيابةً عن شخص",
+      "بإدخال اسمه ورقمه",
+      "لا نرسل إليه شيئاً قبل أن يرسل",
+    ]) {
+      expect(ar).toContain(words);
+    }
+    const en = flat("What organizers and admins add");
+    for (const words of [
+      "Wirdak's admins can set up a rotating khatma for someone",
+      "that person's name and number",
+      "We send that person nothing until they send",
+    ]) {
+      expect(en).toContain(words);
+    }
+  });
+
+  it("says what a deleted khatma leaves behind", () => {
+    expect(flat("مدة الحفظ والحذف")).toContain(
+      "وحين تُحذف ختمة بالتناوب نحذف سجلاتها، ويبقى من حفظهم منظّمها في قائمته",
+    );
+    expect(flat("How long we keep data, and deleting it")).toContain(
+      "When a rotating khatma is deleted, we delete its records; the people its organizer saved stay on their list",
+    );
+  });
+
+  it("limits what an organizer sees to the right kind of khatma, and keeps imported numbers hidden", () => {
+    const ar = flat("من يرى بياناتك");
+    expect(ar).toContain("منظّم الختمة بالحجز يرى أسماء الأعضاء فقط");
+    expect(ar).toContain(
+      "إلا عضواً في ختمة بالحجز يديرها المنظّم أو نُقل منها",
+    );
+    expect(ar).not.toContain("منظّم الختمة يرى أسماء الأعضاء فقط");
+    const en = flat("Who sees your data");
+    expect(en).toContain(
+      "The organizer of a khatma where members take their own juz' sees members' names only",
+    );
+    expect(en).toContain(
+      "unless that person is in, or was copied from, one of the organizer's own khatmas where members take their own juz'",
+    );
+    expect(en).not.toContain("The organizer sees members' names only");
+    expect(flat("واتساب")).toContain(
+      "إلا إن كان عضواً في ختمة بالحجز يديرها المنظّم أو نُقل منها",
+    );
+    expect(flat("WhatsApp")).toContain(
+      "unless they are in, or were copied from, a khatma the organizer runs where members take their own juz'",
+    );
   });
 });

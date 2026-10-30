@@ -10,6 +10,7 @@ import {
 } from "./_generated/server";
 import { counted, type CountForms } from "./lib/arabicCount";
 import { toArabicDigits } from "./lib/digits";
+import { isArchived } from "./lib/khatma";
 import { milestonesFor, type MilestoneMetric } from "./lib/milestones";
 import { getSetting } from "./lib/settings";
 import {
@@ -31,6 +32,7 @@ export type DayCounts = {
   newMembers: number;
   newKhatmas: number;
   roundsCompleted: number;
+  rotaDaysCompleted: number;
   signInsStarted: number;
   signInsCompleted: number;
 };
@@ -69,11 +71,18 @@ export async function dayCounts(
       q.gte("completedAt", from).lt("completedAt", to),
     )
     .collect();
+  const rotaDays = await ctx.db
+    .query("rotaDays")
+    .withIndex("by_completedAt", (q) =>
+      q.gte("completedAt", from).lt("completedAt", to),
+    )
+    .collect();
   return {
     ajzaFinished: finished.length,
     newMembers: people.length,
     newKhatmas: khatmas.length,
     roundsCompleted: rounds.length,
+    rotaDaysCompleted: rotaDays.length,
     signInsStarted: await readCounter(ctx, signInKey(day, "started")),
     signInsCompleted: await readCounter(ctx, signInKey(day, "completed")),
   };
@@ -132,7 +141,7 @@ async function writeDay(
         q.gt("lastFinishedAt", dayEnd - ACTIVE_DAYS * DAY_MS),
       )
       .collect();
-    activeKhatmas = new Set(rounds.map((r) => r.khatmaId)).size;
+    activeKhatmas = await countActiveKhatmas(ctx, rounds);
   }
   const row = {
     day,
@@ -146,6 +155,19 @@ async function writeDay(
   };
   if (existing) await ctx.db.replace(existing._id, row);
   else await ctx.db.insert("dailyStats", row);
+}
+
+/** How many khatmas these rounds belong to, leaving out archived and deleted ones. */
+export async function countActiveKhatmas(
+  ctx: QueryCtx,
+  rounds: Doc<"rounds">[],
+): Promise<number> {
+  let count = 0;
+  for (const khatmaId of new Set(rounds.map((r) => r.khatmaId))) {
+    const khatma = await ctx.db.get(khatmaId);
+    if (khatma && !isArchived(khatma)) count++;
+  }
+  return count;
 }
 
 export const rollupDay = internalMutation({

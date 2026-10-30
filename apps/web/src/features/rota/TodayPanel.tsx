@@ -1,21 +1,18 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { addDays } from "@convex/lib/rota";
+import type { TodayView } from "@convex/lib/rotaOps";
 import { localDate } from "@convex/lib/wakingTime";
-import { useMutation, type useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken } from "../../lib/session";
 import { toArabicDigits } from "@convex/lib/digits";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate, formatTime } from "./format";
 
-export type TodayView = NonNullable<
-  ReturnType<typeof useQuery<typeof api.rota.today>>
->;
 type Tile = TodayView["tiles"][number];
 
 const todayErrors: Record<string, string> = t.rota.todayErrors;
@@ -83,13 +80,14 @@ function TileSheet({
   tile: Tile;
   onClose: () => void;
 }) {
-  const reassign = useMutation(api.rota.reassign);
-  const markDone = useMutation(api.rota.markDone);
-  const markNotDone = useMutation(api.rota.markNotDone);
+  const backend = useRotaBackend(inviteCode);
+  const reassign = useMutation(backend.reassign);
+  const markDone = useMutation(backend.markDone);
+  const markNotDone = useMutation(backend.markNotDone);
   const [picking, setPicking] = useState(false);
   const { busy, error, run } = useRotaCall(todayErrors);
   const me = view.participants.find((p) => p.isMe);
-  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+  const args = backend.authArgs();
 
   const give = (participantId: Id<"rotaParticipants">) =>
     run(
@@ -216,7 +214,8 @@ function nextLine(view: TodayView, dayAt: number, timeZone: string) {
 
 /** Setup was left unfinished: no day starts until the organizer starts the khatma here. */
 function StartKhatma({ inviteCode }: { inviteCode: string }) {
-  const finishSetup = useMutation(api.rota.finishSetup);
+  const backend = useRotaBackend(inviteCode);
+  const finishSetup = useMutation(backend.finishSetup);
   const { busy, error, run } = useRotaCall(t.rota.errors);
   return (
     <div className="rounded-ui border-2 border-line bg-card p-4">
@@ -224,14 +223,7 @@ function StartKhatma({ inviteCode }: { inviteCode: string }) {
       <div className="mt-4">
         <Button
           disabled={busy}
-          onClick={() =>
-            void run(() =>
-              finishSetup({
-                sessionToken: getSessionToken() ?? undefined,
-                inviteCode,
-              }),
-            )
-          }
+          onClick={() => void run(() => finishSetup(backend.authArgs()))}
         >
           {t.rota.startKhatma}
         </Button>
@@ -266,7 +258,7 @@ export function TodayPanel({
           formatIsoDate(view.next.date),
           formatTime(dayAt),
         )
-      : view.paused
+      : view.paused && !view.archived
         ? null
         : t.rota.ended;
   const noDay =
@@ -282,20 +274,12 @@ export function TodayPanel({
 
   return (
     <div className="mt-4">
-      {view.paused && (
+      {view.paused && !view.archived && (
         <p
           role="note"
           className="mb-3 rounded-ui border-2 border-gold bg-[#FBF1D9] p-3 font-medium"
         >
           {t.rota.pausedBanner}
-        </p>
-      )}
-      {view.archived && (
-        <p
-          role="note"
-          className="mb-3 rounded-ui border-2 border-line bg-paper-2 p-3 font-medium"
-        >
-          {t.rota.archivedBanner}
         </p>
       )}
 

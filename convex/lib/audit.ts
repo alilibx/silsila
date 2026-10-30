@@ -17,6 +17,8 @@ export const auditActionValidator = v.union(
   v.literal("khatma.resetInvite"),
   v.literal("khatma.handOver"),
   v.literal("person.rotaAllowed"),
+  v.literal("rota.adminCreate"),
+  v.literal("rota.adminChange"),
 );
 
 export type AuditAction = Infer<typeof auditActionValidator>;

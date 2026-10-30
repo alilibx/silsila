@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { archiveKhatma } from "./khatmaLifecycle";
+import { isArchived } from "./lib/khatma";
 import { clearNotes, notify } from "./notes";
 import { enqueue } from "./rotaOutbox";
 import {
@@ -361,9 +363,10 @@ async function sendCycleMessages(
 }
 
 /**
- * Closes a day: the one place `closedAt` is set, so the silence count and
- * the cycle messages run once per day. Does nothing for a closed day. A day
- * closing while the khatma is paused doesn't count toward silence.
+ * Closes a day and runs its silence count and cycle messages, once per day:
+ * it does nothing for a closed day. (Archiving a khatma closes its open day
+ * without them.) A day closing while the khatma is paused doesn't count toward
+ * silence.
  */
 async function closeDay(
   ctx: MutationCtx,
@@ -391,7 +394,7 @@ export const tick = internalMutation({
     const khatma = await ctx.db.get(args.khatmaId);
     const rota = khatma?.rota;
     if (!khatma || khatma.kind !== "rota" || !rota) return;
-    if (rota.archivedAt !== null) return;
+    if (isArchived(khatma)) return;
     const now = Date.now();
     const today = localDate(now, rota.timeZone);
 
@@ -418,7 +421,7 @@ export const tick = internalMutation({
 
     const open = last !== null && last.closedAt === null;
     if (rota.endDate !== null && today > rota.endDate && !open) {
-      await ctx.db.patch(khatma._id, { rota: { ...rota, archivedAt: now } });
+      await archiveKhatma(ctx, khatma);
     }
   },
 });
@@ -432,7 +435,7 @@ export const sweep = internalMutation({
       .withIndex("by_kind", (q) => q.eq("kind", "rota"))
       .collect();
     for (const khatma of khatmas) {
-      if (khatma.rota && khatma.rota.archivedAt === null) {
+      if (!isArchived(khatma)) {
         await ctx.scheduler.runAfter(0, internal.rotaDays.tick, {
           khatmaId: khatma._id,
         });

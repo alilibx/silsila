@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   clear: vi.fn(),
   stored: null as string | null,
   stats: null as unknown,
+  savedPeople: [] as unknown,
   thisDevice: false,
   support: "ready" as "ready" | "ios_install" | "unsupported",
   blocked: false,
@@ -26,6 +27,7 @@ const m = vi.hoisted(() => ({
     signOutOthers: vi.fn(),
     unsubscribe: vi.fn(),
     setWhatsappNotes: vi.fn(),
+    removeSaved: vi.fn(),
   },
 }));
 
@@ -56,6 +58,7 @@ vi.mock("convex/react", async () => {
       const name = getFunctionName(ref);
       if (name === "sessions:me") return m.me;
       if (name === "people:myStats") return m.stats;
+      if (name === "people:savedPeople") return m.savedPeople;
       if (name === "push:mine")
         return args === "skip" ? undefined : { thisDevice: m.thisDevice };
       return m.list;
@@ -67,7 +70,8 @@ vi.mock("convex/react", async () => {
         | "signOutOne"
         | "signOutOthers"
         | "unsubscribe"
-        | "setWhatsappNotes";
+        | "setWhatsappNotes"
+        | "removeSaved";
       return m.fns[name];
     },
   };
@@ -129,6 +133,7 @@ describe("SettingsPage", () => {
     m.enablePush.mockReset().mockResolvedValue("granted");
     m.dropSubscription.mockReset().mockResolvedValue("https://push/e1");
     m.stats = { paceDays: null, juzRead: 0, weekStreak: null };
+    m.savedPeople = [];
     m.thisDevice = false;
     m.support = "ready";
     m.blocked = false;
@@ -382,6 +387,105 @@ describe("SettingsPage", () => {
       expect(
         screen.queryByRole("region", { name: t.settings.numbers }),
       ).toBeNull();
+    });
+  });
+
+  describe("my participants", () => {
+    beforeEach(() => {
+      m.savedPeople = [
+        { id: "c1", name: "أم خالد", phone: "+971501234567" },
+        { id: "c2", name: "سعد", phone: null },
+      ];
+    });
+
+    it("lists each saved person with their number, or that it is hidden", () => {
+      renderPage();
+      const section = screen.getByRole("region", {
+        name: t.settings.savedHeading,
+      });
+      const items = within(section).getAllByRole("listitem");
+      expect(items).toHaveLength(2);
+      expect(
+        within(items[0] as HTMLElement).getByText("أم خالد"),
+      ).toBeInTheDocument();
+      expect(
+        within(items[0] as HTMLElement).getByText("+971501234567"),
+      ).toHaveAttribute("dir", "ltr");
+      expect(
+        within(items[1] as HTMLElement).getByText(t.settings.savedHidden),
+      ).toBeInTheDocument();
+      expect(within(items[1] as HTMLElement).queryByText(/\+971/)).toBeNull();
+    });
+
+    it("has no section while the list is empty or loading", () => {
+      m.savedPeople = [];
+      const { unmount } = renderPage();
+      expect(screen.queryByText(t.settings.savedHeading)).toBeNull();
+      unmount();
+      m.savedPeople = undefined;
+      renderPage();
+      expect(screen.queryByText(t.settings.savedHeading)).toBeNull();
+    });
+
+    it("asks before deleting, and deletes nothing if the answer is no", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(
+        screen.getByRole("button", {
+          name: t.settings.savedRemoveLabel("أم خالد"),
+        }),
+      );
+      const confirm = screen.getByRole("dialog", {
+        name: t.settings.savedRemoveTitle("أم خالد"),
+      });
+      expect(
+        within(confirm).getByText(t.settings.savedRemoveBody),
+      ).toBeInTheDocument();
+      expect(m.fns.removeSaved).not.toHaveBeenCalled();
+      await user.click(
+        within(confirm).getByRole("button", {
+          name: t.settings.savedRemoveCancel,
+        }),
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(m.fns.removeSaved).not.toHaveBeenCalled();
+    });
+
+    it("deletes the one confirmed", async () => {
+      const user = userEvent.setup();
+      m.fns.removeSaved?.mockResolvedValue({ ok: true });
+      renderPage();
+      await user.click(
+        screen.getByRole("button", {
+          name: t.settings.savedRemoveLabel("سعد"),
+        }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: t.settings.savedRemoveConfirm }),
+      );
+      expect(m.fns.removeSaved).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        contactId: "c2",
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("a refusal stays in the sheet in plain words", async () => {
+      const user = userEvent.setup();
+      m.fns.removeSaved?.mockResolvedValue({ error: "not_found" });
+      renderPage();
+      await user.click(
+        screen.getByRole("button", {
+          name: t.settings.savedRemoveLabel("سعد"),
+        }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: t.settings.savedRemoveConfirm }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        t.settings.savedErrors.not_found ?? "",
+      );
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
   });
 

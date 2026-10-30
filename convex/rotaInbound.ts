@@ -6,6 +6,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { isBlocked } from "./lib/blocked";
+import { isArchived } from "./lib/khatma";
 import { notify } from "./notes";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
 import { titled, welcomeMessage } from "./rotaOutbox";
@@ -67,11 +68,23 @@ const hasJoined = (p: Participant) => isActive(p) && p.joinedAt != null;
 /** A declined join request holds off another from the same phone for this long. */
 const DECLINED_COOLDOWN_MS = 7 * 86_400_000;
 
+/** Whether any of these participants is on a khatma that is still running. */
+async function onRunningKhatma(
+  ctx: MutationCtx,
+  participants: Participant[],
+): Promise<boolean> {
+  for (const p of participants) {
+    const khatma = await ctx.db.get(p.khatmaId);
+    if (khatma && !isArchived(khatma)) return true;
+  }
+  return false;
+}
+
 /**
  * Opens the phone's 24-hour window, but only for a phone Wirdak may write to:
- * one on a rota khatma's list (`active`, the phone's participants that
- * `recordReply` loaded), or with a join request waiting. Every other number's
- * messages leave no trace here.
+ * one on the list of a rota khatma still running (`active`, the phone's
+ * participants that `recordReply` loaded), or with a join request waiting.
+ * Every other number's messages leave no trace here.
  */
 async function openWindow(
   ctx: MutationCtx,
@@ -79,7 +92,7 @@ async function openWindow(
   now: number,
   active: Participant[],
 ): Promise<void> {
-  const listed = active.length > 0;
+  const listed = await onRunningKhatma(ctx, active);
   const asking =
     !listed &&
     (
@@ -239,6 +252,42 @@ async function welcome(
 }
 
 /**
+ * An admin set this khatma up on someone's behalf: the join message from that
+ * person's own number makes them its organizer. Any other phone changes nothing
+ * here, and neither does a blocked one. The membership has no share token: drawing one takes an action, and a
+ * rota khatma has no use for it.
+ */
+async function takeUpOrganizing(
+  ctx: MutationCtx,
+  khatma: Khatma,
+  rota: RotaConfig,
+  args: { phone: string; now: number },
+): Promise<void> {
+  if (rota.pendingOrganizer !== true) return;
+  const organizer = await ctx.db.get(khatma.creatorPersonId);
+  if (organizer?.phone !== args.phone) return;
+  // A number an admin blocked takes nothing up.
+  if (await isBlocked(ctx, args.phone)) return;
+  await ctx.db.insert("members", {
+    khatmaId: khatma._id,
+    personId: organizer._id,
+    joinedAt: args.now,
+    status: "active",
+    notificationsOn: true,
+    lastNudgeAt: null,
+    lastCelebratedRound: 0,
+  });
+  await ctx.db.patch(khatma._id, {
+    rota: { ...rota, pendingOrganizer: false },
+  });
+  await notify(ctx, {
+    personId: organizer._id,
+    khatmaId: khatma._id,
+    kind: "nowOrganizer",
+  });
+}
+
+/**
  * A join message for a rota khatma, or null when this deployment has no such
  * khatma. An archived khatma only says it has ended. A listed phone joins (or rejoins
  * after «إيقاف»); any other phone files one open join request, and the
@@ -258,6 +307,7 @@ async function join(
   const rota = khatma?.rota;
   if (!khatma || khatma.kind !== "rota" || !rota) return null;
   if (rota.archivedAt !== null) return [about(khatma, endedText)];
+  await takeUpOrganizing(ctx, khatma, rota, args);
   const rows = await ctx.db
     .query("rotaParticipants")
     .withIndex("by_khatma_phone", (q) =>
@@ -328,7 +378,7 @@ async function join(
   return [await welcome(ctx, khatma, joined, args.now)];
 }
 
-/** «إيقاف»: stops every khatma's messages for the phone and tells each organizer. */
+/** «إيقاف»: stops every khatma's messages for the phone and tells each live khatma's organizer. */
 async function stop(
   ctx: MutationCtx,
   joined: Participant[],
@@ -338,7 +388,7 @@ async function stop(
     if (p.stoppedAt != null) continue;
     await ctx.db.patch(p._id, { stoppedAt: now });
     const khatma = await ctx.db.get(p.khatmaId);
-    if (!khatma) continue;
+    if (!khatma || isArchived(khatma)) continue;
     await notify(ctx, {
       personId: khatma.creatorPersonId,
       khatmaId: khatma._id,
@@ -438,6 +488,24 @@ async function answerTyped(
   ];
 }
 
+/**
+ * The newest of the phone's joined khatmas when every one of them is archived,
+ * so a reply can say it ended; null with one still running.
+ */
+async function allEnded(
+  ctx: MutationCtx,
+  joined: Participant[],
+): Promise<Khatma | null> {
+  let newest: Khatma | null = null;
+  for (const p of joined) {
+    const khatma = await ctx.db.get(p.khatmaId);
+    if (!khatma) continue;
+    if (!isArchived(khatma)) return null;
+    if (!newest || khatma.createdAt > newest.createdAt) newest = khatma;
+  }
+  return newest;
+}
+
 /** Whether the phone is on any rota khatma's list (not removed). */
 export const hasParticipant = internalQuery({
   args: { phone: v.string() },
@@ -456,10 +524,12 @@ export const hasParticipant = internalQuery({
  * button tap, a join message, and a typed reply from a phone with a rota
  * participant (a rota word from any of them; anything else only from a
  * joined one, and not when `mayBeSignIn`, so another deployment's sign-in
- * code is left for the relay). `none` means it isn't a rota message here (a
- * phone with no participant, or a join code or a tap this deployment
- * doesn't have). Last, the phone's 24-hour window opens if it is on a list
- * or has a join request waiting.
+ * code is left for the relay). When all the phone's joined khatmas are
+ * archived, only «إيقاف» still acts, and anything else hears that it ended.
+ * `none` means it isn't a rota message here (a phone with no participant, or
+ * a join code or a tap this deployment doesn't have). Last, the phone's
+ * 24-hour window opens if it is on a running khatma's list or has a join
+ * request waiting.
  */
 export const handle = internalMutation({
   args: {
@@ -520,17 +590,21 @@ async function route(
   }
   const joined = active.filter(hasJoined);
   const word = classifyReply(args.text);
+  if (word === "stop") {
+    // Withdraws any join request too, so accepting one can't write to them.
+    await declineRequests(ctx, args.phone, args.now);
+    return await stop(ctx, joined, args.now);
+  }
+  if (word === null && args.mayBeSignIn) return NONE;
+  const ended = await allEnded(ctx, joined);
+  if (ended) return [about(ended, endedText)];
   switch (word) {
-    case "stop":
-      // Withdraws any join request too, so accepting one can't write to them.
-      await declineRequests(ctx, args.phone, args.now);
-      return await stop(ctx, joined, args.now);
     case "done":
     case "notYet":
       return await answerTyped(ctx, joined, word, args.now);
     case "dua":
       return [reply(duaText())];
     case null:
-      return joined.length === 0 || args.mayBeSignIn ? NONE : [reply(helpText)];
+      return joined.length === 0 ? NONE : [reply(helpText)];
   }
 }

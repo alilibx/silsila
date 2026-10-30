@@ -14,6 +14,7 @@ const card = (over: object = {}) => ({
   done: 18,
   holding: null as number | null,
   hasNote: false,
+  archived: false,
   ...over,
 });
 
@@ -123,5 +124,23 @@ describe("SwitchKhatmaSheet", () => {
       current: false,
     });
     expect(row).toHaveTextContent("ختمة بالتناوب · ٢٦ من ٣٠ اليوم");
+  });
+
+  it("leaves archived khatmas out", () => {
+    setup("A", [
+      card(),
+      card({ inviteCode: "B", name: "ختمة قديمة", archived: true }),
+    ]);
+    expect(screen.queryByText("ختمة قديمة")).toBeNull();
+    expect(screen.getByText("ختمة العائلة")).toBeInTheDocument();
+  });
+
+  it("on an archived khatma, offers the active ones and marks none current", () => {
+    setup("B", [
+      card(),
+      card({ inviteCode: "B", name: "ختمة قديمة", archived: true }),
+    ]);
+    expect(screen.queryByText("ختمة قديمة")).toBeNull();
+    expect(current()).toHaveLength(0);
   });
 });

@@ -1,3 +1,7 @@
-/* The website's theme (colors, fonts, pattern), plus its components as Tailwind sources. */
+/* The website's theme (colors, fonts, pattern), plus what the panel reuses as Tailwind sources. */
 @import "../../web/src/styles.css";
 @source "../../web/src/components";
+@source "../../web/src/features/khatma";
+@source "../../web/src/features/rota";
+@source "../../web/src/pages/RotaCreatePage.tsx";
+@source "../../web/src/pages/RotaSettingsPage.tsx";

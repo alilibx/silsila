@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { OrganizerPage } from "./OrganizerPage";
 
-type Fn = "update" | "removeMember" | "unblock" | "handOver";
+type Fn =
+  "update" | "removeMember" | "unblock" | "handOver" | "archive" | "remove";
 
 const m = vi.hoisted(() => ({
   settings: undefined as unknown,
@@ -18,6 +19,8 @@ const m = vi.hoisted(() => ({
     removeMember: vi.fn(),
     unblock: vi.fn(),
     handOver: vi.fn(),
+    archive: vi.fn(),
+    remove: vi.fn(),
   },
   resetInvite: vi.fn(),
   /** When set, navigate() does nothing, so a test can stop between the action and the route change. */
@@ -63,6 +66,7 @@ const organizerView = {
     { memberId: "m3", displayName: "خالد", isOrganizer: false },
   ],
   blocked: [{ memberId: "m9", displayName: "ليلى" }],
+  archived: false,
 };
 
 const visited: string[] = [];
@@ -563,5 +567,101 @@ describe("OrganizerPage", () => {
     m.settings = { forbidden: true };
     view.rerender(tree());
     expect(await screen.findByText("khatma-page")).toBeInTheDocument();
+  });
+
+  describe("archiving and deleting", () => {
+    it("archives after a confirmation that says messages stop and nothing is lost", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      expect(
+        screen.queryByRole("button", { name: t.archive.delete }),
+      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: t.archive.button }));
+      const sheet = screen.getByRole("dialog", { name: t.archive.title });
+      expect(within(sheet).getByText(t.archive.body)).toBeInTheDocument();
+      expect(m.fns.archive).not.toHaveBeenCalled();
+      await user.click(
+        within(sheet).getByRole("button", { name: t.archive.confirm }),
+      );
+      expect(m.fns.archive).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        inviteCode: "CODE",
+      });
+    });
+
+    it("an archived khatma hides every control that changes it", () => {
+      m.settings = { ...organizerView, archived: true };
+      renderPage();
+      expect(screen.getByText(t.rota.archivedSettings)).toBeInTheDocument();
+      // Names stay readable; no field, no save, no member action, no reset.
+      expect(screen.getByText("سارة")).toBeInTheDocument();
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(screen.queryByRole("radio")).toBeNull();
+      for (const name of [
+        t.organizer.save,
+        t.organizer.reset,
+        t.archive.button,
+      ]) {
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      }
+      expect(
+        screen.queryByRole("button", {
+          name: `${t.organizer.remove}: سارة`,
+        }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: new RegExp(t.organizer.allow) }),
+      ).toBeNull();
+    });
+
+    it("an archived pool khatma can be deleted, not started again", async () => {
+      m.settings = { ...organizerView, archived: true };
+      const user = userEvent.setup();
+      renderPage();
+      expect(
+        screen.queryByRole("button", { name: t.archive.restart }),
+      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: t.archive.delete }));
+      const sheet = screen.getByRole("dialog", { name: t.archive.deleteTitle });
+      expect(within(sheet).getByText(t.archive.deleteBody)).toBeInTheDocument();
+      expect(m.fns.remove).not.toHaveBeenCalled();
+      await user.click(
+        within(sheet).getByRole("button", { name: t.archive.deleteConfirm }),
+      );
+      expect(m.fns.remove).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        inviteCode: "CODE",
+      });
+    });
+
+    it("while a delete runs, the page stays on «جارٍ الحذف» when its settings turn forbidden", async () => {
+      m.settings = { ...organizerView, archived: true };
+      m.fns.remove.mockReturnValue(new Promise(() => {}));
+      const user = userEvent.setup();
+      const view = renderPage();
+      await user.click(screen.getByRole("button", { name: t.archive.delete }));
+      await user.click(
+        screen.getByRole("button", { name: t.archive.deleteConfirm }),
+      );
+      m.settings = { forbidden: true };
+      view.rerender(tree());
+      expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+      expect(screen.queryByText("khatma-page")).toBeNull();
+      expect(visited).not.toContain("/j/CODE");
+    });
+
+    it("says an organizer change was refused because the khatma got archived", async () => {
+      m.fns.update.mockRejectedValue(new ConvexError({ code: "archived" }));
+      const user = userEvent.setup();
+      renderPage();
+      const name = section(t.organizer.nameHeading);
+      await user.type(within(name).getByRole("textbox"), "x");
+      await user.click(
+        within(name).getByRole("button", { name: t.organizer.save }),
+      );
+      expect(await within(name).findByRole("alert")).toHaveTextContent(
+        t.organizer.errors.archived,
+      );
+    });
   });
 });

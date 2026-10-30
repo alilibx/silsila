@@ -6,8 +6,14 @@ import { Link, useSearchParams } from "react-router";
 import { buttonClass } from "../components/Button";
 import { KhatmaTabs } from "../components/KhatmaTabs";
 import { NoteCard } from "../components/NoteCard";
-import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import { canSwitch, SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import {
+  ArchivedBanner,
+  ArchivedSection,
+} from "../features/khatma/ArchivedActions";
+import { DeletingPage, useDeleting } from "../features/khatma/deleting";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
+import { useRotaBackend } from "../features/rota/backend";
 import { ErrorLine } from "../features/rota/ErrorLine";
 import { PeoplePanel } from "../features/rota/PeoplePanel";
 import { TodayPanel } from "../features/rota/TodayPanel";
@@ -41,10 +47,13 @@ function Loading() {
  */
 function WhatsAppPage({
   title,
+  archived,
   joinLink,
   onSignIn,
 }: {
   title: string;
+  /** An archived khatma says so, and nobody can join it. */
+  archived: boolean;
   /** Opens WhatsApp with the join message typed; null while the khatma has none. */
   joinLink: string | null;
   onSignIn: (() => void) | null;
@@ -62,8 +71,12 @@ function WhatsAppPage({
       <h1 className="font-display text-4xl leading-tight break-words text-green-deep">
         {title}
       </h1>
-      <p className="mt-4 text-xl leading-relaxed">{t.rota.whatsappOnly}</p>
-      {joinLink && (
+      {archived ? (
+        <ArchivedBanner />
+      ) : (
+        <p className="mt-4 text-xl leading-relaxed">{t.rota.whatsappOnly}</p>
+      )}
+      {!archived && joinLink && (
         <a
           href={joinLink}
           target="_blank"
@@ -125,11 +138,14 @@ function RotaNotes({ notes }: { notes: NoteView[] }) {
 export function RotaKhatmaPage({
   inviteCode,
   name,
+  archived,
   joinLink,
 }: {
   inviteCode: string;
   /** The khatma's name, which anyone can see. */
   name: string | null;
+  /** Whether the khatma is archived, which anyone can see. */
+  archived: boolean;
   /** The wa.me link that joins the khatma, which anyone can use. */
   joinLink: string | null;
 }) {
@@ -137,11 +153,9 @@ export function RotaKhatmaPage({
   const [search, setSearch] = useSearchParams();
   const tab: RotaTab = search.get("tab") === "people" ? "people" : "today";
   const ids = useId();
-  const today = useQuery(api.rota.today, { sessionToken, inviteCode });
-  const settings = useQuery(
-    api.rota.settings,
-    today ? { sessionToken, inviteCode } : "skip",
-  );
+  const backend = useRotaBackend(inviteCode);
+  const today = useQuery(backend.today, backend.scope);
+  const settings = useQuery(backend.settings, today ? backend.scope : "skip");
   const notes = useQuery(
     api.notes.forKhatma,
     today ? { sessionToken, inviteCode } : "skip",
@@ -150,6 +164,7 @@ export function RotaKhatmaPage({
   const me = useQuery(api.sessions.me, { sessionToken });
   const signIn = useSignInSheet();
   const [switching, setSwitching] = useState(false);
+  const deleting = useDeleting(inviteCode);
 
   // Tabs replace the entry, so the phone's back leaves the khatma instead of stepping through tabs.
   const setTab = (next: RotaTab) =>
@@ -163,6 +178,8 @@ export function RotaKhatmaPage({
       { replace: true },
     );
 
+  // Deleted from here: the queries are about to turn null, and this page must not show that.
+  if (deleting) return <DeletingPage />;
   if (today === undefined || (today !== null && settings === undefined)) {
     return <Loading />;
   }
@@ -173,6 +190,7 @@ export function RotaKhatmaPage({
       <>
         <WhatsAppPage
           title={name ?? t.app.name}
+          archived={archived}
           joinLink={joinLink}
           onSignIn={me === null ? signIn.open : null}
         />
@@ -217,7 +235,7 @@ export function RotaKhatmaPage({
           >
             {t.khatmaSettings.link}
           </Link>
-          {mine !== undefined && mine.length >= 2 && (
+          {mine !== undefined && canSwitch(mine, inviteCode) && (
             <button
               type="button"
               onClick={() => setSwitching(true)}
@@ -228,6 +246,7 @@ export function RotaKhatmaPage({
           )}
         </div>
 
+        {today.archived && <ArchivedBanner />}
         <KhatmaTabs tab={tab} onChange={setTab} idPrefix={ids} tabs={TABS} />
         <section
           role="tabpanel"
@@ -245,9 +264,15 @@ export function RotaKhatmaPage({
               />
             </>
           ) : (
-            <PeoplePanel inviteCode={inviteCode} />
+            <PeoplePanel inviteCode={inviteCode} archived={today.archived} />
           )}
         </section>
+        {today.archived && (
+          <ArchivedSection
+            inviteCode={inviteCode}
+            restart={{ days: settings.days, timeZone: settings.timeZone }}
+          />
+        )}
       </main>
       {signIn.sheet}
       {switching && mine && (

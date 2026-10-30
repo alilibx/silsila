@@ -56,6 +56,28 @@ function renderPage() {
 }
 
 describe("PersonAdminPage", () => {
+  it("says someone has never come in, and when they last did", () => {
+    const { unmount } = renderPage();
+    expect(
+      screen.getByText(new RegExp(t.lookup.neverSeen)),
+    ).toBeInTheDocument();
+    unmount();
+    m.person = { ...person(false), lastSeenAt: 1_800_000_000_000 };
+    renderPage();
+    expect(screen.queryByText(new RegExp(t.lookup.neverSeen))).toBeNull();
+  });
+
+  it("says a khatma is waiting for them", () => {
+    const base = person(false);
+    m.person = {
+      ...base,
+      khatmas: [{ ...base.khatmas[0], pending: true }],
+    };
+    renderPage();
+    expect(screen.getByText(t.rota.pending)).toBeInTheDocument();
+    expect(screen.queryByText(t.lookup.organizerBadge)).toBeNull();
+  });
+
   it("signs out everywhere after a confirmation", async () => {
     renderPage();
     expect(screen.getByText(t.lookup.organizerBadge)).toBeInTheDocument();

@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { toArabicDigits } from "@convex/lib/digits";
+import { buttonClass } from "@web/components/Button";
 import { formatDate } from "@web/lib/format";
 import { useQuery } from "convex/react";
 import { useId, useState } from "react";
@@ -95,6 +96,11 @@ function Dashboard({ adminToken }: { adminToken: string }) {
           value={formatCount(o.completedThisWeek)}
         />
         <StatTile
+          label={t.stats.rotaDaysCompleted}
+          value={formatCount(o.rotaDaysCompletedThisWeek)}
+          detail={t.stats.thisWeek}
+        />
+        <StatTile
           label={t.stats.stalled}
           value={
             o.stalledCapped
@@ -185,6 +191,9 @@ export function HomePage() {
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-3xl text-green-deep">{t.home.title}</h1>
       <OpenHelpCard adminToken={adminToken} />
+      <Link to="/rota/new" className={buttonClass("ghost", "no-underline")}>
+        {t.rota.create}
+      </Link>
       <Dashboard adminToken={adminToken} />
       <AdminPushCard />
       <h2 className="text-lg font-semibold">{t.home.switches}</h2>

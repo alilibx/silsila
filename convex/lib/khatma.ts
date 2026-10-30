@@ -15,3 +15,8 @@ export async function khatmaByInviteCode(
     .withIndex("by_inviteCode", (q) => q.eq("inviteCode", inviteCode))
     .first();
 }
+
+/** Whether a khatma is archived: read-only, and nothing runs on it any more. */
+export function isArchived(khatma: Doc<"khatmas">): boolean {
+  return khatma.archivedAt != null || khatma.rota?.archivedAt != null;
+}

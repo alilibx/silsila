@@ -81,6 +81,8 @@ export default defineSchema({
     rota: v.optional(rotaConfigValidator),
     /** What a member sends on WhatsApp to ask to join a rota khatma. */
     joinCode: v.optional(v.string()),
+    /** When a pool khatma was archived. A rota khatma keeps `rota.archivedAt`. */
+    archivedAt: v.optional(nullableNumber),
   })
     .index("by_inviteCode", ["inviteCode"])
     .index("by_joinCode", ["joinCode"])
@@ -142,6 +144,7 @@ export default defineSchema({
   })
     .index("by_round_juz", ["roundId", "juz"])
     .index("by_khatma_person", ["khatmaId", "personId"])
+    .index("by_khatma_finishedAt", ["khatmaId", "finishedAt"])
     .index("by_round", ["roundId"])
     .index("by_person_finishedAt", ["personId", "finishedAt"])
     .index("by_finishedAt", ["finishedAt"]),
@@ -164,6 +167,7 @@ export default defineSchema({
       v.literal("rotaSilent"),
       v.literal("rotaSilenced"),
       v.literal("rotaStopped"),
+      v.literal("rotaEnabled"),
     ),
     /** A rota participant's name, in the organizer notes about them. */
     name: v.optional(v.union(v.string(), v.null())),
@@ -202,11 +206,34 @@ export default defineSchema({
     lastReplyAt: v.optional(nullableNumber),
     /** Reading days in a row they sent no reply. */
     silentDays: v.optional(v.number()),
+    /**
+     * Imported from a pool khatma: the organizer never sees this phone, so
+     * nothing returns it to a client (the join link is the only way in).
+     */
+    phoneHidden: v.optional(v.boolean()),
   })
     .index("by_khatma", ["khatmaId"])
     .index("by_khatma_phone", ["khatmaId", "phone"])
     // Every khatma a phone reads in, for its WhatsApp replies.
     .index("by_phone", ["phone"]),
+
+  /** Someone an organizer added before: they can be added to another rota khatma in a tap. */
+  rotaContacts: defineTable({
+    ownerPersonId: v.id("people"),
+    name: v.string(),
+    /** Null for someone imported from a pool khatma: the organizer never sees the number. */
+    phone: v.union(v.string(), v.null()), // E.164
+    personId: v.union(v.id("people"), v.null()),
+    createdAt: v.number(),
+    /**
+     * The organizer removed it from their list. Only a contact without a number
+     * is kept this way: it is how a number stays hidden from them afterwards.
+     */
+    removedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerPersonId"])
+    .index("by_owner_phone", ["ownerPersonId", "phone"])
+    .index("by_owner_person", ["ownerPersonId", "personId"]),
 
   /** Which participant owns each of the 30 slots. */
   rotaSlots: defineTable({
@@ -236,7 +263,8 @@ export default defineSchema({
     celebratedAt: v.optional(nullableNumber),
   })
     .index("by_khatma_n", ["khatmaId", "n"])
-    .index("by_khatma_date", ["khatmaId", "date"]),
+    .index("by_khatma_date", ["khatmaId", "date"])
+    .index("by_completedAt", ["completedAt"]),
 
   /** One juz' of one rota day, and who holds, reads and finished it. */
   rotaReads: defineTable({
@@ -253,7 +281,8 @@ export default defineSchema({
     notYetAt: v.optional(nullableNumber),
   })
     .index("by_day_juz", ["dayId", "juz"])
-    .index("by_reader_day", ["readerId", "dayId"]),
+    .index("by_reader_day", ["readerId", "dayId"])
+    .index("by_khatma", ["khatmaId"]),
 
   /** Someone who sent a rota khatma's join code and waits for the organizer's answer. */
   rotaJoinRequests: defineTable({
@@ -305,6 +334,7 @@ export default defineSchema({
     skippedAt: nullableNumber,
   })
     .index("by_day_kind_participant", ["dayId", "kind", "participantId"])
+    .index("by_khatma_unsent", ["khatmaId", "sentAt", "skippedAt"])
     .index("by_createdAt", ["createdAt"]),
 
   pushSubscriptions: defineTable({
@@ -355,6 +385,8 @@ export default defineSchema({
     newMembers: v.number(),
     newKhatmas: v.number(),
     roundsCompleted: v.number(),
+    /** Rotating khatma days whose 30 ajza' were all read; missing on older rows. */
+    rotaDaysCompleted: v.optional(v.number()),
     signInsStarted: v.number(),
     signInsCompleted: v.number(),
     totalMembers: v.number(),
@@ -428,6 +460,7 @@ export default defineSchema({
   })
     .index("by_person", ["personId", "lastMessageAt"])
     .index("by_reporter", ["reporterHash", "lastMessageAt"])
+    .index("by_khatma", ["khatmaId"])
     .index("by_status", ["status", "lastMessageAt"])
     .index("by_status_answeredAt", ["status", "answeredAt"])
     .index("by_closedAt", ["closedAt"])

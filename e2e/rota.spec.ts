@@ -5,19 +5,11 @@ import {
   blockExternal,
   randomPhone,
   test,
+  today,
   verifyInSheet,
 } from "./support";
 
 const KHATMA_NAME = "ختمة التناوب";
-
-/** Today's date in the browser's time zone as `YYYY-MM-DD` (the backend uses the same zone). */
-function today(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 // A rotating khatma from start to a first day: A signs in, an admin-style switch lets A create one,
 // A makes it daily from today, adds two people, reassigns an unread juz' to themselves, records it

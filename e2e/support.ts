@@ -19,6 +19,15 @@ export function randomPhone(): string {
   return `97150${tail}`;
 }
 
+/** Today's date in the browser's time zone as `YYYY-MM-DD` (the backend uses the same zone). */
+export function today(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 /** Runs an internal Convex function on the local backend (`bun run convex run`). */
 async function convexRun(fn: string, args: object): Promise<string> {
   const { stdout } = await run(
@@ -70,6 +79,13 @@ export async function forceGraceEnd(
 /** Lets the verified person who sent from `phone` (digits only) create rotating khatmas, as an admin would (dev-only helper). */
 export async function allowRota(phone: string): Promise<void> {
   await convexRun("dev:allowRota", { phone: `+${phone}` });
+}
+
+/** A session token for the admin with this number, who is made if new (dev-only helper). */
+export async function adminSession(phone: string): Promise<string> {
+  const stdout = await convexRun("dev:adminSession", { phone });
+  // The CLI prints the return value as JSON on its last line.
+  return JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as string;
 }
 
 const FONTS_DIR = new URL("../node_modules/@fontsource/", import.meta.url)
