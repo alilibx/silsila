@@ -424,6 +424,20 @@ test("the nightly rollup stores yesterday's active khatma count", async () => {
   expect((await rows(t)).find((r) => r.day === D)?.activeKhatmas).toBe(1);
 });
 
+test("the nightly active khatma count skips an archived khatma", async () => {
+  const t = convexTest(schema, modules);
+  const { k } = await seed(t);
+  await t.run(async (ctx) => {
+    const round = await ctx.db.query("rounds").first();
+    await ctx.db.patch(round!._id, { lastFinishedAt: noon(D) });
+    await ctx.db.patch(k, { archivedAt: noon(D) });
+  });
+  await t.mutation(internal.stats.rollupDay, { day: D - 1 });
+  vi.setSystemTime(noon(D + 1));
+  await t.mutation(internal.stats.rollupYesterday, {});
+  expect((await rows(t)).find((r) => r.day === D)?.activeKhatmas).toBe(0);
+});
+
 // ---------------------------------------------------------------------------
 // PR review fixes
 

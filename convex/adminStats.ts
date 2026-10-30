@@ -4,7 +4,7 @@ import type { QueryCtx } from "./_generated/server";
 import { adminQuery } from "./lib/adminSession";
 import { isArchived } from "./lib/khatma";
 import { DAY_MS, dubaiDay } from "./lib/stats";
-import { dayCounts, type DayCounts } from "./stats";
+import { countActiveKhatmas, dayCounts, type DayCounts } from "./stats";
 
 const ACTIVE_DAYS = 14;
 const STALLED_DAYS = 14;
@@ -124,7 +124,7 @@ export const overview = adminQuery({
     );
 
     return {
-      activeKhatmas: new Set(activeRounds.map((r) => r.khatmaId)).size,
+      activeKhatmas: await countActiveKhatmas(ctx, activeRounds),
       activeKhatmasWeekAgo: weekAgo?.activeKhatmas ?? null,
       members: (latest?.totalMembers ?? 0) + live.newMembers,
       membersNewThisWeek: sum(lastSix, "newMembers") + live.newMembers,

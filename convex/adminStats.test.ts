@@ -201,6 +201,17 @@ test("active khatmas: a finish in the last 14 days", async () => {
   expect(o.activeKhatmasWeekAgo).toBeNull();
 });
 
+test("activeKhatmas skips archived khatmas", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const round = { startedAt: NOW - 30 * DAY, lastFinishedAt: NOW - 3 * DAY };
+  await khatmaWithRound(t, round);
+  const { khatmaId } = await khatmaWithRound(t, round);
+  expect((await overview(t)).activeKhatmas).toBe(2);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+  expect((await overview(t)).activeKhatmas).toBe(1);
+});
+
 test("stalled khatmas: an open current round, a member, and 14 quiet days", async () => {
   const t = convexTest(schema, modules);
   await admin(t);
