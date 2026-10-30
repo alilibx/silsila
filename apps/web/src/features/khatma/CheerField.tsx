@@ -49,6 +49,18 @@ function CheerForm({ setting, disabled, hint, onSave }: Props) {
       />
       {draft.on && (
         <>
+          <SwitchRow
+            label={t.cheer.showNameLabel}
+            on={draft.showName}
+            disabled={disabled}
+            onChange={(showName) => setDraft({ ...draft, showName })}
+          />
+          <SwitchRow
+            label={t.cheer.showJuzLabel}
+            on={draft.showJuz}
+            disabled={disabled}
+            onChange={(showJuz) => setDraft({ ...draft, showJuz })}
+          />
           <label htmlFor="cheer-audience" className="mt-4 block font-medium">
             {t.cheer.audienceLabel}
           </label>

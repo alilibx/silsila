@@ -122,6 +122,8 @@ export const SETTING_SPECS: { [K in SettingKey]: SettingSpec } = {
     max: CHEER_MAX_GAP_MS,
     group: "notifications",
   },
+  cheerShowName: { kind: "bool", group: "notifications" },
+  cheerShowJuz: { kind: "bool", group: "notifications" },
   organizerInactiveMs: {
     kind: "duration",
     min: 7 * DAY,

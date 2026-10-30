@@ -95,6 +95,7 @@ export async function enqueue(
     kind: Kind;
     juz: number[];
     number: number | null;
+    name?: string | null;
   },
 ): Promise<Id<"rotaOutbox"> | null> {
   const participant = await ctx.db.get(row.participantId);
@@ -325,7 +326,9 @@ function compose(
         : cycleTemplate(khatma);
     case "cheer":
       // No template, as Meta would count it as marketing.
-      return inWindow ? { text: titled(khatma, cheerText(number)) } : null;
+      return inWindow
+        ? { text: titled(khatma, cheerText(number, row.name ?? null, row.juz)) }
+        : null;
     case "welcome":
       // Needs the database; `plan` builds it (there is no template for it).
       return null;

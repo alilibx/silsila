@@ -66,7 +66,16 @@ export const SETTING_LAYOUT: Record<
       section: "readers",
       keys: ["reminderPaceMultiple", "nudgeCooldownMs", "openForHelpBatchMs"],
     },
-    { section: "cheers", keys: ["cheerOn", "cheerEveryone", "cheerGapMs"] },
+    {
+      section: "cheers",
+      keys: [
+        "cheerOn",
+        "cheerEveryone",
+        "cheerGapMs",
+        "cheerShowName",
+        "cheerShowJuz",
+      ],
+    },
     { section: "admins", keys: ["summaryHour", "milestonePushSpacingMs"] },
   ],
   help: [

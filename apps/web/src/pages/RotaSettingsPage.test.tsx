@@ -59,7 +59,13 @@ const baseSettings = {
   quiet: { startHour: 22, endHour: 7 },
   cheer: {
     override: null,
-    defaults: { on: true, everyone: false, gapMs: 86_400_000 },
+    defaults: {
+      on: true,
+      everyone: false,
+      gapMs: 86_400_000,
+      showName: false,
+      showJuz: false,
+    },
   },
   archived: false,
 };
@@ -233,13 +239,23 @@ describe("RotaSettingsPage", () => {
       renderPage();
       const cheerSection = section(t.cheer.heading);
       expect(cheerSection).toHaveTextContent(t.cheer.rotaHint);
-      await user.click(within(cheerSection).getByRole("switch"));
+      await user.click(
+        within(cheerSection).getByRole("switch", {
+          name: t.cheer.switchLabel,
+        }),
+      );
       await user.click(
         within(cheerSection).getByRole("button", { name: t.organizer.save }),
       );
       expect(m.fns.update).toHaveBeenCalledWith({
         ...args,
-        cheer: { on: false, everyone: false, gapMs: 86_400_000 },
+        cheer: {
+          on: false,
+          everyone: false,
+          gapMs: 86_400_000,
+          showName: false,
+          showJuz: false,
+        },
       });
     });
 

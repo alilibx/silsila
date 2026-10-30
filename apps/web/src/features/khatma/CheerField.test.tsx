@@ -5,7 +5,13 @@ import { t } from "../../i18n/ar";
 import { CheerField } from "./CheerField";
 
 const HOUR = 3_600_000;
-const defaults = { on: true, everyone: false, gapMs: 24 * HOUR };
+const defaults = {
+  on: true,
+  everyone: false,
+  gapMs: 24 * HOUR,
+  showName: false,
+  showJuz: false,
+};
 
 describe("CheerField", () => {
   it("starts from the defaults and saves the khatma's own choice", async () => {
@@ -34,6 +40,33 @@ describe("CheerField", () => {
       on: true,
       everyone: true,
       gapMs: 0,
+      showName: false,
+      showJuz: false,
+    });
+  });
+
+  it("lets the organizer show the reader's name and juz'", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <CheerField
+        setting={{ override: null, defaults }}
+        disabled={false}
+        onSave={onSave}
+      />,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: t.cheer.showNameLabel }),
+    );
+    await user.click(
+      screen.getByRole("switch", { name: t.cheer.showJuzLabel }),
+    );
+    await user.click(screen.getByRole("button", { name: t.organizer.save }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      ...defaults,
+      showName: true,
+      showJuz: true,
     });
   });
 
@@ -47,7 +80,7 @@ describe("CheerField", () => {
         onSave={onSave}
       />,
     );
-    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("switch", { name: t.cheer.switchLabel }));
 
     expect(screen.queryByLabelText(t.cheer.gapLabel)).toBeNull();
     await user.click(screen.getByRole("button", { name: t.organizer.save }));
@@ -57,7 +90,13 @@ describe("CheerField", () => {
   it("goes back to the defaults", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    const own = { on: true, everyone: true, gapMs: 6 * HOUR };
+    const own = {
+      on: true,
+      everyone: true,
+      gapMs: 6 * HOUR,
+      showName: false,
+      showJuz: false,
+    };
     const field = (override: typeof own | null) => (
       <CheerField
         setting={{ override, defaults }}

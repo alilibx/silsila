@@ -68,7 +68,13 @@ const organizerView = {
   blocked: [{ memberId: "m9", displayName: "ليلى" }],
   cheer: {
     override: null,
-    defaults: { on: true, everyone: false, gapMs: 86_400_000 },
+    defaults: {
+      on: true,
+      everyone: false,
+      gapMs: 86_400_000,
+      showName: false,
+      showJuz: false,
+    },
   },
   archived: false,
 };
@@ -137,7 +143,13 @@ describe("OrganizerPage", () => {
       quiet: { startHour: 22, endHour: 7 },
       cheer: {
         override: null,
-        defaults: { on: true, everyone: false, gapMs: 86_400_000 },
+        defaults: {
+          on: true,
+          everyone: false,
+          gapMs: 86_400_000,
+          showName: false,
+          showJuz: false,
+        },
       },
     };
     renderPage();
@@ -267,7 +279,13 @@ describe("OrganizerPage", () => {
     expect(m.fns.update).toHaveBeenCalledWith({
       sessionToken: "tok",
       inviteCode: "CODE",
-      cheer: { on: true, everyone: false, gapMs: 0 },
+      cheer: {
+        on: true,
+        everyone: false,
+        gapMs: 0,
+        showName: false,
+        showJuz: false,
+      },
     });
     expect(await within(cheerSection).findByRole("status")).toHaveTextContent(
       t.organizer.saved,

@@ -13,12 +13,18 @@ export type CheerConfig = {
   everyone: boolean;
   /** 0 means every finish. */
   gapMs: number;
+  /** Say who finished. Off by default: a finish is a private act of worship. */
+  showName: boolean;
+  /** Say which juz'. Off by default: its tile showed who held it. */
+  showJuz: boolean;
 };
 
 export const cheerConfigValidator = v.object({
   on: v.boolean(),
   everyone: v.boolean(),
   gapMs: v.number(),
+  showName: v.boolean(),
+  showJuz: v.boolean(),
 });
 
 /** What a khatma's settings screen shows: its own choice, if any, and what it falls back to. */
@@ -40,6 +46,8 @@ async function cheerDefaults(ctx: QueryCtx): Promise<CheerConfig> {
     on: await getSetting(ctx, "cheerOn"),
     everyone: await getSetting(ctx, "cheerEveryone"),
     gapMs: await getSetting(ctx, "cheerGapMs"),
+    showName: await getSetting(ctx, "cheerShowName"),
+    showJuz: await getSetting(ctx, "cheerShowJuz"),
   };
 }
 

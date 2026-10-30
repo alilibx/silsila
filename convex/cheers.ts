@@ -13,8 +13,9 @@ import { doneCount, heldAssignment, roundAssignments } from "./rounds";
 import { enqueue, reachable, windowOpen } from "./rotaOutbox";
 
 /**
- * Tells other readers a juz' was finished. A cheer names nobody and no juz':
- * the tile showed who held it, so the number would name them too. It is rarer
+ * Tells other readers a juz' was finished. By default a cheer names nobody and
+ * no juz' (the tile showed who held it, so the number would name them too);
+ * a khatma can choose to show either. It is rarer
  * than the finishes it follows, stays private, and isn't a nudge: it never
  * delays a reminder, and a recent nudge holds it back instead.
  */
@@ -62,6 +63,7 @@ export const afterFinish = internalMutation({
     const done = doneCount(assignments);
     if (done >= JUZ_COUNT - QUIET_LAST_AJZA) return;
 
+    const reader = config.showName ? await ctx.db.get(finished.personId) : null;
     const now = Date.now();
     const cooldownMs = await getSetting(ctx, "nudgeCooldownMs");
     const members = await ctx.db
@@ -109,6 +111,8 @@ export const afterFinish = internalMutation({
         khatmaId: khatma._id,
         kind: "cheer",
         count: done,
+        name: reader?.displayName ?? null,
+        juz: config.showJuz ? [finished.juz] : [],
         roundNumber: finished.roundNumber,
       });
     }
@@ -180,6 +184,11 @@ export const afterRead = internalMutation({
       .query("rotaParticipants")
       .withIndex("by_khatma", (q) => q.eq("khatmaId", khatma._id))
       .collect();
+    const reader = participants.find(
+      (p) => p._id === (args.actorId ?? finished.readerId),
+    );
+    // One tap can finish several ajza': they share its moment.
+    const juz = reads.filter((r) => r.doneAt === args.doneAt).map((r) => r.juz);
     for (const participant of participants) {
       if (
         participant._id === finished.readerId ||
@@ -198,8 +207,9 @@ export const afterRead = internalMutation({
         participantId: participant._id,
         dayId: null,
         kind: "cheer",
-        juz: [],
+        juz: config.showJuz ? juz : [],
         number: done,
+        name: config.showName ? (reader?.name ?? null) : null,
       });
       if (queued) await ctx.db.patch(participant._id, { lastCheerAt: now });
     }

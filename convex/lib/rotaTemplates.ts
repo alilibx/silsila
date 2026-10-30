@@ -190,9 +190,13 @@ export function thanksText(doneCount: number): string {
   return `تقبّل الله منك. ${toArabicDigits(doneCount)} من ٣٠ جزءاً تمّت اليوم.`;
 }
 
-/** A cheer to the other readers: it names nobody and no juz'. */
-export function cheerText(doneCount: number): string {
-  return `أتمّ أحد المشاركين جزءاً، فتمّ ${toArabicDigits(doneCount)} من ٣٠ جزءاً اليوم. بارك الله في قراءتكم.`;
+/** A cheer to the other readers: `name` and `juz` are only what the khatma chose to show. */
+export function cheerText(
+  doneCount: number,
+  name: string | null,
+  juz: number[],
+): string {
+  return `أتمّ ${name ?? "أحد المشاركين"} ${juzPhraseGenitive(juz) || "جزءاً"}، فتمّ ${toArabicDigits(doneCount)} من ٣٠ جزءاً اليوم. بارك الله في قراءتكم.`;
 }
 
 /** `reminderTime` is the already formatted time of the day's reminder, or null with none. */

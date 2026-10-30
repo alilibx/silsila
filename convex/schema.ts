@@ -338,6 +338,8 @@ export default defineSchema({
     ),
     juz: v.array(v.number()),
     number: nullableNumber,
+    /** Who finished, in a cheer that shows it. */
+    name: v.optional(v.union(v.string(), v.null())),
     createdAt: v.number(),
     sentAt: nullableNumber,
     skippedAt: nullableNumber,

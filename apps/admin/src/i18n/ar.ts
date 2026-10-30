@@ -37,6 +37,8 @@ const labels: Record<SettingKey, string> = {
   cheerOn: "رسائل التشجيع مفعّلة",
   cheerEveryone: "تصل الجميع، لا من ما زال يقرأ فقط",
   cheerGapMs: "أقل مدة بين رسالتي تشجيع",
+  cheerShowName: "تذكر اسم القارئ",
+  cheerShowJuz: "تذكر رقم الجزء",
   organizerInactiveMs: "غياب المنظّم قبل التسليم التلقائي",
   successorActiveMs: "نشاط المنظّم البديل خلال",
   notesRetentionMs: "الاحتفاظ بالملاحظات بعد قراءتها",

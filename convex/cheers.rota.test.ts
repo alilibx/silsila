@@ -161,7 +161,32 @@ test("a read cheers those still reading inside their window, free-form", async (
   await advance(t, AFTER_UNDO);
 
   expect(sent.map((m) => m.to)).toEqual([READING.slice(1)]);
-  expect(sent[0]?.text).toContain(cheerText(2));
+  expect(sent[0]?.text).toContain(cheerText(2, null, []));
+});
+
+test("a khatma can show the reader's name and every juz' of the tap", async () => {
+  const t = convexTest(schema, modules);
+  const { readId, otherId } = await setup(t, {
+    on: true,
+    everyone: true,
+    gapMs: 0,
+    showName: true,
+    showJuz: true,
+  });
+  await t.run(async (ctx) => {
+    const read = (await ctx.db.get(readId))!;
+    await ctx.db.patch(otherId, { readerId: read.readerId });
+    await ctx.db.patch(readId, { doneAt: NOW });
+    await ctx.db.patch(otherId, { doneAt: NOW });
+    await scheduleRotaCheer(ctx, readId, NOW, read.readerId);
+  });
+
+  await advance(t, AFTER_UNDO);
+
+  // Nothing is sent to the reader of the two; the one already done hears of both.
+  const [message] = sent.filter((m) => m.to === DONE.slice(1));
+  expect(message?.text).toContain(cheerText(3, "قارئ 0", [1, 2]));
+  expect(message?.text).toContain("أتمّ قارئ 0 الجزأين ١ و٢");
 });
 
 test("the everyone setting reaches those already done, and never the reader", async () => {
@@ -170,6 +195,8 @@ test("the everyone setting reaches those already done, and never the reader", as
     on: true,
     everyone: true,
     gapMs: 0,
+    showName: false,
+    showJuz: false,
   });
 
   await mark(t, khatmaId, readId);
@@ -186,6 +213,8 @@ test("the gap holds the next cheer", async () => {
     on: true,
     everyone: true,
     gapMs: DAY,
+    showName: false,
+    showJuz: false,
   });
   await mark(t, khatmaId, readId);
   await advance(t, AFTER_UNDO);
@@ -206,6 +235,8 @@ test("a gap of zero cheers more than once a reading day", async () => {
     on: true,
     everyone: true,
     gapMs: 0,
+    showName: false,
+    showJuz: false,
   });
   await mark(t, khatmaId, readId);
   await advance(t, AFTER_UNDO);
@@ -221,6 +252,8 @@ test("switched off, nobody is cheered", async () => {
     on: false,
     everyone: true,
     gapMs: 0,
+    showName: false,
+    showJuz: false,
   });
 
   await mark(t, khatmaId, readId);
@@ -288,6 +321,8 @@ test("after the day's reminder, only those done are cheered", async () => {
     on: true,
     everyone: true,
     gapMs: 0,
+    showName: false,
+    showJuz: false,
   });
   await t.run((ctx) => ctx.db.patch(dayId, { reminderSentAt: NOW - HOUR }));
 
@@ -339,6 +374,8 @@ test("whoever tapped for a handed-on juz' isn't cheered about it", async () => {
     on: true,
     everyone: true,
     gapMs: 0,
+    showName: false,
+    showJuz: false,
   });
   await t.run(async (ctx) => {
     const participant = await ctx.db
@@ -392,7 +429,13 @@ test("the organizer's override is stored, shown, and cleared", async () => {
       const khatma = (await ctx.db.get(khatmaId))!;
       return work(ctx, khatma, khatma.rota!);
     });
-  const own = { on: true, everyone: true, gapMs: HOUR };
+  const own = {
+    on: true,
+    everyone: true,
+    gapMs: HOUR,
+    showName: false,
+    showJuz: false,
+  };
 
   expect(
     await onKhatma((ctx, k, r) => ops.update(ctx, k, r, { cheer: own })),

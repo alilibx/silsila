@@ -159,6 +159,52 @@ test("the note names nobody and no juz'", () => {
   expect(text).not.toMatch(/الجزء \d/);
 });
 
+test("the text says only what the note carries", () => {
+  const base = { kind: "cheer" as const, count: 3, until: null };
+  const named = noteText({ ...base, juz: [], name: "سارة" });
+  expect(named).toContain("أتمّ سارة جزءاً");
+  const numbered = noteText({ ...base, juz: [5] });
+  expect(numbered).toContain("أتمّ أحد الأعضاء الجزء ٥");
+  const both = noteText({ ...base, juz: [5], name: "سارة" });
+  expect(both).toContain("أتمّ سارة الجزء ٥");
+});
+
+test("a khatma can choose to show the reader's name and juz'", async () => {
+  const { t, code, khatmaId } = await setup();
+  await t.run((ctx) =>
+    ctx.db.patch(khatmaId, {
+      cheer: {
+        on: true,
+        everyone: false,
+        gapMs: 0,
+        showName: true,
+        showJuz: true,
+      },
+    }),
+  );
+  const reader = await signedIn(t, "القارئ");
+  await take(t, code, reader, 3);
+
+  await read(t, code, await signedIn(t, "سارة"), 7);
+  await advance(t, AFTER_UNDO);
+
+  const [note] = await cheersOf(t, reader);
+  expect(note).toMatchObject({ name: "سارة", juz: [7] });
+});
+
+test("the admin's defaults can show the name alone", async () => {
+  const { t, code } = await setup();
+  await setSetting(t, "cheerShowName", true);
+  const reader = await signedIn(t, "القارئ");
+  await take(t, code, reader, 3);
+
+  await read(t, code, await signedIn(t, "سارة"), 7);
+  await advance(t, AFTER_UNDO);
+
+  const [note] = await cheersOf(t, reader);
+  expect(note).toMatchObject({ name: "سارة", juz: [] });
+});
+
 test("an undone finish cheers nobody", async () => {
   const { t, code, khatmaId } = await setup();
   const reader = await signedIn(t, "القارئ");
@@ -250,7 +296,13 @@ test("a khatma's own settings beat the admin's", async () => {
   await setSetting(t, "cheerOn", false);
   await t.run((ctx) =>
     ctx.db.patch(khatmaId, {
-      cheer: { on: true, everyone: true, gapMs: 0 },
+      cheer: {
+        on: true,
+        everyone: true,
+        gapMs: 0,
+        showName: false,
+        showJuz: false,
+      },
     }),
   );
   const idle = await signedIn(t, "بلا جزء");
@@ -398,10 +450,22 @@ test("organizer settings show the override and the defaults, and null goes back"
     if ("forbidden" in settings) throw new Error("forbidden");
     return settings.cheer;
   };
-  const defaults = { on: true, everyone: false, gapMs: HOUR };
+  const defaults = {
+    on: true,
+    everyone: false,
+    gapMs: HOUR,
+    showName: false,
+    showJuz: false,
+  };
   expect(await cheerOf()).toEqual({ override: null, defaults });
 
-  const own = { on: false, everyone: true, gapMs: 3 * HOUR };
+  const own = {
+    on: false,
+    everyone: true,
+    gapMs: 3 * HOUR,
+    showName: false,
+    showJuz: false,
+  };
   expect(
     await t.mutation(api.organizer.update, { ...args, cheer: own }),
   ).toEqual({ ok: true });
@@ -416,7 +480,13 @@ test("the organizer can't store a gap out of range", async () => {
   const result = await t.mutation(api.organizer.update, {
     sessionToken: org.token,
     inviteCode: code,
-    cheer: { on: true, everyone: false, gapMs: -1 },
+    cheer: {
+      on: true,
+      everyone: false,
+      gapMs: -1,
+      showName: false,
+      showJuz: false,
+    },
   });
   expect(result).toEqual({ ok: false, reason: "invalid_cheer" });
 });
