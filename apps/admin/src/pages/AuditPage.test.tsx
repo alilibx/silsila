@@ -4,12 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { AuditPage } from "./AuditPage";
 
-const m = vi.hoisted(() => ({ args: [] as unknown[] }));
+const m = vi.hoisted(() => ({
+  args: [] as unknown[],
+  results: [] as unknown[],
+}));
 
 vi.mock("convex/react", () => ({
   usePaginatedQuery: (_ref: unknown, args: unknown) => {
     m.args.push(args);
-    return { results: [], status: "Exhausted", loadMore: vi.fn() };
+    return { results: m.results, status: "Exhausted", loadMore: vi.fn() };
   },
   useQuery: () => [
     { adminId: "a1", phone: "+971500000001", addedAt: 0, isMe: true },
@@ -20,6 +23,7 @@ vi.mock("../lib/adminSession", () => ({ useAdminToken: () => "tok" }));
 
 beforeEach(() => {
   m.args = [];
+  m.results = [];
 });
 
 describe("AuditPage", () => {
@@ -33,5 +37,45 @@ describe("AuditPage", () => {
       "setting.set",
     );
     expect(m.args.at(-1)).toEqual({ adminToken: "tok", action: "setting.set" });
+  });
+
+  it("names an admin's work on a rota khatma, and which operation it was", () => {
+    m.results = [
+      {
+        _id: "row1",
+        adminPhone: "+971500000001",
+        at: 0,
+        action: "rota.adminChange",
+        targetKind: "khatma",
+        targetId: "k1",
+        before: null,
+        after: { juz: 9 },
+        note: "giveJuz",
+      },
+      {
+        _id: "row2",
+        adminPhone: "+971500000001",
+        at: 0,
+        action: "rota.adminCreate",
+        targetKind: "khatma",
+        targetId: "k2",
+        before: null,
+        after: { phone: "+971500009000" },
+        note: null,
+      },
+    ];
+    render(<AuditPage />);
+    expect(
+      screen.getAllByText(t.audit.actions["rota.adminChange"]),
+    ).not.toHaveLength(0);
+    expect(
+      screen.getAllByText(t.audit.actions["rota.adminCreate"]),
+    ).not.toHaveLength(0);
+    expect(screen.getByText(/giveJuz/)).toBeInTheDocument();
+    expect(screen.getByText(/\+971500009000/)).toBeInTheDocument();
+    // Both can be filtered on.
+    expect(
+      screen.getByRole("option", { name: t.audit.actions["rota.adminChange"] }),
+    ).toBeInTheDocument();
   });
 });

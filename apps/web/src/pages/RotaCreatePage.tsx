@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { addDays, type ReadingDays } from "@convex/lib/rota";
 import { localDate } from "@convex/lib/wakingTime";
 import { useAction, useQuery } from "convex/react";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { Button } from "../components/Button";
 import { DateLine } from "../features/rota/DateLine";
@@ -16,12 +16,26 @@ import { getSessionToken, useSessionToken } from "../lib/session";
 
 const rotaErrors: Record<string, string> = t.rota.errors;
 
-/** Step 1 of 2: the name and the reading days. Only for people an admin turned rota khatmas on for. */
-export function RotaCreatePage() {
-  const navigate = useNavigate();
-  const sessionToken = useSessionToken();
-  const me = useQuery(api.people.me, { sessionToken });
-  const createRota = useAction(api.rota.create);
+/** What the first step of a new rota khatma asks. */
+export type RotaDetails = {
+  name: string;
+  days: ReadingDays;
+  firstDate: string;
+  endDate: string | null;
+};
+
+/** Step 1 of 2: the name and the reading days. */
+export function RotaCreateForm({
+  create,
+  errors = rotaErrors,
+  children,
+}: {
+  /** Creates the khatma and moves on. A throw stays on the form and says why, through `errors`. */
+  create: (details: RotaDetails) => Promise<void>;
+  errors?: Record<string, string>;
+  /** Asked before anything else, inside the form. */
+  children?: ReactNode;
+}) {
   const [name, setName] = useState("");
   const [days, setDays] = useState<ReadingDays>({ kind: "daily" });
   // `null` while the start follows "tomorrow"; only a picked date is kept.
@@ -30,9 +44,6 @@ export function RotaCreatePage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const creatingRef = useRef(false);
-
-  if (me === undefined) return <main className="mx-auto max-w-xl p-5" />;
-  if (me === null || !me.rotaAllowed) return <Navigate to="/new" replace />;
 
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = localDate(Date.now(), timeZone);
@@ -47,28 +58,19 @@ export function RotaCreatePage() {
     setCreating(true);
     setError(null);
     try {
-      const { inviteCode } = await createRota({
-        sessionToken: getSessionToken() ?? undefined,
-        name: name.trim(),
-        days,
-        firstDate: start,
-        endDate,
-      });
-      void navigate(`/j/${encodeURIComponent(inviteCode)}/setup`);
+      await create({ name: name.trim(), days, firstDate: start, endDate });
     } catch (caught) {
       const code = errorCode(caught);
       creatingRef.current = false;
       setCreating(false);
       setError(
-        code === null
-          ? t.errors.network
-          : (rotaErrors[code] ?? t.errors.generic),
+        code === null ? t.errors.network : (errors[code] ?? t.errors.generic),
       );
     }
   }
 
   return (
-    <main className="mx-auto max-w-xl p-5">
+    <>
       <h1 className="font-display text-4xl leading-tight text-green-deep">
         {t.pages.create}
       </h1>
@@ -79,6 +81,7 @@ export function RotaCreatePage() {
         noValidate
         className="mt-5"
       >
+        {children}
         <label htmlFor="rota-name" className="block text-xl font-semibold">
           {t.rota.nameQuestion}
         </label>
@@ -146,6 +149,31 @@ export function RotaCreatePage() {
           </Button>
         </div>
       </form>
+    </>
+  );
+}
+
+/** The first step for people an admin turned rota khatmas on for. */
+export function RotaCreatePage() {
+  const navigate = useNavigate();
+  const sessionToken = useSessionToken();
+  const me = useQuery(api.people.me, { sessionToken });
+  const createRota = useAction(api.rota.create);
+
+  if (me === undefined) return <main className="mx-auto max-w-xl p-5" />;
+  if (me === null || !me.rotaAllowed) return <Navigate to="/new" replace />;
+
+  return (
+    <main className="mx-auto max-w-xl p-5">
+      <RotaCreateForm
+        create={async (details) => {
+          const { inviteCode } = await createRota({
+            sessionToken: getSessionToken() ?? undefined,
+            ...details,
+          });
+          void navigate(`/j/${encodeURIComponent(inviteCode)}/setup`);
+        }}
+      />
     </main>
   );
 }

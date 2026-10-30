@@ -49,11 +49,16 @@ type Scoped<Fn> =
       >
     : never;
 
+/** What only an organizer does: a screen hides it for a backend that doesn't have it. */
+type OrganizerOnly = "importable" | "importMembers" | "startAgain";
+
 /** The functions behind the rota screens, and the scope they are called with. */
 export type RotaBackend = {
-  [Name in keyof typeof organizerFunctions]: Scoped<
+  [Name in Exclude<keyof typeof organizerFunctions, OrganizerOnly>]: Scoped<
     (typeof organizerFunctions)[Name]
   >;
+} & {
+  [Name in OrganizerOnly]?: Scoped<(typeof organizerFunctions)[Name]>;
 } & {
   /** For queries: follows the session as the screen renders. */
   scope: RotaScope;

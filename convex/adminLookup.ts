@@ -6,9 +6,11 @@ import { adminQuery } from "./lib/adminSession";
 import { isBlocked } from "./lib/blocked";
 import { JUZ_COUNT } from "./lib/juz";
 import { ROTA_SIZE } from "./lib/rota";
+import { khatmaJoinLink } from "./lib/rotaJoin";
 import { lastRotaDay } from "./lib/rotaPlace";
 import { membersByJoin } from "./organizer";
 import { roundAssignments } from "./rounds";
+import { env } from "./whatsapp";
 
 const MAX_RESULTS = 20;
 const MIN_QUERY = 2;
@@ -39,6 +41,8 @@ async function rotaFacts(ctx: QueryCtx, k: Doc<"khatmas">) {
     endDate: k.rota.endDate,
     pausedAt: k.rota.pausedAt,
     archivedAt: k.rota.archivedAt,
+    pendingOrganizer: k.rota.pendingOrganizer === true,
+    joinLink: khatmaJoinLink(k, env("WHATSAPP_PUBLIC_NUMBER")),
     number: day?.number ?? null,
     cycle: day?.cycle ?? null,
     dayOpen: open,

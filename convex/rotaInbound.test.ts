@@ -1,7 +1,8 @@
 import { convexTest, type TestConvexForDataModel } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
+import { sha256Hex } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
 import type { RotaMessages } from "./lib/rota";
 import { joinText } from "./lib/rotaJoin";
@@ -1060,4 +1061,133 @@ test("what production places is never relayed", async () => {
   await send(t, STRANGER, "السلام عليكم");
   expect(relayed).toEqual([]);
   expect(sent).toHaveLength(5);
+});
+
+// ---------------------------------------------------------------------------
+// A khatma an admin set up, waiting for its organizer
+
+/** The khatma's organizer as a participant on slot 1, and a session for them; no `members` row. */
+async function pendingKhatma(t: T) {
+  const s = await setup(t, [{ slot: 1, phone: ORGANIZER, joinedAt: null }]);
+  const sessionToken = "organizer-session";
+  const inviteCode = "pendingCode1";
+  const tokenHash = await sha256Hex(sessionToken);
+  await t.run(async (ctx) => {
+    const khatma = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      inviteCode,
+      rota: { ...khatma!.rota!, pendingOrganizer: true },
+    });
+    await ctx.db.patch(s.participants[0]!, { personId: s.personId });
+    await ctx.db.insert("sessions", {
+      personId: s.personId,
+      tokenHash,
+      alertTokenHash: "alert",
+      deviceLabel: "test",
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+    });
+  });
+  return { ...s, sessionToken, inviteCode };
+}
+
+const pendingState = (t: T, khatmaId: Id<"khatmas">) =>
+  t.run(async (ctx) => ({
+    pending: (await ctx.db.get(khatmaId))?.rota?.pendingOrganizer,
+    members: await ctx.db
+      .query("members")
+      .withIndex("by_khatma", (q) => q.eq("khatmaId", khatmaId))
+      .collect(),
+    notes: await ctx.db.query("notes").collect(),
+    requests: await ctx.db.query("rotaJoinRequests").collect(),
+  }));
+
+test("a stranger's join on a waiting khatma files a request, and makes nobody organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+
+  await send(t, STRANGER, joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+  expect(state.requests.map((r) => r.phone)).toEqual([`+${STRANGER}`]);
+  expect(state.notes.map((n) => n.kind)).toEqual(["rotaJoinRequest"]);
+  expect(
+    await t.query(api.rota.people, {
+      sessionToken: s.sessionToken,
+      inviteCode: s.inviteCode,
+    }),
+  ).toBeNull();
+});
+
+test("a listed reader's join on a waiting khatma joins them, and makes them no organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("rotaParticipants", {
+      khatmaId: s.khatmaId,
+      name: "قارئ",
+      phone: "+971500000200",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+    });
+  });
+
+  await send(t, "971500000200", joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+});
+
+test("the organizer's own number takes the khatma up, and only then does it answer them", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  const args = { sessionToken: s.sessionToken, inviteCode: s.inviteCode };
+  expect(await t.query(api.rota.people, args)).toBeNull();
+
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(false);
+  expect(state.members).toHaveLength(1);
+  expect(state.members[0]).toMatchObject({
+    personId: s.personId,
+    status: "active",
+  });
+  expect(state.notes.map((n) => [n.kind, n.personId])).toEqual([
+    ["nowOrganizer", s.personId],
+  ]);
+  expect(state.requests).toEqual([]);
+
+  // On top of the usual join: they are welcomed, and joined.
+  expect(sent.map((m) => m.to)).toEqual([ORGANIZER.slice(1)]);
+  const view = await t.query(api.rota.people, args);
+  expect(view?.participants[0]).toMatchObject({ isMe: true, joined: true });
+
+  // A second join is an ordinary join.
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+  const again = await pendingState(t, s.khatmaId);
+  expect(again.members).toHaveLength(1);
+  expect(again.notes).toHaveLength(1);
+});
+
+test("an archived waiting khatma only says it has ended", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  await t.run(async (ctx) => {
+    const khatma = await ctx.db.get(s.khatmaId);
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...khatma!.rota!, archivedAt: 1 },
+    });
+  });
+
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+  expect(sent[0]?.body).toContain(endedText);
 });

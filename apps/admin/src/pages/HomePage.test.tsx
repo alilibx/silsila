@@ -56,6 +56,14 @@ beforeEach(() => {
 });
 
 describe("dashboard", () => {
+  it("links setting a rotating khatma up for someone", () => {
+    renderPage();
+    expect(screen.getByRole("link", { name: t.rota.create })).toHaveAttribute(
+      "href",
+      "/rota/new",
+    );
+  });
+
   it("shows the six tiles in Arabic digits", () => {
     renderPage();
     for (const text of ["١٠٤", "١٬٠٣٨", "٢١٤", "٣", "٥", "٤ أيام", "٩٢٪"]) {

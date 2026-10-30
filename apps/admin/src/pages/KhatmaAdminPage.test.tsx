@@ -137,4 +137,56 @@ describe("KhatmaAdminPage", () => {
     renderPage();
     expect(screen.getByText(t.lookup.rotaArchived)).toBeInTheDocument();
   });
+
+  const running = {
+    days: { kind: "daily" },
+    firstDate: "2026-10-01",
+    endDate: null,
+    pausedAt: null,
+    archivedAt: null,
+    pendingOrganizer: false,
+    joinLink: "https://wa.me/971500000000?text=join",
+    number: null,
+    cycle: null,
+    dayOpen: false,
+    doneToday: 0,
+    total: 30,
+  };
+
+  it("offers a pool khatma no help page and no join link", () => {
+    renderPage();
+    expect(screen.queryByRole("link", { name: t.rota.help })).toBeNull();
+    expect(screen.queryByRole("button", { name: t.rota.copy })).toBeNull();
+  });
+
+  it("links a rota khatma's help page, and copies its join link", async () => {
+    const user = userEvent.setup();
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue();
+    m.rota = running;
+    renderPage();
+    expect(screen.getByRole("link", { name: t.rota.help })).toHaveAttribute(
+      "href",
+      "/khatmas/k1/rota",
+    );
+    expect(screen.queryByText(t.rota.pending)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: t.rota.copy }));
+    expect(writeText).toHaveBeenCalledWith(running.joinLink);
+    expect(screen.getByRole("status")).toHaveTextContent(t.rota.copied);
+  });
+
+  it("says a khatma waits for its organizer", () => {
+    m.rota = { ...running, pendingOrganizer: true };
+    renderPage();
+    expect(screen.getByText(t.rota.pending)).toBeInTheDocument();
+    expect(t.rota.pending).toBe("بانتظار المنظّم");
+  });
+
+  it("has nothing to copy without a join link", () => {
+    m.rota = { ...running, joinLink: null };
+    renderPage();
+    expect(screen.queryByRole("button", { name: t.rota.copy })).toBeNull();
+  });
 });

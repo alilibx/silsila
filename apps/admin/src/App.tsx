@@ -14,6 +14,8 @@ import { HelpRequestPage } from "./pages/HelpRequestPage";
 import { HomePage } from "./pages/HomePage";
 import { KhatmaAdminPage } from "./pages/KhatmaAdminPage";
 import { PersonAdminPage } from "./pages/PersonAdminPage";
+import { RotaCreatePage, RotaSetupPage } from "./pages/RotaCreatePage";
+import { RotaHelpPage } from "./pages/RotaHelpPage";
 import { SearchPage } from "./pages/SearchPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SignInPage } from "./pages/SignInPage";
@@ -100,6 +102,12 @@ function SignedIn({
           <Route path="/help/:requestId" element={<HelpRequestPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/khatmas/:khatmaId" element={<KhatmaAdminPage />} />
+          <Route path="/khatmas/:khatmaId/rota" element={<RotaHelpPage />} />
+          <Route
+            path="/khatmas/:khatmaId/rota/setup"
+            element={<RotaSetupPage />}
+          />
+          <Route path="/rota/new" element={<RotaCreatePage />} />
           <Route path="/people/:personId" element={<PersonAdminPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit" element={<AuditPage />} />

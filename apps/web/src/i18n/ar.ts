@@ -694,7 +694,7 @@ export const ar = {
     cancel: "تراجع",
     peopleErrors: {
       not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
-      is_me: "لا يمكنك إزالة نفسك من الختمة.",
+      is_me: "لا يمكن إزالة منظّم الختمة منها.",
       juz_taken: "هذا الجزء له قارئ الآن.",
       too_many: "لا يمكنه أن يقرأ أكثر من هذا.",
     } as Record<string, string>,

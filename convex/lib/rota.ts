@@ -58,6 +58,11 @@ export const rotaConfigValidator = v.object({
    * then. Null while setting up; missing on khatmas made before this field.
    */
   setupDoneAt: v.optional(v.union(v.number(), v.null())),
+  /**
+   * An admin set the khatma up on someone's behalf, and they haven't joined it
+   * yet: their own join message makes them its organizer. Missing means no.
+   */
+  pendingOrganizer: v.optional(v.boolean()),
 });
 
 export const ROTA_SIZE = 30;

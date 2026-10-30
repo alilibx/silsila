@@ -240,6 +240,40 @@ async function welcome(
 }
 
 /**
+ * An admin set this khatma up on someone's behalf: the join message from that
+ * person's own number makes them its organizer. Any other phone changes nothing
+ * here. The membership has no share token: drawing one takes an action, and a
+ * rota khatma has no use for it.
+ */
+async function takeUpOrganizing(
+  ctx: MutationCtx,
+  khatma: Khatma,
+  rota: RotaConfig,
+  args: { phone: string; now: number },
+): Promise<void> {
+  if (rota.pendingOrganizer !== true) return;
+  const organizer = await ctx.db.get(khatma.creatorPersonId);
+  if (organizer?.phone !== args.phone) return;
+  await ctx.db.insert("members", {
+    khatmaId: khatma._id,
+    personId: organizer._id,
+    joinedAt: args.now,
+    status: "active",
+    notificationsOn: true,
+    lastNudgeAt: null,
+    lastCelebratedRound: 0,
+  });
+  await ctx.db.patch(khatma._id, {
+    rota: { ...rota, pendingOrganizer: false },
+  });
+  await notify(ctx, {
+    personId: organizer._id,
+    khatmaId: khatma._id,
+    kind: "nowOrganizer",
+  });
+}
+
+/**
  * A join message for a rota khatma, or null when this deployment has no such
  * khatma. An archived khatma only says it has ended. A listed phone joins (or rejoins
  * after «إيقاف»); any other phone files one open join request, and the
@@ -259,6 +293,7 @@ async function join(
   const rota = khatma?.rota;
   if (!khatma || khatma.kind !== "rota" || !rota) return null;
   if (rota.archivedAt !== null) return [about(khatma, endedText)];
+  await takeUpOrganizing(ctx, khatma, rota, args);
   const rows = await ctx.db
     .query("rotaParticipants")
     .withIndex("by_khatma_phone", (q) =>

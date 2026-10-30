@@ -6,7 +6,7 @@ import { useNavigate } from "react-router";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { useRotaBackend } from "../rota/backend";
+import { useRotaBackend, type RotaBackend } from "../rota/backend";
 import { DateLine } from "../rota/DateLine";
 import { firstReadingDay } from "../rota/dates";
 import { ErrorLine } from "../rota/ErrorLine";
@@ -121,15 +121,17 @@ export type Restart = { days: ReadingDays; timeZone: string };
 function RestartSheet({
   inviteCode,
   restart,
+  startAgainFunction,
   onClose,
 }: {
   inviteCode: string;
   restart: Restart;
+  startAgainFunction: NonNullable<RotaBackend["startAgain"]>;
   onClose: () => void;
 }) {
   const navigate = useNavigate();
   const backend = useRotaBackend(inviteCode);
-  const startAgain = useAction(backend.startAgain);
+  const startAgain = useAction(startAgainFunction);
   const { busy, error, run } = useRotaCall(errors);
   // `null` while the start follows "tomorrow"; only a picked date is kept.
   const [picked, setPicked] = useState<string | null>(null);
@@ -234,8 +236,8 @@ function DeleteSheet({
 }
 
 /**
- * What the organizer can still do with an archived khatma: start a rota khatma again with the same
- * people (`restart` is null for a pool khatma, which has no such thing), or delete it.
+ * What can still be done with an archived khatma: start a rota khatma again with the same people
+ * (`restart` is null for a pool khatma, which has no such thing, and an admin can't), or delete it.
  */
 export function ArchivedSection({
   inviteCode,
@@ -244,6 +246,7 @@ export function ArchivedSection({
   inviteCode: string;
   restart: Restart | null;
 }) {
+  const { startAgain } = useRotaBackend(inviteCode);
   const [open, setOpen] = useState<"restart" | "delete" | null>(null);
   const failure = useDeleteFailure(inviteCode);
   const show = (sheet: "restart" | "delete") => {
@@ -252,7 +255,7 @@ export function ArchivedSection({
   };
   return (
     <div className="mt-8 grid gap-3">
-      {restart && (
+      {restart && startAgain && (
         <Button onClick={() => show("restart")}>{t.archive.restart}</Button>
       )}
       <Button
@@ -263,10 +266,11 @@ export function ArchivedSection({
         {t.archive.delete}
       </Button>
       <ErrorLine error={failure} />
-      {open === "restart" && restart && (
+      {open === "restart" && restart && startAgain && (
         <RestartSheet
           inviteCode={inviteCode}
           restart={restart}
+          startAgainFunction={startAgain}
           onClose={() => setOpen(null)}
         />
       )}

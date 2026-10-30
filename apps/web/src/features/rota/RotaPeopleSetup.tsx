@@ -7,7 +7,7 @@ import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
 import { AddPersonForm } from "./AddPersonForm";
-import { useRotaBackend } from "./backend";
+import { useRotaBackend, type RotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
 import { SavedPicker } from "./SavedPicker";
@@ -73,32 +73,31 @@ function GiveJuzSheet({
 
 const importErrors: Record<string, string> = t.rota.importErrors;
 
+type Pool = { inviteCode: string; title: string; memberCount: number };
+
 /**
  * Ways to fill the ajza' without typing: the members of one of the organizer's pool khatmas
  * (names only, their numbers stay hidden), or people saved from earlier khatmas. Shows only what
  * applies, and nothing when neither does.
  */
-function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
+function BringPeopleInList({
+  inviteCode,
+  pools,
+  busy = false,
+  error = null,
+  result = null,
+  onBringIn,
+}: {
+  inviteCode: string;
+  pools?: Pool[] | undefined;
+  busy?: boolean;
+  error?: string | null;
+  result?: string | null;
+  onBringIn?: (sourceInviteCode: string) => void;
+}) {
   const backend = useRotaBackend(inviteCode);
-  const pools = useQuery(backend.importable, backend.scope);
   const saved = useQuery(backend.saved, backend.scope);
-  const importMembers = useMutation(backend.importMembers);
-  const { busy, error, run } = useRotaCall(importErrors);
-  const [result, setResult] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-
-  const bringIn = (sourceInviteCode: string) => {
-    setResult(null);
-    return run(async () => {
-      const done = await importMembers({
-        ...backend.authArgs(),
-        sourceInviteCode,
-      });
-      if ("ok" in done)
-        setResult(t.rota.importResult(done.added, done.skipped));
-      return done;
-    });
-  };
 
   const hasPools = pools !== undefined && pools.length > 0;
   const hasSaved = saved !== undefined && saved !== null && saved.length > 0;
@@ -112,7 +111,7 @@ function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
             key={pool.inviteCode}
             type="button"
             disabled={busy}
-            onClick={() => void bringIn(pool.inviteCode)}
+            onClick={() => onBringIn?.(pool.inviteCode)}
             className="min-h-14 w-full rounded-ui border-2 border-gold bg-[#FBF1D9] px-4 py-3 text-start disabled:opacity-50"
           >
             <span className="block font-medium">
@@ -145,26 +144,84 @@ function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
   );
 }
 
-/** Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. */
-export function RotaPeopleSetup() {
-  const { inviteCode = "" } = useParams();
+/** The list with the organizer's pool khatmas in it, for a backend that can read them. */
+function BringPoolMembersIn({
+  inviteCode,
+  importable,
+  importMembers,
+}: {
+  inviteCode: string;
+  importable: NonNullable<RotaBackend["importable"]>;
+  importMembers: NonNullable<RotaBackend["importMembers"]>;
+}) {
+  const backend = useRotaBackend(inviteCode);
+  const pools = useQuery(importable, backend.scope);
+  const bring = useMutation(importMembers);
+  const { busy, error, run } = useRotaCall(importErrors);
+  const [result, setResult] = useState<string | null>(null);
+
+  const bringIn = (sourceInviteCode: string) => {
+    setResult(null);
+    return run(async () => {
+      const done = await bring({ ...backend.authArgs(), sourceInviteCode });
+      if ("ok" in done)
+        setResult(t.rota.importResult(done.added, done.skipped));
+      return done;
+    });
+  };
+
+  return (
+    <BringPeopleInList
+      inviteCode={inviteCode}
+      pools={pools}
+      busy={busy}
+      error={error}
+      result={result}
+      onBringIn={(code) => void bringIn(code)}
+    />
+  );
+}
+
+function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
+  const { importable, importMembers } = useRotaBackend(inviteCode);
+  return importable && importMembers ? (
+    <BringPoolMembersIn
+      inviteCode={inviteCode}
+      importable={importable}
+      importMembers={importMembers}
+    />
+  ) : (
+    <BringPeopleInList inviteCode={inviteCode} />
+  );
+}
+
+/**
+ * Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. Whoever
+ * has no People view is sent to `khatmaPath`, where «تمّ» goes too.
+ */
+export function RotaPeopleSetupContent({
+  inviteCode,
+  khatmaPath,
+}: {
+  inviteCode: string;
+  khatmaPath: string;
+}) {
   const navigate = useNavigate();
   const backend = useRotaBackend(inviteCode);
   const view = useQuery(backend.people, backend.scope);
   const finishSetup = useMutation(backend.finishSetup);
   const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
-  const khatmaPath = `/j/${encodeURIComponent(inviteCode)}`;
   useEnsureJoinLink(inviteCode, view?.joinLink);
 
-  if (view === undefined) return <main className="mx-auto max-w-xl p-5" />;
+  if (view === undefined) return null;
   // Only the organizer sets people up.
   if (view === null) {
     return <Navigate to={khatmaPath} replace />;
   }
 
   return (
-    <main className="mx-auto max-w-xl p-5">
+    <>
       <h1 className="font-display text-4xl leading-tight text-green-deep">
         {t.rota.setupTitle}
       </h1>
@@ -251,6 +308,19 @@ export function RotaPeopleSetup() {
           onClose={() => setGiving(false)}
         />
       )}
+    </>
+  );
+}
+
+/** The organizer's setup of the khatma in the address. */
+export function RotaPeopleSetup() {
+  const { inviteCode = "" } = useParams();
+  return (
+    <main className="mx-auto max-w-xl p-5">
+      <RotaPeopleSetupContent
+        inviteCode={inviteCode}
+        khatmaPath={`/j/${encodeURIComponent(inviteCode)}`}
+      />
     </main>
   );
 }

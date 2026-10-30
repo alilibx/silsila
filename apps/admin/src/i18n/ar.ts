@@ -91,6 +91,8 @@ const actions: Record<AuditAction, string> = {
   "khatma.resetInvite": "أعاد ضبط رابط دعوة",
   "khatma.handOver": "سلّم دور المنظّم",
   "person.rotaAllowed": "غيّر السماح بالختمة بالتناوب",
+  "rota.adminCreate": "أنشأ ختمة بالتناوب نيابة عن منظّم",
+  "rota.adminChange": "غيّر ختمة بالتناوب",
 };
 
 /** Every admin panel string lives here. Components never contain Arabic literals. */
@@ -381,6 +383,23 @@ export const ar = {
       not_member: "اختر عضواً نشطاً.",
       self: "هذا العضو هو المنظّم الآن.",
       generic: "تعذّر التنفيذ. حاول مرة أخرى.",
+    },
+  },
+  rota: {
+    create: "أنشئ ختمة بالتناوب لمنظّم",
+    organizerName: "اسم المنظّم",
+    organizerPhone: "رقم المنظّم (مع رمز الدولة)",
+    help: "ساعد في هذه الختمة",
+    helpStrip: "تساعد بصفتك مشرفاً. كل تغيير يُسجَّل.",
+    back: "إلى صفحة الختمة",
+    pending: "بانتظار المنظّم",
+    copy: "انسخ رابط الانضمام",
+    copied: "نُسخ الرابط.",
+    errors: {
+      bad_name: "اكتب اسم المنظّم.",
+      bad_phone: "الرقم غير صحيح. اكتبه مع رمز الدولة، مثل \u200E+971",
+      rota_cap: "لدى هذا المنظّم العدد الأقصى من الختمات بالتناوب.",
+      rate_limited: "أُنشئت لهذا المنظّم ختمات كثيرة اليوم. جرّب غداً.",
     },
   },
   signOut: {

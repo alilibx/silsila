@@ -385,7 +385,6 @@ export async function removeParticipant(
   khatma: Doc<"khatmas">,
   _rota: RotaConfig,
   args: { participantId: Id<"rotaParticipants"> },
-  actor: Actor,
 ): Promise<{ ok: true } | { error: "not_found" | "is_me" }> {
   const participant = await activeParticipant(
     ctx,
@@ -393,7 +392,10 @@ export async function removeParticipant(
     args.participantId,
   );
   if (!participant) return { error: "not_found" };
-  if (isActor(participant, actor)) return { error: "is_me" };
+  // Not even an admin: a khatma keeps its organizer.
+  if (participant.personId === khatma.creatorPersonId) {
+    return { error: "is_me" };
+  }
   const slots = await ctx.db
     .query("rotaSlots")
     .withIndex("by_participant", (q) => q.eq("participantId", participant._id))

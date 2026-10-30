@@ -19,6 +19,7 @@ import {
   isValidReadingDays,
   readingDaysValidator,
   rotaMessagesValidator,
+  type ReadingDays,
   type RotaMessages,
 } from "./lib/rota";
 import * as ops from "./lib/rotaOps";
@@ -37,23 +38,36 @@ const INVITE_CODE_ATTEMPTS = 3;
 // ---------------------------------------------------------------------------
 // Create
 
-/** How many rota khatmas the person organizes that are not archived. */
+/**
+ * How many rota khatmas the person organizes that are not archived, counting
+ * the ones an admin set up that wait for them: those have no membership yet,
+ * only the person's row among the participants.
+ */
 async function activeRotaCount(
   ctx: QueryCtx,
-  personId: Id<"people">,
+  person: Doc<"people">,
 ): Promise<number> {
   const memberships = await ctx.db
     .query("members")
-    .withIndex("by_person", (q) => q.eq("personId", personId))
+    .withIndex("by_person", (q) => q.eq("personId", person._id))
     .collect();
+  const participants = await ctx.db
+    .query("rotaParticipants")
+    .withIndex("by_phone", (q) => q.eq("phone", person.phone))
+    .collect();
+  const organizes = (khatma: Doc<"khatmas"> | null) =>
+    khatma?.kind === "rota" &&
+    khatma.creatorPersonId === person._id &&
+    !isArchived(khatma);
+
   let count = 0;
   for (const member of memberships) {
-    const khatma = await ctx.db.get(member.khatmaId);
-    if (
-      khatma?.kind === "rota" &&
-      khatma.creatorPersonId === personId &&
-      !isArchived(khatma)
-    ) {
+    if (organizes(await ctx.db.get(member.khatmaId))) count += 1;
+  }
+  for (const participant of participants) {
+    if (participant.removedAt !== null) continue;
+    const khatma = await ctx.db.get(participant.khatmaId);
+    if (organizes(khatma) && khatma?.rota?.pendingOrganizer === true) {
       count += 1;
     }
   }
@@ -79,9 +93,100 @@ async function defaultMessages(ctx: QueryCtx): Promise<RotaMessages> {
 }
 
 /**
- * Inserts a rota khatma, the organizer's membership, and the organizer as
- * participant 1 on slot 1 atomically. `null` on invite-code collision.
+ * Inserts a rota khatma with `person` as its organizer and as participant 1 on
+ * slot 1, within the cap and with valid dates. `null` on a code collision. No
+ * membership: with `pendingOrganizer`, it comes with the person's join message.
  */
+export async function insertRotaKhatma(
+  ctx: MutationCtx,
+  person: Doc<"people">,
+  args: {
+    name: string;
+    days: ReadingDays;
+    firstDate: string;
+    endDate: string | null;
+    inviteCode: string;
+    joinCode: string;
+  },
+  pendingOrganizer: boolean,
+): Promise<Id<"khatmas"> | null> {
+  if (
+    (await activeRotaCount(ctx, person)) >=
+    (await getSetting(ctx, "rotaMaxActivePerOrganizer"))
+  ) {
+    throw new ConvexError({ code: "rota_cap" });
+  }
+  if (!isValidReadingDays(args.days)) {
+    throw new ConvexError({ code: "invalid_days" });
+  }
+  const today = localDate(Date.now(), person.timeZone);
+  if (
+    !isDate(args.firstDate) ||
+    args.firstDate < today ||
+    (args.endDate !== null &&
+      (!isDate(args.endDate) || args.endDate < args.firstDate)) ||
+    !isReadingDate(args.days, args.firstDate, args.firstDate)
+  ) {
+    throw new ConvexError({ code: "invalid_dates" });
+  }
+
+  const taken = await ctx.db
+    .query("khatmas")
+    .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
+    .first();
+  if (taken) return null;
+  const joinTaken = await ctx.db
+    .query("khatmas")
+    .withIndex("by_joinCode", (q) => q.eq("joinCode", args.joinCode))
+    .first();
+  if (joinTaken) return null;
+
+  const allowed = await checkRateLimit(
+    ctx,
+    `khatmaCreate:${person._id}`,
+    await getSetting(ctx, "createsPerPersonPerDay"),
+    DAY_MS,
+  );
+  if (!allowed) throw new ConvexError({ code: "rate_limited" });
+
+  const now = Date.now();
+  const khatmaId = await ctx.db.insert("khatmas", {
+    name: args.name,
+    schedule: "none",
+    grace: DEFAULT_GRACE.none,
+    creatorPersonId: person._id,
+    inviteCode: args.inviteCode,
+    joinCode: args.joinCode,
+    completedRounds: 0,
+    createdAt: now,
+    kind: "rota",
+    rota: {
+      days: args.days,
+      firstDate: args.firstDate,
+      endDate: args.endDate,
+      timeZone: person.timeZone,
+      messages: await defaultMessages(ctx),
+      pausedAt: null,
+      pauseDates: [],
+      archivedAt: null,
+      // No day starts until the organizer finishes adding people (`finishSetup`).
+      setupDoneAt: null,
+      ...(pendingOrganizer ? { pendingOrganizer: true } : {}),
+    },
+  });
+  const participantId = await ctx.db.insert("rotaParticipants", {
+    khatmaId,
+    name: person.displayName,
+    phone: person.phone,
+    personId: person._id,
+    addedAt: now,
+    removedAt: null,
+  });
+  await ctx.db.insert("rotaSlots", { khatmaId, slot: 1, participantId });
+  return khatmaId;
+}
+
+/** Inserts a rota khatma for the person creating it, with their membership. */
 export const insertRota = internalMutation({
   args: {
     personId: v.id("people"),
@@ -102,88 +207,18 @@ export const insertRota = internalMutation({
     if (person.rotaAllowed !== true) {
       throw new ConvexError({ code: "rota_not_allowed" });
     }
-    if (
-      (await activeRotaCount(ctx, person._id)) >=
-      (await getSetting(ctx, "rotaMaxActivePerOrganizer"))
-    ) {
-      throw new ConvexError({ code: "rota_cap" });
-    }
-    if (!isValidReadingDays(args.days)) {
-      throw new ConvexError({ code: "invalid_days" });
-    }
-    const today = localDate(Date.now(), person.timeZone);
-    if (
-      !isDate(args.firstDate) ||
-      args.firstDate < today ||
-      (args.endDate !== null &&
-        (!isDate(args.endDate) || args.endDate < args.firstDate)) ||
-      !isReadingDate(args.days, args.firstDate, args.firstDate)
-    ) {
-      throw new ConvexError({ code: "invalid_dates" });
-    }
-
-    const taken = await ctx.db
-      .query("khatmas")
-      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
-      .first();
-    if (taken) return null;
-    const joinTaken = await ctx.db
-      .query("khatmas")
-      .withIndex("by_joinCode", (q) => q.eq("joinCode", args.joinCode))
-      .first();
-    if (joinTaken) return null;
-
-    const allowed = await checkRateLimit(
-      ctx,
-      `khatmaCreate:${person._id}`,
-      await getSetting(ctx, "createsPerPersonPerDay"),
-      DAY_MS,
-    );
-    if (!allowed) throw new ConvexError({ code: "rate_limited" });
-
-    const now = Date.now();
-    const khatmaId = await ctx.db.insert("khatmas", {
-      name: args.name,
-      schedule: "none",
-      grace: DEFAULT_GRACE.none,
-      creatorPersonId: person._id,
-      inviteCode: args.inviteCode,
-      joinCode: args.joinCode,
-      completedRounds: 0,
-      createdAt: now,
-      kind: "rota",
-      rota: {
-        days: args.days,
-        firstDate: args.firstDate,
-        endDate: args.endDate,
-        timeZone: person.timeZone,
-        messages: await defaultMessages(ctx),
-        pausedAt: null,
-        pauseDates: [],
-        archivedAt: null,
-        // No day starts until the organizer finishes adding people (`finishSetup`).
-        setupDoneAt: null,
-      },
-    });
+    const khatmaId = await insertRotaKhatma(ctx, person, args, false);
+    if (khatmaId === null) return null;
     await ctx.db.insert("members", {
       khatmaId,
       personId: person._id,
-      joinedAt: now,
+      joinedAt: Date.now(),
       shareToken: args.shareToken,
       status: "active",
       notificationsOn: true,
       lastNudgeAt: null,
       lastCelebratedRound: 0,
     });
-    const participantId = await ctx.db.insert("rotaParticipants", {
-      khatmaId,
-      name: person.displayName,
-      phone: person.phone,
-      personId: person._id,
-      addedAt: now,
-      removedAt: null,
-    });
-    await ctx.db.insert("rotaSlots", { khatmaId, slot: 1, participantId });
     return { inviteCode: args.inviteCode };
   },
 });
@@ -250,7 +285,7 @@ export const insertAgain = internalMutation({
     const source = found.khatma;
     if (!isArchived(source)) throw new ConvexError({ code: "not_archived" });
     if (
-      (await activeRotaCount(ctx, person._id)) >=
+      (await activeRotaCount(ctx, person)) >=
       (await getSetting(ctx, "rotaMaxActivePerOrganizer"))
     ) {
       throw new ConvexError({ code: "rota_cap" });
@@ -529,13 +564,8 @@ export const removeParticipant = sessionMutation({
     participantId: v.id("rotaParticipants"),
   },
   handler: async (ctx, args): ReturnType<typeof ops.removeParticipant> => {
-    const { person, khatma, rota } = await requireRotaOrganizer(
-      ctx,
-      args.inviteCode,
-    );
-    return ops.removeParticipant(ctx, khatma, rota, args, {
-      personId: person._id,
-    });
+    const { khatma, rota } = await requireRotaOrganizer(ctx, args.inviteCode);
+    return ops.removeParticipant(ctx, khatma, rota, args);
   },
 });
 
