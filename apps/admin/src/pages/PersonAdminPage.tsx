@@ -1,6 +1,7 @@
+import { PageHeader } from "../components/PageHeader";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button } from "@web/components/Button";
+import { Button } from "@/components/ui/button";
 import { formatDate } from "@web/lib/format";
 import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
@@ -56,11 +57,11 @@ export function PersonAdminPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">{p.displayName}</h1>
-      <p dir="ltr" className="text-start text-ink-soft">
+      <PageHeader title={p.displayName} />
+      <p dir="ltr" className="text-start text-muted-foreground">
         {p.phone} {p.blocked && `· ${t.lookup.blocked}`}
       </p>
-      <p className="text-sm text-ink-soft">
+      <p className="text-sm text-muted-foreground">
         {t.lookup.lastSeen}:{" "}
         {p.lastSeenAt === 0 ? t.lookup.neverSeen : formatDate(p.lastSeenAt)}
       </p>
@@ -72,11 +73,11 @@ export function PersonAdminPage() {
             <li key={k.khatmaId} className="flex justify-between text-sm">
               <Link
                 to={`/khatmas/${k.khatmaId}`}
-                className="text-green underline"
+                className="text-primary underline"
               >
                 {k.name ?? t.lookup.unnamed}
               </Link>
-              <span className="text-ink-soft">
+              <span className="text-muted-foreground">
                 {k.pending
                   ? t.rota.pending
                   : k.isOrganizer
@@ -94,7 +95,9 @@ export function PersonAdminPage() {
           {p.sessions.map((s, i) => (
             <li key={i} className="flex justify-between">
               <span>{s.deviceLabel}</span>
-              <span className="text-ink-soft">{formatDate(s.lastUsedAt)}</span>
+              <span className="text-muted-foreground">
+                {formatDate(s.lastUsedAt)}
+              </span>
             </li>
           ))}
         </ul>
@@ -108,11 +111,11 @@ export function PersonAdminPage() {
               <li key={r.requestId} className="flex justify-between">
                 <Link
                   to={`/help/${r.requestId}`}
-                  className="text-green underline"
+                  className="text-primary underline"
                 >
                   {formatDate(r.lastMessageAt)}
                 </Link>
-                <span className="text-ink-soft">
+                <span className="text-muted-foreground">
                   {t.lookup.helpStatuses[r.status]}
                 </span>
               </li>
@@ -121,7 +124,7 @@ export function PersonAdminPage() {
         </section>
       )}
 
-      <section className="flex items-center justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 py-3">
+      <section className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
         <span id={rotaLabelId}>{t.ops.rotaAllowed}</span>
         <RotaSwitch
           checked={p.rotaAllowed}
@@ -131,11 +134,11 @@ export function PersonAdminPage() {
       </section>
 
       {message && <p role="status">{message}</p>}
-      <Button variant="ghost" onClick={() => setOp("signOutAll")}>
+      <Button variant="outline" onClick={() => setOp("signOutAll")}>
         {t.ops.signOutAll}
       </Button>
       <Button
-        variant="ghost"
+        variant="outline"
         onClick={() => setOp(p.blocked ? "unblock" : "block")}
       >
         {p.blocked ? t.ops.unblock : t.ops.block}

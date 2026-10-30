@@ -1,6 +1,7 @@
+import { PageHeader } from "../components/PageHeader";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button, buttonClass } from "@web/components/Button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { t as webT } from "@web/i18n/ar";
 import { formatIsoDate } from "@web/features/rota/format";
 import { formatDate } from "@web/lib/format";
@@ -8,6 +9,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ConfirmSheet } from "../components/ConfirmSheet";
+import { DetailList } from "../components/DetailList";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { formatCount } from "../lib/formatNumber";
@@ -56,50 +58,51 @@ export function KhatmaAdminPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">
-        {k.name ?? t.lookup.unnamed}
-      </h1>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-        <dt className="text-ink-soft">{t.lookup.organizer}</dt>
-        <dd>
-          {k.organizer ? (
-            <Link
-              to={`/people/${k.organizer.personId}`}
-              className="text-green underline"
-            >
-              {k.organizer.displayName}
-            </Link>
-          ) : (
-            "—"
-          )}
-        </dd>
-        <dt className="text-ink-soft">{t.lookup.schedule}</dt>
-        <dd>{webT.schedules[k.schedule]}</dd>
-        <dt className="text-ink-soft">{t.help.khatma}</dt>
-        <dd dir="ltr" className="text-start">
-          {k.inviteCode}
-        </dd>
-        <dt className="text-ink-soft">{t.lookup.openHelp}</dt>
-        <dd>{formatCount(k.openHelpRequests)}</dd>
-      </dl>
+      <PageHeader title={k.name ?? t.lookup.unnamed} />
+      <DetailList
+        rows={[
+          [
+            t.lookup.organizer,
+            k.organizer ? (
+              <Link
+                to={`/people/${k.organizer.personId}`}
+                className="text-primary underline"
+              >
+                {k.organizer.displayName}
+              </Link>
+            ) : (
+              "—"
+            ),
+          ],
+          [t.lookup.schedule, webT.schedules[k.schedule]],
+          [
+            t.help.khatma,
+            <span dir="ltr" className="text-start">
+              {k.inviteCode}
+            </span>,
+          ],
+          [t.lookup.openHelp, formatCount(k.openHelpRequests)],
+        ]}
+      />
       {!k.rota && k.archived && (
-        <p className="text-ink-soft">{t.lookup.rotaArchived}</p>
+        <p className="text-muted-foreground">{t.lookup.rotaArchived}</p>
       )}
 
       {k.rota && (
-        <section className="rounded-ui border-2 border-line bg-card px-4 py-3">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            <dt className="text-ink-soft">{t.lookup.kind}</dt>
-            <dd>{t.lookup.kindRota}</dd>
-            <dt className="text-ink-soft">{t.lookup.readingDays}</dt>
-            <dd>{formatReadingDays(k.rota.days)}</dd>
-            <dt className="text-ink-soft">{t.lookup.startsOn}</dt>
-            <dd>{formatIsoDate(k.rota.firstDate)}</dd>
-            <dt className="text-ink-soft">{t.lookup.endsOn}</dt>
-            <dd>
-              {k.rota.endDate ? formatIsoDate(k.rota.endDate) : webT.rota.noEnd}
-            </dd>
-          </dl>
+        <section className="rounded-lg border bg-card px-4 py-3">
+          <DetailList
+            rows={[
+              [t.lookup.kind, t.lookup.kindRota],
+              [t.lookup.readingDays, formatReadingDays(k.rota.days)],
+              [t.lookup.startsOn, formatIsoDate(k.rota.firstDate)],
+              [
+                t.lookup.endsOn,
+                k.rota.endDate
+                  ? formatIsoDate(k.rota.endDate)
+                  : webT.rota.noEnd,
+              ],
+            ]}
+          />
           {k.rota.number !== null && k.rota.cycle !== null ? (
             <p className="mt-2 font-semibold">
               {t.lookup.rotaNumber(
@@ -108,7 +111,7 @@ export function KhatmaAdminPage() {
               )}
             </p>
           ) : (
-            <p className="mt-2 text-ink-soft">{t.lookup.rotaNoDay}</p>
+            <p className="mt-2 text-muted-foreground">{t.lookup.rotaNoDay}</p>
           )}
           {k.rota.dayOpen && (
             <p className="text-2xl font-semibold">
@@ -119,10 +122,10 @@ export function KhatmaAdminPage() {
             </p>
           )}
           {k.rota.archivedAt !== null ? (
-            <p className="text-ink-soft">{t.lookup.rotaArchived}</p>
+            <p className="text-muted-foreground">{t.lookup.rotaArchived}</p>
           ) : (
             k.rota.pausedAt !== null && (
-              <p className="text-ink-soft">{t.lookup.rotaPaused}</p>
+              <p className="text-muted-foreground">{t.lookup.rotaPaused}</p>
             )
           )}
           {k.rota.pendingOrganizer && (
@@ -131,15 +134,12 @@ export function KhatmaAdminPage() {
             </p>
           )}
           <div className="mt-3 grid gap-2">
-            <Link
-              to={`/khatmas/${khatmaId}/rota`}
-              className={buttonClass("primary", "no-underline")}
-            >
+            <Link to={`/khatmas/${khatmaId}/rota`} className={buttonVariants()}>
               {t.rota.help}
             </Link>
             {joinLink && (
               <Button
-                variant="ghost"
+                variant="outline"
                 onClick={() => void copyJoinLink(joinLink)}
               >
                 {t.rota.copy}
@@ -150,7 +150,7 @@ export function KhatmaAdminPage() {
       )}
 
       {k.round && (
-        <section className="rounded-ui border-2 border-line bg-card px-4 py-3">
+        <section className="rounded-lg border bg-card px-4 py-3">
           <h2 className="mb-2 font-semibold">
             {t.lookup.roundTitle(formatCount(k.round.number))}
           </h2>
@@ -160,7 +160,7 @@ export function KhatmaAdminPage() {
                 <p className="text-2xl font-semibold">
                   {formatCount(k.round![key])}
                 </p>
-                <p className="text-xs text-ink-soft">{t.lookup[key]}</p>
+                <p className="text-xs text-muted-foreground">{t.lookup[key]}</p>
               </div>
             ))}
           </div>
@@ -174,11 +174,11 @@ export function KhatmaAdminPage() {
             <li key={m.memberId} className="flex justify-between text-sm">
               <Link
                 to={`/people/${m.personId}`}
-                className="text-green underline"
+                className="text-primary underline"
               >
                 {m.displayName}
               </Link>
-              <span className="text-ink-soft">
+              <span className="text-muted-foreground">
                 {t.lookup.statuses[m.status]} · {formatDate(m.joinedAt)}
               </span>
             </li>
@@ -187,11 +187,11 @@ export function KhatmaAdminPage() {
       </section>
 
       {message && <p role="status">{message}</p>}
-      <Button variant="ghost" onClick={() => setSheet("reset")}>
+      <Button variant="outline" onClick={() => setSheet("reset")}>
         {t.ops.resetInvite}
       </Button>
       {candidates.length > 0 && (
-        <Button variant="ghost" onClick={() => setSheet("handOver")}>
+        <Button variant="outline" onClick={() => setSheet("handOver")}>
           {t.ops.handOver}
         </Button>
       )}
@@ -232,7 +232,7 @@ export function KhatmaAdminPage() {
             id={pickId}
             value={pick}
             onChange={(e) => setPick(e.target.value)}
-            className="mt-1 w-full rounded-ui border-2 border-line bg-white p-2"
+            className="mt-1 w-full rounded-lg border bg-card p-2"
           >
             <option value="" />
             {candidates.map((m) => (

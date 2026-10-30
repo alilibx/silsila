@@ -15,6 +15,7 @@ const buttonVariants = cva(
           "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        whatsapp: "bg-wa text-white hover:bg-wa/90",
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
@@ -42,6 +43,7 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  type,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -54,6 +56,8 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      // A plain button, as on the website: inside a form only `type="submit"` submits.
+      type={asChild ? type : (type ?? "button")}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
