@@ -16,9 +16,9 @@ export function Layout({ actions }: { actions?: ReactNode }) {
         <AppSidebar />
         <SidebarInset className="min-w-0 bg-background">
           <TopBar actions={actions} />
-          <main className="mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-4 pb-24 md:px-5 md:pt-5 md:pb-10">
+          <div className="mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-4 pb-24 md:px-5 md:pt-5 md:pb-10">
             <Outlet />
-          </main>
+          </div>
         </SidebarInset>
         {mobile && <BottomBar />}
       </SidebarProvider>

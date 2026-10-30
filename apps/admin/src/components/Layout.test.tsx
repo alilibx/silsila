@@ -128,3 +128,10 @@ describe("Layout", () => {
     });
   });
 });
+
+describe("Layout landmarks", () => {
+  it("has one main region", () => {
+    renderAt("/");
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+  });
+});

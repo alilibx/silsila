@@ -213,7 +213,10 @@ html.dark {
   --wa: var(--good);
 }
 
-.dark .bg-white {
+/* Inputs only: `bg-white` on a switch's knob has to stay white. */
+.dark input.bg-white,
+.dark textarea.bg-white,
+.dark select.bg-white {
   background-color: var(--card);
 }
 

@@ -164,7 +164,7 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title={t.settings.title} />
-      <div className="sticky top-14 z-10 -mx-1 flex flex-col gap-2 bg-background px-1 pt-1 pb-2">
+      <div className="sticky top-14 z-10 -mx-4 flex flex-col gap-2 bg-background px-4 pt-1 pb-2 md:-mx-5 md:px-5">
         <label className="sr-only" htmlFor={`${idPrefix}-search`}>
           {t.settings.searchLabel}
         </label>

@@ -1,9 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /** The panel's own code, without generated components and tests. */
-function sources(dir = "apps/admin/src"): { path: string; text: string }[] {
+function sources(
+  dir = fileURLToPath(new URL(".", import.meta.url)),
+): { path: string; text: string }[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return entry.name === "ui" ? [] : sources(path);

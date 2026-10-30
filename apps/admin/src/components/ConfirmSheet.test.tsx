@@ -67,3 +67,13 @@ describe("ConfirmSheet", () => {
     );
   });
 });
+
+describe("ConfirmSheet on a short screen", () => {
+  it("scrolls instead of hiding its buttons", () => {
+    setup();
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "max-h-[90svh]",
+      "overflow-y-auto",
+    );
+  });
+});

@@ -77,7 +77,7 @@ export function KhatmaAdminPage() {
           [t.lookup.schedule, webT.schedules[k.schedule]],
           [
             t.help.khatma,
-            <span dir="ltr" className="text-start">
+            <span dir="ltr" className="block text-start">
               {k.inviteCode}
             </span>,
           ],

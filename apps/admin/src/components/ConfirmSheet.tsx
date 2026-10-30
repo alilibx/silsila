@@ -39,6 +39,7 @@ export function ConfirmSheet({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
+        className="max-h-[90svh] overflow-y-auto"
         // Only its buttons and Escape close it, so a stray tap can't lose a note.
         onInteractOutside={(event) => event.preventDefault()}
       >

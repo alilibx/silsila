@@ -22,7 +22,7 @@ function paint(dark: boolean): void {
   document.documentElement.classList.toggle("dark", dark);
 }
 
-/** Runs before the first render, so a dark page never flashes light. */
+/** Runs before the first render, so the first frame React paints has the right theme. */
 export function applyStoredTheme(): void {
   paint(isDark());
 }
