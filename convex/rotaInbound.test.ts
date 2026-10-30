@@ -236,7 +236,7 @@ test("a join text from a listed phone joins and replies with today's juz' button
     {
       to: phoneOf(0),
       body:
-        "*ختمة*\nأهلاً قارئ 1، انضممت إلى ختمة.\nالختمة ١ اليوم. قراءتك: الجزء ١ من هذه الختمة." +
+        "*ختمة*\nأهلاً قارئ 1، انضممت إلى ختمة.\nتحديث على قراءتك اليوم في الختمة ١: المسجَّل لك الجزء ١ من هذه الختمة." +
         `\n[أتممت] ${tap("done", day._id, pid)}` +
         `\n[ليس بعد] ${tap("notYet", day._id, pid)}`,
     },

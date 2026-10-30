@@ -279,7 +279,7 @@ test("a juz' message inside the window goes as interactive buttons", async () =>
   expect(sent).toEqual([
     {
       to: "971500000002",
-      text: `*ختمة العائلة*\nالختمة ١ اليوم. قراءتك: الجزآن ٢ و٣ من هذه الختمة.\n[أتممت] ${done}\n[ليس بعد] ${notYet}`,
+      text: `*ختمة العائلة*\nتحديث على قراءتك اليوم في الختمة ١: المسجَّل لك الجزآن ٢ و٣ من هذه الختمة.\n[أتممت] ${done}\n[ليس بعد] ${notYet}`,
     },
   ]);
   expect((await rows(t))[0]?.sentAt).toBeGreaterThanOrEqual(NOW);
@@ -301,7 +301,7 @@ test("a juz' message outside the window goes as the template with payloads", asy
   expect(sent).toEqual([
     {
       to: "971500000002",
-      text: `[wirdak_rota_juz] ختمة العائلة | ١ | الجزآن ٢ و٣ | ${done} | ${notYet}`,
+      text: `[wirdak_rota_juz_v2] ختمة العائلة | ١ | الجزآن ٢ و٣ | ${done} | ${notYet}`,
     },
   ]);
 });
@@ -430,7 +430,7 @@ test("covered and cycle messages go as their template, or as plain text in the w
   );
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent.map((s) => s.text)).toEqual([
-    "[wirdak_rota_covered] ختمة العائلة | الجزأين ٢ و٣",
+    "[wirdak_rota_covered_v2] ختمة العائلة | الجزأين ٢ و٣",
     "[wirdak_rota_cycle] ختمة العائلة",
   ]);
 
@@ -441,7 +441,7 @@ test("covered and cycle messages go as their template, or as plain text in the w
   expect(sent).toEqual([
     {
       to: "971500000002",
-      text: "*ختمة العائلة*\nتحديث على قراءتك: تمّت اليوم قراءة الجزأين ٢ و٣ عنك، فلم يعد عليك شيء منها.",
+      text: "*ختمة العائلة*\nتحديث على قراءتك: سُجِّلت اليوم قراءة الجزأين ٢ و٣ باسم قارئ آخر في هذه الختمة.",
     },
   ]);
 });
@@ -730,10 +730,10 @@ test("sendSample sends every rota template, only on dev or staging", async () =>
   const t = convexTest(schema, modules);
   await t.action(internal.rotaOutbox.sendSample, { phone: PHONE });
   expect(sent.map((s) => s.text.split("]")[0])).toEqual([
-    "[wirdak_rota_juz",
+    "[wirdak_rota_juz_v2",
     "[wirdak_rota_reminder",
-    "[wirdak_rota_assigned",
-    "[wirdak_rota_covered",
+    "[wirdak_rota_assigned_v2",
+    "[wirdak_rota_covered_v2",
     "[wirdak_rota_complete",
     "[wirdak_rota_cycle",
   ]);

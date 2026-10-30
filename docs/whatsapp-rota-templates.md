@@ -11,6 +11,7 @@ The templates for messages Wirdak starts to a rota member or organizer, submitte
 - Header: text, `{{1}}` = the khatma's title as the app shows it (at most 60 characters). Sample: `ختمة العائلة`.
 - Quick-reply buttons carry a payload per send (`r1|<p or s>|<action>|<dayId>|<participantId>`), so their labels are fixed here and the payloads are not part of the submission.
 - A body can't end with a placeholder, even with a full stop after it, so real words follow the last `{{n}}`.
+- `wirdak_rota_juz`, `wirdak_rota_assigned` and `wirdak_rota_covered` were moved to MARKETING on review, so their `_v2` templates replace them. Never send the originals.
 - Sample values are the examples Meta asks for.
 
 ## Messages to members
@@ -19,14 +20,14 @@ All have header `{{1}}` and quick-reply buttons only.
 
 | Name | Body | Body samples | Buttons |
 | --- | --- | --- | --- |
-| `wirdak_rota_juz` | `الختمة {{1}} اليوم. قراءتك: {{2}} من هذه الختمة.` | `٣`, `الجزآن ٥ و٦` | «أتممت», «ليس بعد» |
+| `wirdak_rota_juz_v2` | `تحديث على قراءتك اليوم في الختمة {{1}}: المسجَّل لك {{2}} من هذه الختمة.` | `٣`, `الجزآن ٥ و٦` | «أتممت», «ليس بعد» |
 | `wirdak_rota_reminder` | `تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة {{1}} في هذه الختمة.` | `الجزأين ٥ و٦` | «أتممت», «ليس بعد» |
-| `wirdak_rota_assigned` | `تحديث على قراءتك: أُسندت إليك قراءة {{1}} في الختمة {{2}} لهذا اليوم.` | `الأجزاء ٣، ٥ و٦`, `٧` | «أتممت», «ليس بعد» |
-| `wirdak_rota_covered` | `تحديث على قراءتك: تمّت اليوم قراءة {{1}} عنك، فلم يعد عليك شيء منها.` | `الجزء ٢٦` | none |
+| `wirdak_rota_assigned_v2` | `تحديث على قراءتك: سُجِّلت لك قراءة {{1}} في الختمة {{2}} لهذا اليوم.` | `الأجزاء ٣، ٥ و٦`, `٧` | «أتممت», «ليس بعد» |
+| `wirdak_rota_covered_v2` | `تحديث على قراءتك: سُجِّلت اليوم قراءة {{1}} باسم قارئ آخر في هذه الختمة.` | `الجزء ٢٦` | none |
 | `wirdak_rota_complete` | `تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة {{1}} لهذا اليوم.` | `٣٠` | «دعاء الختم» |
 | `wirdak_rota_cycle` | `تحديث على قراءتك: أكملت ثلاثين جزءاً في ثلاثين ختمة، أي القرآن كاملاً.` | none | none |
 
-The juz' text is `الجزء ٢٦` for one juz', `الجزآن ٥ و٦` for two and `الأجزاء ٣، ٥ و٦` for three or more. It is the subject of `wirdak_rota_juz` only. Everywhere else it follows the noun «قراءة» (the singular feminine subject, so the verb never has to agree with a plural), so it is genitive: the same except `الجزأين ٥ و٦` for two. This applies to `wirdak_rota_unread` too.
+The juz' text is `الجزء ٢٦` for one juz', `الجزآن ٥ و٦` for two and `الأجزاء ٣، ٥ و٦` for three or more. It is the subject of `wirdak_rota_juz_v2` only. Everywhere else it follows the noun «قراءة» (the singular feminine subject, so the verb never has to agree with a plural), so it is genitive: the same except `الجزأين ٥ و٦` for two. This applies to `wirdak_rota_unread` too.
 
 ## Messages to the organizer
 
