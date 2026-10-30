@@ -173,6 +173,41 @@ describe("SettingField", () => {
     );
   });
 
+  it("edits a time from a select of 15-minute steps and saves minutes", async () => {
+    render(
+      <SettingField
+        setting={{
+          key: "rotaDayAt",
+          value: 480,
+          defaultValue: 480,
+          isDefault: true,
+          spec: { kind: "time", group: "rota" },
+        }}
+      />,
+    );
+    expect(
+      screen.getByText("٨:٠٠ ص", { selector: "span" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: `${t.settings.edit} ${t.settings.labels.rotaDayAt}`,
+      }),
+    );
+    const select = screen.getByRole("combobox", {
+      name: t.settings.labels.rotaDayAt,
+    });
+    expect(within(select).getAllByRole("option")).toHaveLength(96);
+    await userEvent.selectOptions(select, "495");
+    await userEvent.click(
+      screen.getByRole("button", { name: t.settings.save }),
+    );
+    expect(m.set).toHaveBeenCalledWith({
+      adminToken: "tok",
+      key: "rotaDayAt",
+      value: 495,
+    });
+  });
+
   it("goes back to the default", async () => {
     render(
       <SettingField setting={{ ...maxMembers, value: 40, isDefault: false }} />,

@@ -24,6 +24,15 @@ describe("formatSetting", () => {
     expect(formatSetting(duration, 3 * DAY)).not.toContain("259200000");
   });
 
+  it("writes a time of day on a twelve-hour clock", () => {
+    const time: SettingSpec = { kind: "time", group: "rota" };
+    expect(formatSetting(time, 480)).toBe("٨:٠٠ ص");
+    expect(formatSetting(time, 1260)).toBe("٩:٠٠ م");
+    expect(formatSetting(time, 0)).toBe("١٢:٠٠ ص");
+    expect(formatSetting(time, 720)).toBe("١٢:٠٠ م");
+    expect(formatSetting(time, 1425)).toBe("١١:٤٥ م");
+  });
+
   it("writes hours, switches, empty text and numbers", () => {
     expect(formatSetting({ kind: "hour", group: "notifications" }, 22)).toBe(
       "22:00",

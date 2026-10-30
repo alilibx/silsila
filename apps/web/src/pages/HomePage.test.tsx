@@ -135,6 +135,21 @@ describe("HomePage", () => {
     expect(second).toHaveTextContent(/^ختمة .*أكتوبر/);
   });
 
+  it("a rotating khatma's card says so, with today's count and no schedule", () => {
+    m.mine = [card({ kind: "rota", done: 26, schedule: "none" })];
+    renderHome();
+    const link = screen
+      .getAllByRole("link")
+      .find((l) => l.getAttribute("href") === "/j/AAA")!;
+    expect(link).toHaveTextContent("ختمة بالتناوب · ٢٦ من ٣٠ اليوم");
+    expect(link).not.toHaveTextContent("تمّت");
+    expect(link).not.toHaveTextContent("جزؤك");
+    expect(within(link).getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "26",
+    );
+  });
+
   it("home shows the new-message label", () => {
     m.mine = [
       card({ hasNote: true }),

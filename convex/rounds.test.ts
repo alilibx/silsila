@@ -152,7 +152,8 @@ async function viewAs(t: T, inviteCode: string, who: Who | null) {
     inviteCode,
     sessionToken: who?.token,
   });
-  if ("notFound" in res) throw new Error("unexpected notFound");
+  if ("notFound" in res || "rota" in res)
+    throw new Error("unexpected notFound");
   return res;
 }
 

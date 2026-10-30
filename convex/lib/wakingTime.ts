@@ -101,8 +101,9 @@ function localToInstant(
   month: number,
   day: number,
   hour: number,
+  minute = 0,
 ): number {
-  const guess = Date.UTC(year, month - 1, day, hour, 0, 0);
+  const guess = Date.UTC(year, month - 1, day, hour, minute, 0);
   const first = guess - offsetAt(guess, tz);
   // Correct once more with the offset at the result so DST changes land right.
   return guess - offsetAt(first, tz);
@@ -112,6 +113,33 @@ function localToInstant(
 export function localDayNumber(at: number, tz: string): number {
   const w = wallClock(at, safeTimeZone(tz));
   return Math.floor(Date.UTC(w.year, w.month - 1, w.day) / DAY_MS);
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** The local calendar date of an instant in `tz`, as `YYYY-MM-DD`. */
+export function localDate(at: number, tz: string): string {
+  const w = wallClock(at, safeTimeZone(tz));
+  return `${w.year}-${pad2(w.month)}-${pad2(w.day)}`;
+}
+
+/** Minutes after local midnight of an instant in `tz`. */
+export function localMinutes(at: number, tz: string): number {
+  const w = wallClock(at, safeTimeZone(tz));
+  return w.hour * 60 + w.minute;
+}
+
+/** The instant at which the wall clock in `tz` reads `minutes` after midnight on `date` (`YYYY-MM-DD`). */
+export function instantAt(date: string, minutes: number, tz: string): number {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  return localToInstant(
+    safeTimeZone(tz),
+    year,
+    month,
+    day,
+    Math.floor(minutes / 60),
+    minutes % 60,
+  );
 }
 
 function awakeHours(q: QuietHours): number {

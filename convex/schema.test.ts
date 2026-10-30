@@ -147,3 +147,106 @@ test("plan 2 tables accept their documented shapes", async () => {
     ).resolves.toBeTruthy();
   });
 });
+
+test("rota tables accept their documented shapes", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+966500000003",
+      displayName: "x",
+      verifiedAt: 0,
+      timeZone: "UTC",
+      lastSeenAt: 0,
+      rotaAllowed: true,
+    });
+    const khatmaId = await ctx.db.insert("khatmas", {
+      name: null,
+      schedule: "none",
+      grace: { value: 7, unit: "days" },
+      creatorPersonId: personId,
+      inviteCode: "rota",
+      completedRounds: 0,
+      createdAt: 0,
+      kind: "rota",
+      rota: {
+        days: { kind: "weekly", weekdays: [5], everyWeeks: 1 },
+        firstDate: "2027-01-15",
+        endDate: null,
+        timeZone: "Asia/Dubai",
+        messages: {
+          dayAt: 480,
+          reminder: { at: 960, on: true },
+          unread: { at: 1140, on: true },
+          summary: { at: 1260, on: false },
+        },
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+      },
+    });
+    const participantId = await ctx.db.insert("rotaParticipants", {
+      khatmaId,
+      name: "x",
+      phone: "+966500000004",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+    });
+    await ctx.db.insert("rotaSlots", { khatmaId, slot: 1, participantId });
+    const dayId = await ctx.db.insert("rotaDays", {
+      khatmaId,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2027-01-15",
+      startedAt: 0,
+      closesAt: 1,
+      completedAt: null,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+    });
+    await ctx.db.insert("rotaReads", {
+      dayId,
+      khatmaId,
+      juz: 1,
+      slot: 1,
+      holderId: participantId,
+      readerId: null,
+      doneAt: null,
+      doneByOrganizer: false,
+      reassignedAt: null,
+    });
+    await ctx.db.insert("notes", {
+      personId,
+      khatmaId,
+      kind: "rotaUnread",
+      juz: [1],
+      count: null,
+      until: null,
+      assignmentId: null,
+      roundNumber: null,
+      createdAt: 0,
+      pushedAt: null,
+      clearedAt: null,
+    });
+    const kinds = await ctx.db
+      .query("khatmas")
+      .withIndex("by_kind", (q) => q.eq("kind", "rota"))
+      .collect();
+    expect(kinds).toHaveLength(1);
+    await expect(
+      ctx.db.insert("khatmas", {
+        name: null,
+        schedule: "none",
+        grace: { value: 7, unit: "days" },
+        creatorPersonId: personId,
+        inviteCode: "bad",
+        completedRounds: 0,
+        createdAt: 0,
+        // @ts-expect-error only "rota" is a stored kind
+        kind: "pool",
+      }),
+    ).rejects.toThrow();
+  });
+});

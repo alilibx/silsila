@@ -109,6 +109,58 @@ test("equal quiet hours are refused", async () => {
   ).toEqual({ error: "quiet_hours_equal" });
 });
 
+test("rota default times must stay in order and in waking hours together", async () => {
+  const t = convexTest(schema, modules);
+  await signedInAdmin(t);
+  const set = (key: string, value: unknown) =>
+    t.mutation(api.adminSettings.set, { adminToken: "ali", key, value });
+  // the reminder after the 19:00 unread list
+  expect(await set("rotaReminderAt", 1200)).toEqual({ error: "out_of_range" });
+  // 06:00 is in the quiet hours
+  expect(await set("rotaDayAt", 360)).toEqual({ error: "out_of_range" });
+  expect(await settingsRows(t)).toHaveLength(0);
+
+  // a summary that is off may sit anywhere, until it is turned on
+  expect(await set("rotaSummaryAt", 1080)).toEqual({ ok: true });
+  expect(await set("rotaSummaryOn", true)).toEqual({ error: "out_of_range" });
+  expect(await set("rotaSummaryAt", 1200)).toEqual({ ok: true });
+  expect(await set("rotaSummaryOn", true)).toEqual({ ok: true });
+
+  // going back to a default is checked the same way
+  await set("rotaUnreadOn", false);
+  await set("rotaReminderAt", 1170);
+  expect(
+    await t.mutation(api.adminSettings.reset, {
+      adminToken: "ali",
+      key: "rotaUnreadOn",
+    }),
+  ).toEqual({ error: "out_of_range" });
+});
+
+test("quiet hours can't move over the rota default times", async () => {
+  const t = convexTest(schema, modules);
+  await signedInAdmin(t);
+  const set = (key: string, value: unknown) =>
+    t.mutation(api.adminSettings.set, { adminToken: "ali", key, value });
+  const reset = (key: string) =>
+    t.mutation(api.adminSettings.reset, { adminToken: "ali", key });
+  // the day starts at 08:00, so waking hours can't begin at 09:00
+  expect(await set("quietEndHour", 9)).toEqual({ error: "out_of_range" });
+  // the unread list is at 19:00, so they can't begin at 19:00 either
+  expect(await set("quietStartHour", 19)).toEqual({ error: "out_of_range" });
+  expect(await settingsRows(t)).toHaveLength(0);
+  // a move that still fits goes through
+  expect(await set("quietEndHour", 8)).toEqual({ ok: true });
+  expect(await set("quietStartHour", 20)).toEqual({ ok: true });
+
+  // going back to a default is checked the same way
+  expect(await set("quietStartHour", 23)).toEqual({ ok: true });
+  expect(await set("rotaSummaryAt", 1350)).toEqual({ ok: true });
+  expect(await set("rotaSummaryOn", true)).toEqual({ ok: true });
+  expect(await reset("quietStartHour")).toEqual({ error: "out_of_range" });
+  expect(await t.run((ctx) => getSetting(ctx, "quietStartHour"))).toBe(23);
+});
+
 test("bad values and unknown keys are refused", async () => {
   const t = convexTest(schema, modules);
   await signedInAdmin(t);

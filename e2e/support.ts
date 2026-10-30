@@ -45,6 +45,11 @@ export async function forceGraceEnd(
   await convexRun("dev:forceGraceEnd", { inviteCode, juz });
 }
 
+/** Lets the verified person who sent from `phone` (digits only) create rotating khatmas, as an admin would (dev-only helper). */
+export async function allowRota(phone: string): Promise<void> {
+  await convexRun("dev:allowRota", { phone: `+${phone}` });
+}
+
 const FONTS_DIR = new URL("../node_modules/@fontsource/", import.meta.url)
   .pathname;
 

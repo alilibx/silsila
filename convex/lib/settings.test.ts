@@ -92,6 +92,17 @@ test("defaults match the spec", () => {
     helpRetentionMs: 180 * 86_400_000,
     summaryHour: 8,
     milestonePushSpacingMs: 60_000,
+    rotaDayAt: 480,
+    rotaReminderAt: 960,
+    rotaReminderOn: true,
+    rotaUnreadAt: 1140,
+    rotaUnreadOn: true,
+    rotaSummaryAt: 1260,
+    rotaSummaryOn: false,
+    rotaMaxActivePerOrganizer: 2,
+    rotaMaxSlotsPerPerson: 3,
+    rotaSilenceNoticeDays: 3,
+    rotaSilenceStopDays: 7,
   });
 });
 

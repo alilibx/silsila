@@ -16,6 +16,7 @@ const ORDER: SettingGroup[] = [
   "help",
   "limits",
   "sessions",
+  "rota",
 ];
 
 /** A group, or every setting that differs from its default. */

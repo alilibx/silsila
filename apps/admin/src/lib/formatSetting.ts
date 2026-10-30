@@ -17,6 +17,14 @@ export function formatDuration(ms: number): string {
   return t.settings.seconds(Math.round(ms / SECOND));
 }
 
+/** Minutes after midnight as «٨:٠٠ ص» (twelve-hour clock, Arabic digits). */
+export function formatTime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${toArabicDigits(`${hour12}:${String(m).padStart(2, "0")}`)} ${h < 12 ? t.settings.am : t.settings.pm}`;
+}
+
 /** A setting's value as an admin reads it: "٣ أيام", "22:00", "مفعّل". */
 export function formatSetting(spec: SettingSpec, value: unknown): string {
   switch (spec.kind) {
@@ -24,6 +32,8 @@ export function formatSetting(spec: SettingSpec, value: unknown): string {
       return typeof value === "number" ? formatDuration(value) : String(value);
     case "hour":
       return `${String(value).padStart(2, "0")}:00`;
+    case "time":
+      return typeof value === "number" ? formatTime(value) : String(value);
     case "bool":
       return value ? t.settings.on : t.settings.off;
     case "text":

@@ -107,4 +107,24 @@ describe("KhatmaTabs", () => {
     await user.keyboard("{ArrowRight}");
     expect(onChange).toHaveBeenLastCalledWith("pool");
   });
+
+  it("takes its own tabs and labels, and moves between them", async () => {
+    const onChange = vi.fn();
+    const tabs = [
+      { id: "today", label: "اليوم" },
+      { id: "people", label: "المشاركون" },
+    ] as const;
+    render(
+      <KhatmaTabs tab="today" onChange={onChange} idPrefix="r" tabs={tabs} />,
+    );
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "اليوم",
+      "المشاركون",
+    ]);
+    await userEvent.click(screen.getByRole("tab", { name: "المشاركون" }));
+    expect(onChange).toHaveBeenCalledWith("people");
+    screen.getByRole("tab", { name: "اليوم" }).focus();
+    await userEvent.keyboard("{End}");
+    expect(onChange).toHaveBeenLastCalledWith("people");
+  });
 });

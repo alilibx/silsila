@@ -6,6 +6,7 @@ import { t } from "../i18n/ar";
 import { SwitchKhatmaSheet } from "./SwitchKhatmaSheet";
 
 const card = (over: object = {}) => ({
+  kind: "pool" as const,
   inviteCode: "A",
   name: "ختمة العائلة",
   createdAt: Date.UTC(2026, 9, 20, 12),
@@ -113,5 +114,14 @@ describe("SwitchKhatmaSheet", () => {
     const { onClose } = setup();
     await userEvent.click(screen.getByRole("button", { name: t.sheet.close }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("a rotating khatma's row reads «ختمة بالتناوب» with today's count", () => {
+    setup("A", [card(), card({ kind: "rota", inviteCode: "R", done: 26 })]);
+    const row = screen.getByRole("link", {
+      name: /ختمة العائلة/,
+      current: false,
+    });
+    expect(row).toHaveTextContent("ختمة بالتناوب · ٢٦ من ٣٠ اليوم");
   });
 });

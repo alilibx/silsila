@@ -57,6 +57,33 @@ export const signOutEverywhere = adminMutation({
   },
 });
 
+/** Lets a person create rotating khatmas, or takes that away (existing ones keep running). */
+export const setRotaAllowed = adminMutation({
+  args: {
+    personId: v.id("people"),
+    allowed: v.boolean(),
+    note: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_found" }> => {
+    const person = await ctx.db.get(args.personId);
+    if (!person) return { error: "not_found" };
+    await ctx.db.patch(person._id, { rotaAllowed: args.allowed });
+    await writeAudit(ctx, {
+      actor: ctx.admin,
+      action: "person.rotaAllowed",
+      targetKind: "person",
+      targetId: person._id,
+      before: { rotaAllowed: person.rotaAllowed === true },
+      after: { rotaAllowed: args.allowed },
+      note: cleanNote(args.note),
+    });
+    return { ok: true };
+  },
+});
+
 /** Blocks a number app-wide and signs it out everywhere. Khatmas and roles stay. */
 export const blockPhone = adminMutation({
   args: { phone: v.string(), note: v.optional(v.string()) },

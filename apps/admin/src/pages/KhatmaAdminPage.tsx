@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@web/components/Button";
 import { t as webT } from "@web/i18n/ar";
+import { formatIsoDate } from "@web/features/rota/format";
 import { formatDate } from "@web/lib/format";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
@@ -10,6 +11,7 @@ import { ConfirmSheet } from "../components/ConfirmSheet";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { formatCount } from "../lib/formatNumber";
+import { formatReadingDays } from "../lib/formatReadingDays";
 import { opsError, withNote } from "../lib/opsError";
 
 /** A khatma for an admin who's helping it: counts, never who reads what (spec 8). */
@@ -69,6 +71,48 @@ export function KhatmaAdminPage() {
         <dt className="text-ink-soft">{t.lookup.openHelp}</dt>
         <dd>{formatCount(k.openHelpRequests)}</dd>
       </dl>
+
+      {k.rota && (
+        <section className="rounded-ui border-2 border-line bg-card px-4 py-3">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            <dt className="text-ink-soft">{t.lookup.kind}</dt>
+            <dd>{t.lookup.kindRota}</dd>
+            <dt className="text-ink-soft">{t.lookup.readingDays}</dt>
+            <dd>{formatReadingDays(k.rota.days)}</dd>
+            <dt className="text-ink-soft">{t.lookup.startsOn}</dt>
+            <dd>{formatIsoDate(k.rota.firstDate)}</dd>
+            <dt className="text-ink-soft">{t.lookup.endsOn}</dt>
+            <dd>
+              {k.rota.endDate ? formatIsoDate(k.rota.endDate) : webT.rota.noEnd}
+            </dd>
+          </dl>
+          {k.rota.number !== null && k.rota.cycle !== null ? (
+            <p className="mt-2 font-semibold">
+              {t.lookup.rotaNumber(
+                formatCount(k.rota.number),
+                formatCount(k.rota.cycle),
+              )}
+            </p>
+          ) : (
+            <p className="mt-2 text-ink-soft">{t.lookup.rotaNoDay}</p>
+          )}
+          {k.rota.dayOpen && (
+            <p className="text-2xl font-semibold">
+              {t.lookup.rotaProgress(
+                formatCount(k.rota.doneToday),
+                formatCount(k.rota.total),
+              )}
+            </p>
+          )}
+          {k.rota.archivedAt !== null ? (
+            <p className="text-ink-soft">{t.lookup.rotaArchived}</p>
+          ) : (
+            k.rota.pausedAt !== null && (
+              <p className="text-ink-soft">{t.lookup.rotaPaused}</p>
+            )
+          )}
+        </section>
+      )}
 
       {k.round && (
         <section className="rounded-ui border-2 border-line bg-card px-4 py-3">

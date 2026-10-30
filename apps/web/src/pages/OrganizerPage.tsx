@@ -13,6 +13,7 @@ import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { formatDate } from "../lib/format";
 import { useSessionToken } from "../lib/session";
+import { RotaSettingsPage } from "./RotaSettingsPage";
 
 const headingClass = "mb-3 text-xl font-semibold";
 const sectionClass = "mt-8";
@@ -46,12 +47,21 @@ export function OrganizerPage() {
     sessionToken,
     inviteCode,
   });
+  // A rotating khatma has its own settings; the answer is null for any other.
+  const rotaSettings = useQuery(api.rota.settings, {
+    sessionToken,
+    inviteCode,
+  });
   // Resetting the link kills the old code, so its query turns `forbidden` before the new code
   // is navigated to. That moment must not bounce the organizer to the dead address.
   const resetting = useRef(false);
 
+  if (rotaSettings !== undefined && rotaSettings !== null) {
+    return <RotaSettingsPage />;
+  }
   if (
     settings === undefined ||
+    rotaSettings === undefined ||
     ("forbidden" in settings && resetting.current)
   ) {
     return (

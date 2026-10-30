@@ -16,6 +16,7 @@ export const auditActionValidator = v.union(
   v.literal("phone.unblock"),
   v.literal("khatma.resetInvite"),
   v.literal("khatma.handOver"),
+  v.literal("person.rotaAllowed"),
 );
 
 export type AuditAction = Infer<typeof auditActionValidator>;

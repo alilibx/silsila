@@ -81,14 +81,19 @@ export async function notify(
  * Clears notes that no longer apply. By assignment (optionally only some
  * kinds), or, for a batched organizer alert, by taking one juz' out of every
  * uncleared "open for help" alert in the khatma and clearing the alerts that
- * end up empty. Or one member's "behind" invites in a khatma.
+ * end up empty. Or one person's notes of a kind in a khatma: a member's
+ * "behind" invites, or a rota organizer's unread lists or summaries.
  */
 export async function clearNotes(
   ctx: MutationCtx,
   where:
     | { assignmentId: Id<"assignments">; kinds?: NoteKind[] }
     | { khatmaId: Id<"khatmas">; kind: "openForHelp"; juz: number }
-    | { khatmaId: Id<"khatmas">; personId: Id<"people">; kind: "behind" },
+    | {
+        khatmaId: Id<"khatmas">;
+        personId: Id<"people">;
+        kind: "behind" | "rotaUnread" | "rotaSummary";
+      },
 ): Promise<void> {
   const now = Date.now();
   if ("assignmentId" in where) {
@@ -105,7 +110,7 @@ export async function clearNotes(
     return;
   }
   if ("personId" in where) {
-    // A behind invite to one member: it ends once they take a juz'.
+    // One person's notes of the kind, such as a behind invite that ends once they take a juz'.
     const invites = await ctx.db
       .query("notes")
       .withIndex("by_khatma_kind", (q) =>

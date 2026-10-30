@@ -11,6 +11,8 @@ type Fn = "update" | "removeMember" | "unblock" | "handOver";
 
 const m = vi.hoisted(() => ({
   settings: undefined as unknown,
+  /** What `api.rota.settings` answers: null for a pool khatma. */
+  rotaSettings: null as unknown,
   fns: {
     update: vi.fn(),
     removeMember: vi.fn(),
@@ -42,7 +44,8 @@ vi.mock("react-router", async () => {
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: () => m.settings,
+    useQuery: (ref: never) =>
+      getFunctionName(ref) === "rota:settings" ? m.rotaSettings : m.settings,
     useMutation: (ref: never) =>
       m.fns[getFunctionName(ref).split(":")[1] as Fn],
     useAction: () => m.resetInvite,
@@ -103,6 +106,31 @@ describe("OrganizerPage", () => {
     m.resetInvite.mockReset().mockResolvedValue({ inviteCode: "NEWCODE" });
     m.holdNavigation = false;
     m.settings = structuredClone(organizerView);
+    m.rotaSettings = null;
+  });
+
+  it("shows the rotating khatma's own settings for a rota khatma", () => {
+    m.rotaSettings = {
+      name: "ختمة الجمعة",
+      days: { kind: "daily" },
+      firstDate: "2026-10-30",
+      firstDatePassed: false,
+      endDate: null,
+      timeZone: "Asia/Dubai",
+      messages: {
+        dayAt: 480,
+        reminder: { at: 960, on: true },
+        unread: { at: 1140, on: true },
+        summary: { at: 1260, on: false },
+      },
+      pausedAt: null,
+      pauseDates: [],
+      upcoming: [],
+      quiet: { startHour: 22, endHour: 7 },
+    };
+    renderPage();
+    expect(screen.getByLabelText(t.rota.nameLabel)).toHaveValue("ختمة الجمعة");
+    expect(screen.queryByText(t.organizer.membersHeading)).toBeNull();
   });
 
   it("non-organizer is sent back to the khatma", () => {

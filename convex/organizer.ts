@@ -45,7 +45,7 @@ export type OrganizerSettings = {
  * The khatma behind `inviteCode` when `person` is its organizer and still an
  * active member of it; otherwise `null`. A removed organizer holds no controls.
  */
-async function organizerOf(
+export async function organizerOf(
   ctx: QueryCtx,
   inviteCode: string,
   person: Doc<"people"> | null,
@@ -64,6 +64,21 @@ export async function requireOrganizer(
 ): Promise<{ person: Doc<"people">; khatma: Doc<"khatmas"> }> {
   const found = await organizerOf(ctx, inviteCode, ctx.person);
   if (!found) throw new ConvexError({ code: "forbidden" });
+  return found;
+}
+
+/**
+ * `requireOrganizer` for the pool khatma's own controls (settings, invite
+ * reset, handover), which a rota khatma doesn't have: `forbidden` there too.
+ */
+async function requirePoolOrganizer(
+  ctx: QueryCtx & SessionContext,
+  inviteCode: string,
+): Promise<{ person: Doc<"people">; khatma: Doc<"khatmas"> }> {
+  const found = await requireOrganizer(ctx, inviteCode);
+  if (found.khatma.kind === "rota") {
+    throw new ConvexError({ code: "forbidden" });
+  }
   return found;
 }
 
@@ -140,7 +155,7 @@ export const update = sessionMutation({
     ctx,
     args,
   ): Promise<{ ok: true } | { ok: false; reason: "invalid_grace" }> => {
-    const { khatma } = await requireOrganizer(ctx, args.inviteCode);
+    const { khatma } = await requirePoolOrganizer(ctx, args.inviteCode);
     if (args.grace && !isValidGrace(args.grace)) {
       return { ok: false, reason: "invalid_grace" };
     }
@@ -162,7 +177,9 @@ export const activeMemberCount = internalQuery({
   handler: async (ctx, args): Promise<number> => {
     const person = await ctx.db.get(args.personId);
     const found = await organizerOf(ctx, args.inviteCode, person);
-    if (!found) throw new ConvexError({ code: "forbidden" });
+    if (!found || found.khatma.kind === "rota") {
+      throw new ConvexError({ code: "forbidden" });
+    }
     return (await membersByJoin(ctx, found.khatma._id)).filter(
       (m) => m.status === "active",
     ).length;
@@ -185,7 +202,9 @@ export const applyInviteReset = internalMutation({
   handler: async (ctx, args): Promise<{ inviteCode: string } | null> => {
     const person = await ctx.db.get(args.personId);
     const found = await organizerOf(ctx, args.inviteCode, person);
-    if (!found) throw new ConvexError({ code: "forbidden" });
+    if (!found || found.khatma.kind === "rota") {
+      throw new ConvexError({ code: "forbidden" });
+    }
     const { khatma } = found;
 
     if (
@@ -379,7 +398,7 @@ export const handOver = sessionMutation({
     ctx,
     args,
   ): Promise<{ ok: true } | { ok: false; reason: "not_member" | "self" }> => {
-    const { khatma } = await requireOrganizer(ctx, args.inviteCode);
+    const { khatma } = await requirePoolOrganizer(ctx, args.inviteCode);
     const member = await otherMember(ctx, khatma, args.memberId, "active");
     if (typeof member === "string") return { ok: false, reason: member };
     // The organizer chose this, so they get no "moved" note.
@@ -401,6 +420,8 @@ export const autoHandoverSweep = internalMutation({
       .paginate({ numItems: SWEEP_PAGE, cursor: args.cursor ?? null });
     const cutoff = Date.now() - (await getSetting(ctx, "organizerInactiveMs"));
     for (const khatma of page.page) {
+      // a rota khatma keeps its organizer: readers are not members to hand it to
+      if (khatma.kind === "rota") continue;
       const organizer = await ctx.db.get(khatma.creatorPersonId);
       if (organizer && organizer.lastSeenAt >= cutoff) continue;
       await ctx.scheduler.runAfter(0, internal.organizer.autoHandover, {
@@ -424,7 +445,7 @@ export const autoHandover = internalMutation({
   args: { khatmaId: v.id("khatmas") },
   handler: async (ctx, args) => {
     const khatma = await ctx.db.get(args.khatmaId);
-    if (!khatma) return;
+    if (!khatma || khatma.kind === "rota") return;
     const now = Date.now();
     const organizer = await ctx.db.get(khatma.creatorPersonId);
     if (

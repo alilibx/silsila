@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { auditActionValidator, auditTargetKindValidator } from "./lib/audit";
 import { graceValidator } from "./lib/grace";
+import { rotaConfigValidator } from "./lib/rota";
 import { scheduleValidator } from "./lib/schedule";
 
 const nullableNumber = v.union(v.number(), v.null());
@@ -15,6 +16,8 @@ export default defineSchema({
     lastSeenAt: v.number(),
     // Opted in to notifications on WhatsApp (missing means no).
     whatsappNotes: v.optional(v.boolean()),
+    // An admin allowed this person to create rotating khatmas (missing means no).
+    rotaAllowed: v.optional(v.boolean()),
   }).index("by_phone", ["phone"]),
 
   sessions: defineTable({
@@ -73,8 +76,12 @@ export default defineSchema({
     currentRoundId: v.optional(v.id("rounds")),
     completedRounds: v.number(),
     createdAt: v.number(),
+    /** Missing means a pool khatma. A rota khatma has no rounds (`rota` holds its settings). */
+    kind: v.optional(v.literal("rota")),
+    rota: v.optional(rotaConfigValidator),
   })
     .index("by_inviteCode", ["inviteCode"])
+    .index("by_kind", ["kind"])
     .searchIndex("search_name", { searchField: "name" }),
 
   members: defineTable({
@@ -148,6 +155,8 @@ export default defineSchema({
       v.literal("completed"),
       v.literal("nowOrganizer"),
       v.literal("organizerMoved"),
+      v.literal("rotaUnread"),
+      v.literal("rotaSummary"),
     ),
     juz: v.array(v.number()),
     count: nullableNumber,
@@ -165,6 +174,59 @@ export default defineSchema({
     .index("by_assignment", ["assignmentId"])
     .index("by_createdAt", ["createdAt"])
     .index("by_clearedAt", ["clearedAt"]),
+
+  /** Someone who reads in a rota khatma: a name and a phone, not necessarily a Wirdak person. */
+  rotaParticipants: defineTable({
+    khatmaId: v.id("khatmas"),
+    name: v.string(),
+    phone: v.string(), // E.164
+    personId: v.union(v.id("people"), v.null()),
+    addedAt: v.number(),
+    removedAt: nullableNumber,
+  })
+    .index("by_khatma", ["khatmaId"])
+    .index("by_khatma_phone", ["khatmaId", "phone"]),
+
+  /** Which participant owns each of the 30 slots. */
+  rotaSlots: defineTable({
+    khatmaId: v.id("khatmas"),
+    slot: v.number(),
+    participantId: v.id("rotaParticipants"),
+  })
+    .index("by_khatma_slot", ["khatmaId", "slot"])
+    .index("by_participant", ["participantId"]),
+
+  /** One reading day of a rota khatma. */
+  rotaDays: defineTable({
+    khatmaId: v.id("khatmas"),
+    n: v.number(),
+    number: v.number(),
+    cycle: v.number(),
+    date: v.string(),
+    startedAt: v.number(),
+    closesAt: v.number(),
+    completedAt: nullableNumber,
+    closedAt: nullableNumber,
+    unreadSentAt: nullableNumber,
+    summarySentAt: nullableNumber,
+  })
+    .index("by_khatma_n", ["khatmaId", "n"])
+    .index("by_khatma_date", ["khatmaId", "date"]),
+
+  /** One juz' of one rota day, and who holds, reads and finished it. */
+  rotaReads: defineTable({
+    dayId: v.id("rotaDays"),
+    khatmaId: v.id("khatmas"),
+    juz: v.number(),
+    slot: v.number(),
+    holderId: v.union(v.id("rotaParticipants"), v.null()),
+    readerId: v.union(v.id("rotaParticipants"), v.null()),
+    doneAt: nullableNumber,
+    doneByOrganizer: v.boolean(),
+    reassignedAt: nullableNumber,
+  })
+    .index("by_day_juz", ["dayId", "juz"])
+    .index("by_reader_day", ["readerId", "dayId"]),
 
   pushSubscriptions: defineTable({
     personId: v.id("people"),

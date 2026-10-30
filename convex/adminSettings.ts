@@ -2,7 +2,13 @@ import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import { adminMutation, adminQuery } from "./lib/adminSession";
 import { writeAudit } from "./lib/audit";
-import { getSetting, SETTING_DEFAULTS, type SettingKey } from "./lib/settings";
+import { messageTimesError } from "./lib/rota";
+import {
+  getSetting,
+  SETTING_DEFAULTS,
+  type SettingKey,
+  type SettingValue,
+} from "./lib/settings";
 import {
   cleanValue,
   crossCheck,
@@ -44,6 +50,66 @@ async function crossCheckWith(
   return crossCheck(next);
 }
 
+const ROTA_TIME_KEYS = [
+  "rotaDayAt",
+  "rotaReminderAt",
+  "rotaReminderOn",
+  "rotaUnreadAt",
+  "rotaUnreadOn",
+  "rotaSummaryAt",
+  "rotaSummaryOn",
+] as const;
+
+const QUIET_KEYS = ["quietStartHour", "quietEndHour"] as const;
+
+/**
+ * Whether the default rota message times would still hold together after
+ * `key` becomes `value`: each is checked alone by its spec, but together they
+ * must be in order and in the waking hours, as a khatma's own are. Moving a
+ * quiet hour changes the waking hours, so it is checked too.
+ */
+async function rotaTimesFit(
+  ctx: MutationCtx,
+  key: SettingKey,
+  value: unknown,
+): Promise<boolean> {
+  if (
+    !(ROTA_TIME_KEYS as readonly string[]).includes(key) &&
+    !(QUIET_KEYS as readonly string[]).includes(key)
+  ) {
+    return true;
+  }
+  const get = async <K extends (typeof ROTA_TIME_KEYS)[number]>(
+    k: K,
+  ): Promise<SettingValue<K>> =>
+    k === key ? (value as SettingValue<K>) : await getSetting(ctx, k);
+  const quietStart =
+    key === "quietStartHour"
+      ? (value as number)
+      : await getSetting(ctx, "quietStartHour");
+  const quietEnd =
+    key === "quietEndHour"
+      ? (value as number)
+      : await getSetting(ctx, "quietEndHour");
+  const error = messageTimesError(
+    {
+      dayAt: await get("rotaDayAt"),
+      reminder: {
+        at: await get("rotaReminderAt"),
+        on: await get("rotaReminderOn"),
+      },
+      unread: { at: await get("rotaUnreadAt"), on: await get("rotaUnreadOn") },
+      summary: {
+        at: await get("rotaSummaryAt"),
+        on: await get("rotaSummaryOn"),
+      },
+    },
+    quietStart,
+    quietEnd,
+  );
+  return error === null;
+}
+
 function cleanNote(note: string | undefined): string | undefined {
   const trimmed = note?.trim().slice(0, MAX_NOTE);
   return trimmed ? trimmed : undefined;
@@ -75,6 +141,9 @@ export const set = adminMutation({
     if (invalid) return { error: invalid };
     const crossed = await crossCheckWith(ctx, key, value);
     if (crossed) return { error: crossed };
+    if (!(await rotaTimesFit(ctx, key, value))) {
+      return { error: "out_of_range" };
+    }
 
     const before = await getSetting(ctx, key);
     const row = await settingRow(ctx, key);
@@ -104,6 +173,9 @@ export const reset = adminMutation({
     const key = args.key;
     const crossed = await crossCheckWith(ctx, key, SETTING_DEFAULTS[key]);
     if (crossed) return { error: crossed };
+    if (!(await rotaTimesFit(ctx, key, SETTING_DEFAULTS[key]))) {
+      return { error: "out_of_range" };
+    }
     const row = await settingRow(ctx, key);
     if (!row) return { ok: true };
     await ctx.db.delete(row._id);

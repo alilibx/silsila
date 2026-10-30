@@ -9,6 +9,7 @@ import { CreatePage } from "./CreatePage";
 const m = vi.hoisted(() => ({
   create: vi.fn(),
   token: undefined as string | undefined,
+  me: { rotaAllowed: false } as { rotaAllowed: boolean } | null | undefined,
 }));
 
 vi.mock("../lib/session", () => ({
@@ -42,7 +43,10 @@ vi.mock("../features/verify/VerifySheet", () => ({
     </div>
   ),
 }));
-vi.mock("convex/react", () => ({ useAction: () => m.create }));
+vi.mock("convex/react", () => ({
+  useAction: () => m.create,
+  useQuery: () => m.me,
+}));
 
 function Landing() {
   const location = useLocation();
@@ -59,6 +63,7 @@ function renderPage() {
       <Routes>
         <Route path="/new" element={<CreatePage />} />
         <Route path="/j/:inviteCode" element={<Landing />} />
+        <Route path="/new/rota" element={<Landing />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -69,6 +74,7 @@ describe("CreatePage", () => {
     m.create.mockReset();
     m.create.mockResolvedValue({ inviteCode: "NEWCODE" });
     m.token = "tok";
+    m.me = { rotaAllowed: false };
     localStorage.clear();
   });
 
@@ -331,5 +337,77 @@ describe("CreatePage", () => {
     await user.clear(input);
     await user.type(input, "45");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  describe("the type cards", () => {
+    it("are not shown to someone without rota khatmas: the form is the page", () => {
+      renderPage();
+      expect(screen.queryByText(t.rota.rotaTitle)).toBeNull();
+      expect(screen.queryByText(t.rota.typeQuestion)).toBeNull();
+      expect(screen.getByLabelText(/اسم الختمة/)).toBeInTheDocument();
+    });
+
+    it("show two cards first to someone with rota khatmas, and no form yet", () => {
+      m.me = { rotaAllowed: true };
+      renderPage();
+      expect(screen.getByText(t.rota.typeQuestion)).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: new RegExp(t.rota.poolTitle) }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: new RegExp(t.rota.rotaTitle) }),
+      ).toHaveAttribute("href", "/new/rota");
+      expect(screen.queryByLabelText(/اسم الختمة/)).toBeNull();
+    });
+
+    it("«ختمة بالحجز» opens today's form unchanged", async () => {
+      m.me = { rotaAllowed: true };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(
+        screen.getByRole("button", { name: new RegExp(t.rota.poolTitle) }),
+      );
+      expect(screen.getAllByRole("radio")).toHaveLength(6);
+      await user.click(screen.getByRole("button", { name: "أنشئ الختمة" }));
+      expect(m.create).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        name: null,
+        schedule: "weekly",
+      });
+    });
+
+    it("«ختمة بالتناوب» goes to the rota screens", async () => {
+      m.me = { rotaAllowed: true };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(
+        screen.getByRole("link", { name: new RegExp(t.rota.rotaTitle) }),
+      );
+      expect(await screen.findByText(/\/new\/rota/)).toBeInTheDocument();
+    });
+
+    it("wait for the answer while signed in, rather than flashing the form", () => {
+      m.me = undefined;
+      renderPage();
+      expect(screen.queryByLabelText(/اسم الختمة/)).toBeNull();
+      expect(screen.queryByText(t.rota.typeQuestion)).toBeNull();
+    });
+
+    it("a create resumed after verification is a pool one: the form, no cards", () => {
+      m.me = { rotaAllowed: true };
+      localStorage.setItem(
+        "wirdak.verify",
+        JSON.stringify({
+          verificationId: "v1",
+          secret: "sec",
+          displayName: "علي",
+          expiresAt: Date.now() + 5 * 60_000,
+          intent: { kind: "create", name: "ختمة الجمعة", schedule: "daily" },
+        }),
+      );
+      renderPage();
+      expect(screen.getByLabelText(/اسم الختمة/)).toHaveValue("ختمة الجمعة");
+      expect(screen.queryByText(t.rota.typeQuestion)).toBeNull();
+    });
   });
 });

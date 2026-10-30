@@ -19,7 +19,7 @@ vi.mock("convex/react", async () => {
 });
 vi.mock("../lib/adminSession", () => ({ useAdminToken: () => "tok" }));
 
-const person = (blocked: boolean) => ({
+const person = (blocked: boolean, rotaAllowed = false) => ({
   displayName: "سارة",
   phone: "+971500000002",
   timeZone: "Asia/Dubai",
@@ -36,6 +36,7 @@ const person = (blocked: boolean) => ({
   ],
   sessions: [{ deviceLabel: "iPhone · Safari", lastUsedAt: 0 }],
   helpRequests: [],
+  rotaAllowed,
   blocked,
 });
 
@@ -79,5 +80,37 @@ describe("PersonAdminPage", () => {
     expect(
       screen.queryByRole("button", { name: t.ops.block }),
     ).not.toBeInTheDocument();
+  });
+
+  it("turns rotating khatmas on after a confirmation", async () => {
+    renderPage();
+    const toggle = screen.getByRole("switch", { name: t.ops.rotaAllowed });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(toggle);
+    expect(m.mutation).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: t.ops.rotaAllowOn }),
+    );
+    expect(m.mutation).toHaveBeenCalledWith("adminOps:setRotaAllowed", {
+      adminToken: "tok",
+      personId: "p2",
+      allowed: true,
+    });
+  });
+
+  it("turns it off for someone who has it", async () => {
+    m.person = person(false, true);
+    renderPage();
+    const toggle = screen.getByRole("switch", { name: t.ops.rotaAllowed });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(toggle);
+    await userEvent.click(
+      screen.getByRole("button", { name: t.ops.rotaAllowOff }),
+    );
+    expect(m.mutation).toHaveBeenCalledWith("adminOps:setRotaAllowed", {
+      adminToken: "tok",
+      personId: "p2",
+      allowed: false,
+    });
   });
 });

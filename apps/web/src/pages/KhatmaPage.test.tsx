@@ -24,6 +24,11 @@ vi.mock("../lib/session", () => ({
   getSessionToken: () => getSessionToken(),
   clearSessionToken: () => clearSessionToken(),
 }));
+vi.mock("./RotaKhatmaPage", () => ({
+  RotaKhatmaPage: ({ inviteCode }: { inviteCode: string }) => (
+    <p>rota page {inviteCode}</p>
+  ),
+}));
 vi.mock("../features/verify/VerifySheet", () => ({
   VerifySheet: (props: {
     title: string;
@@ -83,6 +88,13 @@ describe("KhatmaPage", () => {
     expect(
       screen.getByRole("link", { name: "الصفحة الرئيسية" }),
     ).toHaveAttribute("href", "/");
+  });
+
+  it("hands a rotating khatma to its own page", () => {
+    useQuery.mockReturnValue({ rota: true });
+    renderAt("/j/ROTA");
+    expect(screen.getByText("rota page ROTA")).toBeInTheDocument();
+    expect(screen.queryByText(/لم يعد يعمل/)).toBeNull();
   });
 
   it("shows a loading state while the query is pending", () => {

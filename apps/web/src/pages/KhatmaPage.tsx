@@ -34,6 +34,7 @@ import { useSessionToken } from "../lib/session";
 import { useClearDeadToken } from "../lib/useClearDeadToken";
 import { CelebrationPage } from "./CelebrationPage";
 import { NotFoundPage } from "./NotFoundPage";
+import { RotaKhatmaPage } from "./RotaKhatmaPage";
 
 const chip =
   "rounded-full border border-line bg-paper-2 px-3 py-1 text-base text-ink-soft";
@@ -60,11 +61,14 @@ export function KhatmaPage() {
       { replace: true },
     );
   const sessionToken = useSessionToken();
-  const view = useQuery(api.khatmas.view, {
+  const found = useQuery(api.khatmas.view, {
     sessionToken,
     inviteCode,
     ...(from ? { from } : {}),
   });
+  // A rotating khatma has its own page, rendered below once every hook has run; to the pool
+  // page's hooks it is still loading.
+  const view = found !== undefined && "rota" in found ? undefined : found;
   // Tab ids live here so a tab change the page makes can move focus to the new tab.
   const tabIds = useId();
   const [focusTab, setFocusTab] = useState<KhatmaTab | null>(null);
@@ -118,6 +122,10 @@ export function KhatmaPage() {
   const openJuz = (loaded?.tiles ?? [])
     .filter((tile) => tile.state === "open")
     .map((tile) => tile.juz);
+
+  if (found !== undefined && "rota" in found) {
+    return <RotaKhatmaPage inviteCode={inviteCode} name={found.name} />;
+  }
 
   // The sheets sit outside the page body so they survive the reload the new session token triggers.
   return (

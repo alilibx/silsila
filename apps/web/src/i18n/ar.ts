@@ -447,6 +447,220 @@ export const ar = {
       generic: commonErrors.generic,
     },
   },
+  rota: {
+    typeQuestion: "أي ختمة تريد؟",
+    poolTitle: "ختمة بالحجز",
+    poolBody: "كل شخص يختار جزءاً متاحاً، ونختم عندما تكتمل الأجزاء الثلاثون.",
+    rotaTitle: "ختمة بالتناوب",
+    rotaBody: "لكل شخص جزء ثابت يتقدّم مع كل ختمة، ويصله على واتساب مع زرّين.",
+    step: (n: number, of: number) =>
+      `${toArabicDigits(n)} من ${toArabicDigits(of)}`,
+    nameQuestion: "ما اسم الختمة؟",
+    namePlaceholder: "مثلاً: ختمة العائلة",
+    whenQuestion: "متى تقرؤون؟",
+    daily: "كل يوم",
+    weekly: "كل أسبوع",
+    monthly: "كل شهر",
+    onDays: "في يوم:",
+    ofMonth: "في أيام الشهر:",
+    everyWeek: "كل أسبوع",
+    everyTwoWeeks: "كل أسبوعين",
+    /** Saturday first, the week the way readers count it. */
+    weekdays: {
+      0: "الأحد",
+      1: "الاثنين",
+      2: "الثلاثاء",
+      3: "الأربعاء",
+      4: "الخميس",
+      5: "الجمعة",
+      6: "السبت",
+    } as Record<number, string>,
+    am: "ص",
+    pm: "م",
+    startLabel: "نبدأ",
+    endLabel: "ننتهي",
+    tomorrow: (date: string) => `غداً، ${date}`,
+    today: (date: string) => `اليوم، ${date}`,
+    noEnd: "تستمر دائماً",
+    change: "تغيير",
+    startDateInput: "تاريخ البداية",
+    endDateInput: "تاريخ النهاية",
+    next: "التالي",
+    creating: "جارٍ الإنشاء",
+    errors: {
+      not_signed_in: "سجّل دخولك أولاً ثم حاول مرة أخرى.",
+      rota_not_allowed: "الختمة بالتناوب غير متاحة لحسابك بعد.",
+      rota_cap: "لديك العدد الأقصى من الختمات بالتناوب.",
+      invalid_name: "اكتب اسماً للختمة",
+      invalid_days: "اختر يوماً واحداً على الأقل.",
+      invalid_dates: "تاريخ البداية أو النهاية غير صحيح. عدّله وحاول مرة أخرى.",
+      rate_limited: "أنشأتَ ختمات كثيرة اليوم. جرّب غداً بإذن الله.",
+      maintenance: commonErrors.maintenance,
+      forbidden: "هذا للمنظّم فقط.",
+      first_date_passed: "لا يمكن تغيير يوم البداية بعد أن بدأت الختمة.",
+      invalid_times:
+        "رتّب الأوقات: رسالة الجزء أولاً، ثم التذكير، ثم الأجزاء غير المقروءة، ثم الملخّص.",
+      invalid_zone: "التوقيت غير صحيح.",
+      not_reading_date: "هذا اليوم ليس يوم قراءة.",
+      past: "هذا اليوم مضى.",
+      archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
+    } as Record<string, string>,
+    setupTitle: "من سيقرأ معك؟",
+    personName: "الاسم",
+    personPhone: "الرقم",
+    phoneHint: "مع رمز الدولة، مثل \u200E+971",
+    add: "أضف",
+    adding: "جارٍ الإضافة",
+    me: "أنا",
+    peopleList: "المشاركون",
+    addErrors: {
+      bad_name: "اكتب اسم الشخص.",
+      bad_phone: "الرقم غير صحيح. اكتبه مع رمز الدولة، مثل \u200E+971",
+      no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
+      juz_taken: "هذا الجزء له قارئ. حاول مرة أخرى.",
+      already_added: "هذا الرقم مضاف في الختمة.",
+    } as Record<string, string>,
+    juzOf: (juz: number[]) =>
+      juz.length === 1
+        ? `الجزء ${toArabicDigits(juz[0] ?? 0)}`
+        : `الأجزاء ${juz.map((j) => toArabicDigits(j)).join(" و")}`,
+    /** The banner when ajza' have no reader; the numbers are named only while they are few. */
+    leftover: (juz: number[]) => {
+      const n = juz.length;
+      const named =
+        juz.length <= 4
+          ? ` (${juz.map((j) => toArabicDigits(j)).join(" و")})`
+          : "";
+      if (n === 1) return `بقي جزء بلا قارئ${named}`;
+      if (n === 2) return `بقي جزءان بلا قارئ${named}`;
+      if (n <= 10) return `بقيت ${toArabicDigits(n)} أجزاء بلا قارئ${named}`;
+      return `بقي ${toArabicDigits(n)} جزءاً بلا قارئ`;
+    },
+    leftoverHint: "أعطِها لمن يحب أن يقرأ أكثر، أو أضف أشخاصاً.",
+    giveTitle: (juz: number) => `من يقرأ الجزء ${toArabicDigits(juz)} أيضاً؟`,
+    giveHint: "يقرأ أكثر من جزء كل يوم، ويتقدّمان معاً.",
+    giveErrors: {
+      juz_taken: "هذا الجزء له قارئ الآن.",
+      too_many: "لا يمكنه أن يقرأ أكثر من هذا.",
+      not_found: "لم نجد هذا الشخص.",
+    } as Record<string, string>,
+    done: "تمّ",
+    tabs: { today: "اليوم", people: "المشاركون" },
+    whatsappOnly: "هذه الختمة تعمل على واتساب. يصلك جزؤك كل يوم مع زرّين.",
+    imOrganizer: "أنت المنظّم؟ سجّل الدخول",
+    cardLine: (done: string, total: string) =>
+      `ختمة بالتناوب · ${done} من ${total} اليوم`,
+    // Today
+    heading: (number: number, date: string) =>
+      `الختمة ${toArabicDigits(number)} · ${date}`,
+    cycle: (cycle: number) => `الدورة ${toArabicDigits(cycle)}`,
+    progress: (done: number, total: number) =>
+      `${toArabicDigits(done)} / ${toArabicDigits(total)}`,
+    readToday: "تمّت قراءتها اليوم",
+    nextDay: (number: number, when: string) =>
+      `التالي: الختمة ${toArabicDigits(number)} · ${when}`,
+    nextTomorrow: (time: string) => `غداً ${time}`,
+    nextOn: (date: string, time: string) => `${date} ${time}`,
+    notStarted: (number: number, date: string, time: string) =>
+      `تبدأ الختمة ${toArabicDigits(number)} يوم ${date} الساعة ${time}`,
+    ended: "انتهت أيام القراءة المحددة.",
+    pausedBanner:
+      "الختمة موقوفة الآن. لا رسائل ولا يتقدّم رقم الختمة حتى تعيد تشغيلها.",
+    archivedBanner: "هذه الختمة مؤرشفة.",
+    archivedSettings: "هذه الختمة مؤرشفة، فلا يمكن تغيير إعداداتها.",
+    setupNotDone: "أضف من سيقرأ معك، ثم اضغط «ابدأ الختمة».",
+    startKhatma: "ابدأ الختمة",
+    completeBanner: (number: number) =>
+      `اكتملت الختمة ${toArabicDigits(number)}. تقبّل الله منكم.`,
+    gridLabel: "أجزاء اليوم",
+    legendDone: "تمّ",
+    legendUnread: "لم يُقرأ",
+    legendReassigned: "أُسند",
+    tileLabel: (juz: number, state: string) =>
+      `الجزء ${toArabicDigits(juz)}، ${state}`,
+    unreadTitle: (juz: number) => `الجزء ${toArabicDigits(juz)} لم يُقرأ بعد`,
+    doneTitle: (juz: number) => `الجزء ${toArabicDigits(juz)} تمّت قراءته`,
+    holder: (name: string) => `صاحبه اليوم: ${name}`,
+    readerNow: (name: string) => `يقرؤه الآن: ${name}`,
+    readBy: (name: string) => `قرأه: ${name}`,
+    assign: "أسنده إلى مشارك",
+    readMyself: "سأقرؤه أنا",
+    markDone: "سجّله تامّاً",
+    undoDone: "ليس بعد؟ ألغِ التسجيل",
+    pickTitle: (juz: number) => `من يقرأ الجزء ${toArabicDigits(juz)} اليوم؟`,
+    finishedToday: "أتمّ جزأه اليوم",
+    readingIt: "يقرؤه الآن",
+    back: "رجوع",
+    saving: "جارٍ الحفظ",
+    todayErrors: {
+      not_found: "لم نجد هذا الجزء أو هذا الشخص. أعد تحميل الصفحة.",
+      closed: "انتهى هذا اليوم، فلا يمكن تغييره.",
+      done: "هذا الجزء مسجّل تامّاً.",
+    } as Record<string, string>,
+    // People
+    firstBanner: (date: string | null) =>
+      `جزء كل مشارك في الختمة ١${date ? `، يوم ${date}` : ""}`,
+    nextBanner: (number: number, date: string | null) =>
+      `الختمة ${toArabicDigits(number)}${date ? ` يوم ${date}` : ""}. هذا جزء كل مشارك فيها، ويتقدّم كلٌّ منهم جزءاً في كل ختمة.`,
+    addReader: (juz: number) => `+ أضف قارئاً للجزء ${toArabicDigits(juz)}`,
+    secondJuz: "جزء ثانٍ",
+    readerTitle: (juz: number) => `قارئ الجزء ${toArabicDigits(juz)}`,
+    walk: (juz: number, number: number) => {
+      // Each khatma moves a reader up one juz', and after 30 it goes back to 1.
+      const nextJuz = (juz % 30) + 1;
+      const nextNumber = (number % 30) + 1;
+      return `يقرأ الجزء ${toArabicDigits(juz)} في الختمة ${toArabicDigits(number)}، ثم ${toArabicDigits(nextJuz)} في الختمة ${toArabicDigits(nextNumber)}، وهكذا.`;
+    },
+    moveLabel: "انقله إلى الجزء",
+    moveOption: (juz: number, other: string | null) =>
+      `الجزء ${toArabicDigits(juz)}${other ? ` · سيتبادل مع ${other}` : ""}`,
+    swapsWith: (name: string) => `سيتبادل مع ${name}`,
+    swapsWithMe: "سيتبادل معي",
+    move: "انقله",
+    giveMore: "أعطه جزءاً آخر",
+    giveMoreHint: (juz: number) =>
+      `يقرأ معه الجزء ${toArabicDigits(juz)} كل يوم`,
+    remove: "أزله من الختمة",
+    stopReading: "لن أقرأ جزءاً",
+    stopReadingHint: "تبقى منظّم الختمة، ويصبح جزؤك بلا قارئ.",
+    orGiveTo: "أو أعطه لمن في الختمة",
+    removeTitle: (name: string) => `أزل ${name} من الختمة؟`,
+    removeBody: "يصبح جزؤه بلا قارئ، وتبقى قراءته اليوم كما هي.",
+    removeConfirm: "نعم، أزله",
+    cancel: "تراجع",
+    peopleErrors: {
+      not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
+      is_me: "لا يمكنك إزالة نفسك من الختمة.",
+      juz_taken: "هذا الجزء له قارئ الآن.",
+      too_many: "لا يمكنه أن يقرأ أكثر من هذا.",
+    } as Record<string, string>,
+    // Settings
+    pauseHeading: "الإيقاف",
+    pauseNow: "أوقف الختمة الآن",
+    pauseHint: "لا رسائل حتى تعيد تشغيلها، ولا يتقدّم رقم الختمة.",
+    pauseDates: "أوقف في أيام محددة",
+    pauseDatesHint: "يوم الإيقاف بلا رسائل، ولا يتقدّم رقم الختمة.",
+    addDate: "+ تاريخ",
+    removeDate: (date: string) => `احذف ${date}`,
+    pickDateTitle: "اختر يوماً للإيقاف",
+    noUpcoming: "لا توجد أيام قراءة قادمة.",
+    messagesHeading: "الرسائل",
+    messagesHint: (from: string, to: string) =>
+      `بتوقيت الختمة، بين ${from} و${to}.`,
+    messageNames: {
+      dayAt: "رسالة الجزء مع الأزرار",
+      reminder: "تذكير لمن لم يُتمّ",
+      unread: "الأجزاء غير المقروءة (لي)",
+      summary: "ملخّص اليوم (لي)",
+    },
+    timeLabel: "الوقت",
+    locked: "هذه الرسالة لا يمكن إيقافها.",
+    saveTimes: "احفظ الأوقات",
+    detailsHeading: "الختمة",
+    nameLabel: "اسم الختمة",
+    timeZoneLabel: "التوقيت",
+    timeZoneHint: "كل الأوقات بهذا التوقيت.",
+  },
   share: {
     inviteButton: "ادعُ أحبابك",
     remindButton: "ذكّر المجموعة",

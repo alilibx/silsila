@@ -6,6 +6,7 @@ import { HelpProvider } from "./features/help/helpUi";
 import { useClaimVisitorHelp } from "./features/help/useClaimVisitorHelp";
 import { BottomBarProvider } from "./features/nav/bottomBarUi";
 import { useHelpDeepLink } from "./features/help/useHelpDeepLink";
+import { RotaPeopleSetup } from "./features/rota/RotaPeopleSetup";
 import { OpenInBrowser } from "./features/status/OpenInBrowser";
 import { StatusBanners } from "./features/status/StatusBanners";
 import { BottomBar } from "./components/BottomBar";
@@ -16,6 +17,7 @@ import { HomePage } from "./pages/HomePage";
 import { KhatmaRoute } from "./pages/KhatmaPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OrganizerPage } from "./pages/OrganizerPage";
+import { RotaCreatePage } from "./pages/RotaCreatePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SignOutPage } from "./pages/SignOutPage";
 
@@ -45,7 +47,12 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/new" element={<CreatePage />} />
+              <Route path="/new/rota" element={<RotaCreatePage />} />
               <Route path="/j/:inviteCode" element={<KhatmaRoute />} />
+              <Route
+                path="/j/:inviteCode/setup"
+                element={<RotaPeopleSetup />}
+              />
               <Route
                 path="/j/:inviteCode/settings"
                 element={<OrganizerPage />}

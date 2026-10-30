@@ -191,7 +191,7 @@ test("a held juz' shows its reader their pace in days, and others nothing", asyn
     inviteCode: "STATSCODE012",
     sessionToken: token,
   });
-  if ("notFound" in view) throw new Error("not found");
+  if ("notFound" in view || "rota" in view) throw new Error("not found");
   expect(view.me.hold).toBeNull();
   // taking a juz' puts the pace on the held card
   expect(
@@ -205,7 +205,7 @@ test("a held juz' shows its reader their pace in days, and others nothing", asyn
     inviteCode: "STATSCODE012",
     sessionToken: token,
   });
-  if ("notFound" in held) throw new Error("not found");
+  if ("notFound" in held || "rota" in held) throw new Error("not found");
   expect(held.me.hold?.paceDays).toBe(2);
 });
 
@@ -227,4 +227,21 @@ test("touch writes only what changed: nothing at all when the person was seen wi
   await touchPerson(ctx, person, NOW + HOUR, "Asia/Dubai");
   expect(patch).toHaveBeenLastCalledWith("p1", { lastSeenAt: NOW + HOUR });
   expect(patch).toHaveBeenCalledTimes(2);
+});
+
+test("me: says whether the caller may create a rota khatma; missing means no; signed out is null", async () => {
+  const c = await setup();
+  const { t, token, personId } = c;
+  expect(await t.query(api.people.me, { sessionToken: token })).toEqual({
+    rotaAllowed: false,
+  });
+  await t.run((ctx) => ctx.db.patch(personId, { rotaAllowed: true }));
+  expect(await t.query(api.people.me, { sessionToken: token })).toEqual({
+    rotaAllowed: true,
+  });
+  await t.run((ctx) => ctx.db.patch(personId, { rotaAllowed: false }));
+  expect(await t.query(api.people.me, { sessionToken: token })).toEqual({
+    rotaAllowed: false,
+  });
+  expect(await t.query(api.people.me, {})).toBeNull();
 });

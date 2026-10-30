@@ -4,6 +4,7 @@ import {
   cleanKhatmaName,
   maskPhone,
   normalizeDigits,
+  normalizePhone,
   toArabicDigits,
 } from "./text";
 
@@ -135,5 +136,28 @@ describe("cleanKhatmaName", () => {
     expect(
       Array.from(cleanKhatmaName("ب" + "😀".repeat(70)) ?? ""),
     ).toHaveLength(60);
+  });
+});
+
+describe("normalizePhone", () => {
+  it("strips spaces and keeps the plus", () => {
+    expect(normalizePhone("+971 50 123 4567")).toBe("+971501234567");
+  });
+
+  it("reads Arabic digits and a leading 00", () => {
+    expect(normalizePhone("٠٠٩٧١ ٥٠-١٢٣ ٤٥٦٧")).toBe("+971501234567");
+    expect(normalizePhone("(+971) 50.123.4567")).toBe("+971501234567");
+  });
+
+  it("refuses a number without a country code or one too short or long", () => {
+    expect(normalizePhone("0501234567")).toBeNull();
+    expect(normalizePhone("+12")).toBeNull();
+    expect(normalizePhone("+1234567890123456")).toBeNull();
+    expect(normalizePhone("+971abc")).toBeNull();
+  });
+
+  it("refuses a country code that starts with 0", () => {
+    expect(normalizePhone("+0123456789")).toBeNull();
+    expect(normalizePhone("000971501234567")).toBeNull();
   });
 });
