@@ -78,6 +78,15 @@ export function juzPhraseGenitive(juz: readonly number[]): string {
   return juz.length === 2 ? `الجزأين ${juzList(juz)}` : juzPhrase(juz);
 }
 
+/**
+ * How a cheer opens. It's built around «قراءة» so the verb agrees whoever read:
+ * a name may be a man's or a woman's.
+ */
+export function cheerLead(juz: readonly number[], name: string | null): string {
+  const what = juzPhraseGenitive(juz) || "جزء";
+  return `تمّت قراءة ${what}${name === null ? "" : ` على يد ${name}`}`;
+}
+
 /** The count with the noun agreeing: جزءاً واحداً, جزأين, ٣ أجزاء, ١١ جزءاً. */
 function ajzaa(n: number): string {
   if (n === 1) return "جزءاً واحداً";
@@ -121,7 +130,7 @@ export function noteText(n: NoteTextInput, now: number = Date.now()): string {
     case "behind":
       return `الختمة تحتاج ${behindPhrase(n.count ?? 0, n.until, now)}. هل تأخذ جزءاً؟`;
     case "cheer":
-      return `أتمّ ${n.name ?? "أحد الأعضاء"} ${juzPhraseGenitive(n.juz) || "جزءاً"}، فتمّ ${toArabicDigits(n.count ?? 0)} من ٣٠ جزءاً في ختمتكم. بارك الله في قراءتكم.`;
+      return `${cheerLead(n.juz, n.name ?? null)}، وأصبح المقروء ${toArabicDigits(n.count ?? 0)} من ٣٠ جزءاً في ختمتكم. بارك الله في قراءتكم.`;
     case "completed":
       return "ختمنا القرآن معاً، الحمد لله";
     case "nowOrganizer":

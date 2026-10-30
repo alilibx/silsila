@@ -33,6 +33,7 @@ describe("CheerField", () => {
       screen.getByLabelText(t.cheer.audienceLabel),
       t.cheer.audience.everyone,
     );
+    expect(screen.queryByText(t.cheer.followsDefault)).toBeNull();
     await user.selectOptions(screen.getByLabelText(t.cheer.gapLabel), "0");
     await user.click(screen.getByRole("button", { name: t.organizer.save }));
 

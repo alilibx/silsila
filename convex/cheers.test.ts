@@ -162,11 +162,26 @@ test("the note names nobody and no juz'", () => {
 test("the text says only what the note carries", () => {
   const base = { kind: "cheer" as const, count: 3, until: null };
   const named = noteText({ ...base, juz: [], name: "سارة" });
-  expect(named).toContain("أتمّ سارة جزءاً");
+  expect(named).toContain("تمّت قراءة جزء على يد سارة");
   const numbered = noteText({ ...base, juz: [5] });
-  expect(numbered).toContain("أتمّ أحد الأعضاء الجزء ٥");
+  expect(numbered).toContain("تمّت قراءة الجزء ٥،");
   const both = noteText({ ...base, juz: [5], name: "سارة" });
-  expect(both).toContain("أتمّ سارة الجزء ٥");
+  expect(both).toContain("تمّت قراءة الجزء ٥ على يد سارة");
+});
+
+test("a reader who asked for more time is cheered again", async () => {
+  const { t, code } = await setup();
+  const reader = await signedIn(t, "القارئ");
+  await take(t, code, reader, 3);
+  await t.run(async (ctx) => {
+    const row = await ctx.db.query("assignments").first();
+    await ctx.db.patch(row!._id, { noticeSentAt: NOW, extended: true });
+  });
+
+  await read(t, code, await signedIn(t, "المُتم"), 7);
+  await advance(t, AFTER_UNDO);
+
+  expect(await cheersOf(t, reader)).toHaveLength(1);
 });
 
 test("a khatma can choose to show the reader's name and juz'", async () => {

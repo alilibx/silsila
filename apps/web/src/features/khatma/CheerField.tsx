@@ -99,7 +99,7 @@ function CheerForm({ setting, disabled, hint, onSave }: Props) {
           </select>
         </>
       )}
-      {setting.override === null && (
+      {setting.override === null && !changed && (
         <p className="mt-3 text-ink-soft">{t.cheer.followsDefault}</p>
       )}
       <div className="mt-4 grid gap-3">

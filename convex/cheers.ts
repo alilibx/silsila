@@ -14,10 +14,10 @@ import { enqueue, reachable, windowOpen } from "./rotaOutbox";
 
 /**
  * Tells other readers a juz' was finished. By default a cheer names nobody and
- * no juz' (the tile showed who held it, so the number would name them too);
- * a khatma can choose to show either. It is rarer
- * than the finishes it follows, stays private, and isn't a nudge: it never
- * delays a reminder, and a recent nudge holds it back instead.
+ * no juz' (the tile showed who held it, so the number would name them too); a
+ * khatma can choose to show either. It is rarer than the finishes it follows
+ * and isn't a nudge: it never delays a reminder, and a recent nudge holds it
+ * back instead.
  */
 
 /**
@@ -86,10 +86,11 @@ export const afterFinish = internalMutation({
       }
       const held = heldAssignment(assignments, member.personId);
       // A hold opened for help is already asking someone else to step in, and
-      // the "almost up" note has just told its reader about the time.
+      // an "almost up" note still waiting for an answer is about the time.
       if (
         held &&
-        (held.openedForHelpAt !== null || held.noticeSentAt !== null)
+        (held.openedForHelpAt !== null ||
+          (held.noticeSentAt !== null && !held.extended))
       ) {
         continue;
       }

@@ -1,6 +1,6 @@
 import { DUAS } from "./duas";
 import { toArabicDigits } from "./digits";
-import { juzPhrase, juzPhraseGenitive } from "./noteText";
+import { cheerLead, juzPhrase, juzPhraseGenitive } from "./noteText";
 import { khatmaTitle, type TemplateMessage } from "./whatsappTemplates";
 
 /**
@@ -196,7 +196,7 @@ export function cheerText(
   name: string | null,
   juz: number[],
 ): string {
-  return `أتمّ ${name ?? "أحد المشاركين"} ${juzPhraseGenitive(juz) || "جزءاً"}، فتمّ ${toArabicDigits(doneCount)} من ٣٠ جزءاً اليوم. بارك الله في قراءتكم.`;
+  return `${cheerLead(juz, name)}، وأصبح المقروء ${toArabicDigits(doneCount)} من ٣٠ جزءاً اليوم. بارك الله في قراءتكم.`;
 }
 
 /** `reminderTime` is the already formatted time of the day's reminder, or null with none. */
