@@ -48,7 +48,7 @@ export function SavedPicker({
   return (
     <Sheet title={t.rota.savedTitle} onClose={onClose}>
       <p className="text-ink-soft">{t.rota.savedHint}</p>
-      <ul className="mt-3 grid gap-2">
+      <ul aria-label={t.rota.savedTitle} className="mt-3 grid gap-2">
         {(saved ?? []).map((contact) => (
           <li key={contact.id}>
             <button

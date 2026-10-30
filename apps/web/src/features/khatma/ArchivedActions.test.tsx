@@ -1,10 +1,18 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConvexError } from "convex/values";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/ar";
 import { ArchiveSection, ArchivedSection } from "./ArchivedActions";
+import { resetDeleting, startDelete, useDeleteFailure } from "./deleting";
 
 const m = vi.hoisted(() => ({
   archive: vi.fn(),
@@ -56,6 +64,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  resetDeleting();
 });
 
 describe("ArchiveSection", () => {
@@ -261,6 +270,23 @@ describe("ArchivedSection", () => {
       t.rota.errors.not_archived ?? "",
     );
     expect(where()).toBe("/j/CODE/settings");
+  });
+
+  it("a second delete while the first still lingers says so and deletes nothing", async () => {
+    const failure = renderHook(() => useDeleteFailure("OTHER"));
+    await act(async () => {
+      await startDelete("CODE", m.remove, () => {});
+    });
+    const other = vi.fn();
+
+    let deleted: boolean | undefined;
+    await act(async () => {
+      deleted = await startDelete("OTHER", other, () => {});
+    });
+
+    expect(deleted).toBe(false);
+    expect(other).not.toHaveBeenCalled();
+    expect(failure.result.current).toBe(t.archive.deleteBusy);
   });
 
   it("the delete button is red", () => {

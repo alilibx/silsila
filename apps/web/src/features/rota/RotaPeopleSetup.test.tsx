@@ -69,6 +69,7 @@ function renderSetup() {
     <MemoryRouter initialEntries={["/j/CODE/setup"]}>
       <Routes>
         <Route path="/j/:inviteCode/setup" element={<RotaPeopleSetup />} />
+        <Route path="/j/:inviteCode" element={<p>khatma page</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -81,6 +82,18 @@ beforeEach(() => {
     { id: "c1", name: "أم خالد", phone: "+971509998877", inKhatma: false },
   ];
   m.importable = [pool];
+});
+
+describe("RotaPeopleSetup: an archived khatma", () => {
+  it("goes to the khatma's page, and draws no join link on the way", () => {
+    m.view = { ...makeView(), archived: true, joinLink: null };
+    renderSetup();
+    expect(screen.getByText("khatma page")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: t.rota.setupTitle }),
+    ).toBeNull();
+    expect(m.fns.ensureJoinLink ?? vi.fn()).not.toHaveBeenCalled();
+  });
 });
 
 describe("RotaPeopleSetup: bringing people in", () => {

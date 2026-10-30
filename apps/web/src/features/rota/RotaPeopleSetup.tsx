@@ -197,7 +197,7 @@ function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
 
 /**
  * Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. Whoever
- * has no People view is sent to `khatmaPath`, where «تمّ» goes too.
+ * has no People view, and anyone on an archived khatma, is sent to `khatmaPath`, where «تمّ» goes too.
  */
 export function RotaPeopleSetupContent({
   inviteCode,
@@ -212,11 +212,11 @@ export function RotaPeopleSetupContent({
   const finishSetup = useMutation(backend.finishSetup);
   const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
-  useEnsureJoinLink(inviteCode, view?.joinLink);
+  useEnsureJoinLink(inviteCode, view?.archived ? undefined : view?.joinLink);
 
   if (view === undefined) return null;
-  // Only the organizer sets people up.
-  if (view === null) {
+  // Only the organizer sets people up, and an archived khatma is read-only.
+  if (view === null || view.archived) {
     return <Navigate to={khatmaPath} replace />;
   }
 

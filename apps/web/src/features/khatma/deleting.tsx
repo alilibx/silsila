@@ -46,15 +46,20 @@ export function dismissDeleteFailure() {
 
 /**
  * Deletes the khatma and, once it is gone, runs `onDone` (the move home). `call` answers `{ ok }`
- * or `{ error }`. A refusal or a failure ends the state and is kept for `useDeleteFailure`.
- * Resolves to whether the khatma was deleted.
+ * or `{ error }`. A refusal or a failure ends the state and is kept for `useDeleteFailure`, and
+ * so is a delete refused because another still holds the state (it may be lingering after the
+ * move). Resolves to whether the khatma was deleted.
  */
 export async function startDelete(
   inviteCode: string,
   call: () => Promise<{ ok: true } | { error: string }>,
   onDone: () => void,
 ): Promise<boolean> {
-  if (deletingCode !== null) return false;
+  if (deletingCode !== null) {
+    failure = { code: inviteCode, message: t.archive.deleteBusy };
+    emit();
+    return false;
+  }
   clearTimeout(clearTimer);
   deletingCode = inviteCode;
   failure = null;

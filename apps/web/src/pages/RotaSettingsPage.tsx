@@ -114,13 +114,18 @@ export function RotaSettingsPage() {
   );
 }
 
-/** A rotating khatma's settings: pausing, the message times, the days and the name. */
+/**
+ * A rotating khatma's settings: pausing, the message times, the days and the name. `headingLevel`
+ * is for a page that already has its `h1`.
+ */
 export function RotaSettingsContent({
   settings,
   inviteCode,
+  headingLevel: Heading = "h1",
 }: {
   settings: SettingsView;
   inviteCode: string;
+  headingLevel?: "h1" | "h2";
 }) {
   const backend = useRotaBackend(inviteCode);
   const update = useMutation(backend.update);
@@ -210,9 +215,9 @@ export function RotaSettingsContent({
 
   return (
     <>
-      <h1 className="font-display text-4xl leading-tight text-green-deep">
+      <Heading className="font-display text-4xl leading-tight text-green-deep">
         {t.khatmaSettings.link}
-      </h1>
+      </Heading>
       {settings.archived && (
         <p
           role="note"

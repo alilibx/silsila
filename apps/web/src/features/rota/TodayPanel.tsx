@@ -258,7 +258,7 @@ export function TodayPanel({
           formatIsoDate(view.next.date),
           formatTime(dayAt),
         )
-      : view.paused
+      : view.paused && !view.archived
         ? null
         : t.rota.ended;
   const noDay =
@@ -274,7 +274,7 @@ export function TodayPanel({
 
   return (
     <div className="mt-4">
-      {view.paused && (
+      {view.paused && !view.archived && (
         <p
           role="note"
           className="mb-3 rounded-ui border-2 border-gold bg-[#FBF1D9] p-3 font-medium"

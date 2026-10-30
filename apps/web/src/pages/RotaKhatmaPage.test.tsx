@@ -682,6 +682,23 @@ describe("an archived khatma", () => {
     m.settings = { ...settings, archived: true };
   });
 
+  it("says its days have ended, paused or not, and never promises a next one", () => {
+    m.today = todayView({
+      archived: true,
+      paused: true,
+      day: null,
+      tiles: [],
+      next: { number: 13, date: null },
+    });
+    m.people = { ...peopleView(roster), target: { number: 13, date: null } };
+    const { unmount } = renderAt();
+    expect(screen.getByText(t.rota.ended)).toBeInTheDocument();
+    expect(screen.queryByText(t.rota.pausedBanner)).toBeNull();
+    unmount();
+    renderAt("/j/CODE?tab=people");
+    expect(screen.getByText(t.rota.nextBanner(13, null))).toBeInTheDocument();
+  });
+
   it("says so once, on Today and on People", () => {
     const { unmount } = renderAt();
     expect(screen.getAllByText(t.archive.banner)).toHaveLength(1);

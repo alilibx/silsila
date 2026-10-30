@@ -34,7 +34,7 @@ beforeEach(() => {
 describe("SavedPicker", () => {
   it("lists the saved people; a hidden number is not shown, and who is in already cannot be pressed", () => {
     render(<SavedPicker inviteCode="CODE" onClose={() => {}} />);
-    const list = within(sheet()).getByRole("list");
+    const list = within(sheet()).getByRole("list", { name: t.rota.savedTitle });
     expect(within(list).getAllByRole("listitem")).toHaveLength(3);
     expect(within(list).getByText("+971501234567")).toBeInTheDocument();
     expect(within(list).getByText("نورة").closest("button")).toBeDisabled();
