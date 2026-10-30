@@ -7,7 +7,6 @@ import type { SettingKey } from "@convex/lib/settings";
 import { Button } from "@web/components/Button";
 import { GraceField } from "@web/components/GraceField";
 import { Sheet } from "@web/components/Sheet";
-import { SwitchRow } from "@web/components/SwitchRow";
 import { t as webT } from "@web/i18n/ar";
 import { useMutation } from "convex/react";
 import { useId, useState } from "react";
@@ -52,7 +51,11 @@ function errorText(code: string): string {
   return known[code] ?? t.settings.errors.generic;
 }
 
-/** One setting: its value, default and range, with an editor sheet (spec 9.1). */
+/**
+ * One setting as a row: its name, what it does, and its value. Tapping it opens
+ * a sheet that says why the default was chosen, with the editor (spec 9.1).
+ * Switches flip in place.
+ */
 export function SettingField({ setting }: { setting: SettingRow }) {
   const adminToken = useAdminToken() ?? "";
   const set = useMutation(api.adminSettings.set);
@@ -61,6 +64,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const label = t.settings.labels[setting.key];
+  const labelId = useId();
   const { spec } = setting;
 
   async function run(call: () => Promise<{ ok: true } | { error: string }>) {
@@ -80,24 +84,12 @@ export function SettingField({ setting }: { setting: SettingRow }) {
   const save = (value: unknown) =>
     run(() => set({ adminToken, key: setting.key, value }));
 
-  if (spec.kind === "bool") {
-    return (
-      <div>
-        <SwitchRow
-          label={label}
-          on={setting.value === true}
-          disabled={busy}
-          onChange={(on) => void save(on)}
-        />
-        {error !== null && (
-          <p role="alert" className="mt-1 text-sm text-saffron-ink">
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
-
+  const { what, why } = t.settings.help[setting.key];
+  const changed = !setting.isDefault && (
+    <span className="rounded-full bg-saffron-soft px-2 py-0.5 text-xs font-normal text-saffron-ink">
+      {t.settings.custom}
+    </span>
+  );
   const range =
     spec.kind === "int" || spec.kind === "number" || spec.kind === "duration"
       ? t.settings.range(
@@ -105,46 +97,118 @@ export function SettingField({ setting }: { setting: SettingRow }) {
           formatSetting(spec, spec.max),
         )
       : null;
+  const reason = (
+    <>
+      <p>{why}</p>
+      <p className="mt-2 text-ink-soft">
+        {t.settings.defaultValue}: {formatSetting(spec, setting.defaultValue)}
+      </p>
+      {range !== null && <p className="text-ink-soft">{range}</p>}
+    </>
+  );
+  const errorLine = (className: string) =>
+    error !== null && (
+      <p role="alert" className={className}>
+        {error}
+      </p>
+    );
+
+  if (spec.kind === "bool") {
+    const on = setting.value === true;
+    return (
+      <div className="px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex flex-wrap items-center gap-2 font-medium">
+              <span id={labelId}>{label}</span>
+              {changed}
+            </span>
+            <span className="text-sm text-ink-soft">{what}</span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            aria-labelledby={labelId}
+            disabled={busy}
+            onClick={() => void save(!on)}
+            className={`flex shrink-0 items-center gap-2 pt-0.5 disabled:opacity-50 ${on ? "text-green-deep" : "text-ink-soft"}`}
+          >
+            {on ? t.settings.on : t.settings.off}
+            <span
+              aria-hidden="true"
+              className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${on ? "bg-green" : "bg-line"}`}
+            >
+              <span
+                className={`size-5 rounded-full bg-white transition-[margin] ${on ? "ms-auto" : "me-auto"}`}
+              />
+            </span>
+          </button>
+        </div>
+        <details className="mt-1 text-sm">
+          <summary className="cursor-pointer text-green underline underline-offset-4">
+            {t.settings.whyDefault}
+          </summary>
+          <div className="mt-1">{reason}</div>
+        </details>
+        {errorLine("mt-1 text-sm text-saffron-ink")}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-start justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 py-3">
-      <div className="flex flex-col gap-1">
-        <span className="font-medium">{label}</span>
-        <span className="text-lg text-green-deep">
-          {formatSetting(spec, setting.value)}
-        </span>
-        <span className="text-xs text-ink-soft">
-          {t.settings.defaultValue}: {formatSetting(spec, setting.defaultValue)}
-          {!setting.isDefault && ` · ${t.settings.custom}`}
-        </span>
-        {range !== null && (
-          <span className="text-xs text-ink-soft">{range}</span>
-        )}
-      </div>
+    <div>
       <button
         type="button"
         aria-label={`${t.settings.edit} ${label}`}
-        className="shrink-0 font-medium text-green underline underline-offset-4"
+        // The label replaces the content's name, so the value, badge and description come back as its description.
+        aria-describedby={`${labelId}-value ${labelId}-what`}
+        className="flex w-full flex-col gap-0.5 px-4 py-3 text-start hover:bg-paper"
         onClick={() => {
           setError(null);
           setOpen(true);
         }}
       >
-        {t.settings.edit}
+        <span className="flex w-full items-start gap-3">
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 font-medium">
+            {label}
+            {changed}
+          </span>
+          <span className="flex max-w-[50%] shrink-0 items-start gap-2 text-end font-semibold text-green-deep">
+            <span id={`${labelId}-value`} className="line-clamp-2">
+              {formatSetting(spec, setting.value)}
+              {!setting.isDefault && (
+                <>
+                  {" "}
+                  <span className="sr-only">{`· ${t.settings.custom}`}</span>
+                </>
+              )}
+            </span>
+            <span aria-hidden="true" className="font-normal text-ink-soft">
+              ‹
+            </span>
+          </span>
+        </span>
+        <span id={`${labelId}-what`} className="text-sm text-ink-soft">
+          {what}
+        </span>
       </button>
       {open && (
         <Sheet title={label} onClose={() => setOpen(false)}>
-          <Editor
-            setting={setting}
-            label={label}
-            busy={busy}
-            onSave={(value) => void save(value)}
-          />
-          {error !== null && (
-            <p role="alert" className="mt-3 text-center text-saffron-ink">
-              {error}
-            </p>
-          )}
+          <p>{what}</p>
+          <div className="mt-3 rounded-ui bg-paper-2 p-3 text-sm">
+            <p className="mb-1 font-semibold">{t.settings.whyDefault}</p>
+            {reason}
+          </div>
+          <div className="mt-4">
+            <Editor
+              setting={setting}
+              label={label}
+              busy={busy}
+              onSave={(value) => void save(value)}
+            />
+          </div>
+          {errorLine("mt-3 text-center text-saffron-ink")}
           <div className="mt-3 flex flex-col gap-2">
             {!setting.isDefault && (
               <Button
@@ -160,6 +224,17 @@ export function SettingField({ setting }: { setting: SettingRow }) {
           </div>
         </Sheet>
       )}
+    </div>
+  );
+}
+
+/** Settings as one card, a line between rows. */
+export function SettingList({ rows }: { rows: SettingRow[] }) {
+  return (
+    <div className="divide-y divide-line overflow-hidden rounded-ui border-2 border-line bg-card">
+      {rows.map((row) => (
+        <SettingField key={row.key} setting={row} />
+      ))}
     </div>
   );
 }
