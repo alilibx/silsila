@@ -93,7 +93,6 @@ export function AdminsPage() {
           onChange={(e) => setPhone(e.target.value)}
           inputMode="tel"
           dir="ltr"
-          className="rounded-lg border bg-card p-3"
         />
         <Button
           type="submit"

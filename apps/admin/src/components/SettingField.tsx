@@ -342,7 +342,7 @@ function Editor({
               onChange={(e) => setText(e.target.value)}
               inputMode={spec.kind === "version" ? "text" : "decimal"}
               dir="ltr"
-              className="w-full rounded-lg border bg-card p-3 text-center text-lg"
+              className="w-full text-center text-lg"
             />
           )}
           {spec.kind === "duration" && (

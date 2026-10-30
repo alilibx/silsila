@@ -36,7 +36,7 @@ export function HelpInboxPage() {
             role="tab"
             aria-selected={tab === status}
             onClick={() => setStatus(tab)}
-            className={`rounded-full px-4 py-2 text-sm ${tab === status ? "bg-primary text-white" : "border bg-card"}`}
+            className={`rounded-full px-4 py-2 text-sm ${tab === status ? "bg-primary text-primary-foreground" : "border bg-card"}`}
           >
             {t.help.tabs[tab]}
           </button>

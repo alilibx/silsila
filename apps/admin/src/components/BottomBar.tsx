@@ -20,7 +20,7 @@ export function BottomBar() {
   return (
     <nav
       aria-label={t.shell.navLabel}
-      className="fixed inset-x-0 bottom-0 z-30 border-t bg-card pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-10 border-t bg-card pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="grid grid-cols-5">
         {tabs.map((tab) => (

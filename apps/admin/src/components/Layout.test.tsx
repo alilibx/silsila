@@ -98,6 +98,14 @@ describe("Layout", () => {
       ).toBeInTheDocument();
     });
 
+    it("stays under the sheets the rota pages open", () => {
+      renderAt("/");
+      // The website's Sheet is z-20 and keeps its bottom edge over this bar.
+      expect(
+        screen.getByRole("navigation", { name: t.shell.navLabel }),
+      ).toHaveClass("z-10");
+    });
+
     it("marks more as active for a page behind it", () => {
       renderAt("/audit");
       expect(

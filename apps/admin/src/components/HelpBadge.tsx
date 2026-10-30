@@ -13,7 +13,7 @@ export function HelpBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "rounded-full bg-saffron px-1.5 text-[11px] leading-4 font-medium text-white",
+        "rounded-full bg-sidebar-primary px-1.5 text-[11px] leading-4 font-medium text-sidebar-primary-foreground",
         className,
       )}
     >

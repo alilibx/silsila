@@ -33,7 +33,7 @@ function OpenHelpCard({ adminToken }: { adminToken: string }) {
           </span>
         )}
       </span>
-      <span className="rounded-full bg-saffron px-3 py-1 font-semibold text-white">
+      <span className="rounded-full bg-sidebar-primary px-3 py-1 font-semibold text-sidebar-primary-foreground">
         {counts.open >= 100 ? t.help.manyOpen : toArabicDigits(counts.open)}
       </span>
     </Link>
@@ -150,7 +150,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
                 role="radio"
                 aria-checked={p === days}
                 onClick={() => setDays(p)}
-                className={`rounded-full px-2.5 py-1 text-xs ${p === days ? "bg-primary text-white" : "border "}`}
+                className={`rounded-full px-2.5 py-1 text-xs ${p === days ? "bg-primary text-primary-foreground" : "border "}`}
               >
                 {t.stats.periods[p]}
               </button>

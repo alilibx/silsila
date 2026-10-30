@@ -85,7 +85,6 @@ export function SearchPage() {
           id={khatmaId}
           value={khatmaQuery}
           onChange={(e) => setKhatmaQuery(e.target.value)}
-          className="rounded-lg border bg-card p-3"
         />
         <Button
           type="submit"
@@ -132,7 +131,6 @@ export function SearchPage() {
           inputMode="tel"
           dir="ltr"
           onChange={(e) => setPhone(e.target.value)}
-          className="rounded-lg border bg-card p-3"
         />
         <Button
           type="submit"

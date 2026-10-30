@@ -193,7 +193,6 @@ export function OrganizersPage() {
           inputMode="tel"
           dir="ltr"
           onChange={(e) => setPhone(e.target.value)}
-          className="rounded-lg border bg-card p-3"
         />
         <Button
           type="submit"
