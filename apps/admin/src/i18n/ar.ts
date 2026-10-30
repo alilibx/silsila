@@ -4,6 +4,7 @@ import { formatCount, formatDecimal } from "../lib/formatNumber";
 import type { AuditAction } from "@convex/lib/audit";
 import type { SettingGroup } from "@convex/lib/settingSpecs";
 import type { SettingKey } from "@convex/lib/settings";
+import { groupIntros, help, sections } from "./settingsHelp";
 
 const labels: Record<SettingKey, string> = {
   maxMembers: "أقصى عدد أعضاء في الختمة",
@@ -129,8 +130,6 @@ export const ar = {
   home: {
     title: "الرئيسية",
     switches: "المفاتيح السريعة",
-    maintenanceHint: "يظهر شريط الصيانة في الموقع وتتوقف كل الأفعال.",
-    announcementHint: "يظهر أعلى كل صفحات الموقع حتى يخفيه الزائر.",
     save: "حفظ",
     saved: "تمّ الحفظ",
   },
@@ -138,6 +137,16 @@ export const ar = {
     title: "الإعدادات",
     groups,
     labels,
+    help,
+    groupIntros,
+    sections,
+    tabsLabel: "مجموعات الإعدادات",
+    changedTab: "المعدّلة",
+    searchLabel: "ابحث في الإعدادات",
+    searchPlaceholder: "ابحث بالاسم أو الوصف",
+    noChanges: "كل الإعدادات على قيمها الافتراضية.",
+    noResults: "لا يوجد إعداد يطابق البحث.",
+    whyDefault: "لماذا هذا الافتراضي؟",
     edit: "تعديل",
     save: "حفظ",
     cancel: "إلغاء",
