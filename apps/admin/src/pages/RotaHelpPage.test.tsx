@@ -81,6 +81,10 @@ const settings = {
   pauseDates: [],
   upcoming: [],
   quiet: { startHour: 22, endHour: 7 },
+  cheer: {
+    override: null,
+    defaults: { on: true, everyone: false, gapMs: 86_400_000 },
+  },
   archived: false,
 };
 const organizer = {

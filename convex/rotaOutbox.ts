@@ -14,6 +14,7 @@ import {
   ROTA_BUTTONS,
   assignedText,
   assignedTemplate,
+  cheerText,
   clockText,
   completeTemplate,
   completeText,
@@ -49,7 +50,7 @@ type FreeForm = { text: string; buttons?: { id: string; title: string }[] };
 const WINDOW_MS = 24 * 3_600_000;
 
 /** Whether a participant may be sent messages Wirdak starts: on the list, joined, not stopped or silenced. */
-function reachable(p: Participant | null): p is Participant {
+export function reachable(p: Participant | null): p is Participant {
   return (
     p !== null &&
     p.removedAt == null &&
@@ -57,6 +58,19 @@ function reachable(p: Participant | null): p is Participant {
     p.stoppedAt == null &&
     p.silencedAt == null
   );
+}
+
+/** Whether a phone wrote to us in the last 24 hours, so free-form messages reach it. */
+export async function windowOpen(
+  ctx: QueryCtx,
+  phone: string,
+  now: number,
+): Promise<boolean> {
+  const contact = await ctx.db
+    .query("waContacts")
+    .withIndex("by_phone", (q) => q.eq("phone", phone))
+    .unique();
+  return contact !== null && contact.lastInboundAt >= now - WINDOW_MS;
 }
 
 /** Kinds that name the ajza' of a reassignment: several on one day make one message. */
@@ -251,7 +265,7 @@ export async function welcomeMessage(
 function compose(
   row: Doc<"rotaOutbox">,
   khatma: { name: string | null; createdAt: number },
-  windowOpen: boolean,
+  inWindow: boolean,
   staging: boolean,
 ): TemplateMessage | FreeForm | null {
   const number = row.number ?? 0;
@@ -261,7 +275,7 @@ function compose(
     case "assigned": {
       if (row.dayId === null || row.number === null) return null;
       const payloads = donePayloads(row, staging);
-      if (!windowOpen) {
+      if (!inWindow) {
         if (row.kind === "juz") {
           return juzTemplate(khatma, row.juz, number, payloads);
         }
@@ -285,12 +299,12 @@ function compose(
       };
     }
     case "covered":
-      return windowOpen
+      return inWindow
         ? { text: titled(khatma, coveredText(row.juz)) }
         : coveredTemplate(khatma, row.juz);
     case "complete": {
       if (row.dayId === null || row.number === null) return null;
-      if (windowOpen) {
+      if (inWindow) {
         return {
           text: titled(khatma, `${completeText(number)}\n\n${duaText()}`),
         };
@@ -306,9 +320,12 @@ function compose(
       return completeTemplate(khatma, number, dua);
     }
     case "cycle":
-      return windowOpen
+      return inWindow
         ? { text: titled(khatma, cycleText) }
         : cycleTemplate(khatma);
+    case "cheer":
+      // No template, as Meta would count it as marketing.
+      return inWindow ? { text: titled(khatma, cheerText(number)) } : null;
     case "welcome":
       // Needs the database; `plan` builds it (there is no template for it).
       return null;
@@ -374,15 +391,10 @@ export const plan = internalQuery({
     const now = Date.now();
     const awake = nextAwake(now, rota.timeZone, await quietHours(ctx));
     if (awake > now) return { retryAt: awake };
-    const contact = await ctx.db
-      .query("waContacts")
-      .withIndex("by_phone", (q) => q.eq("phone", participant.phone))
-      .unique();
-    const windowOpen =
-      contact !== null && contact.lastInboundAt >= now - WINDOW_MS;
+    const inWindow = await windowOpen(ctx, participant.phone, now);
     if (row.kind === "welcome") {
       // No template: outside the window the next juz' message follows anyway.
-      if (!windowOpen) return null;
+      if (!inWindow) return null;
       return {
         phone: participant.phone,
         message: await welcomeMessage(ctx, khatma, participant, now),
@@ -391,7 +403,7 @@ export const plan = internalQuery({
     const message = compose(
       waiting === null ? row : { ...row, juz: waiting },
       { name: khatma.name, createdAt: khatma.createdAt },
-      windowOpen,
+      inWindow,
       isStaging(),
     );
     return message === null ? null : { phone: participant.phone, message };

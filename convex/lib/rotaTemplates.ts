@@ -190,6 +190,11 @@ export function thanksText(doneCount: number): string {
   return `تقبّل الله منك. ${toArabicDigits(doneCount)} من ٣٠ جزءاً تمّت اليوم.`;
 }
 
+/** A cheer to the other readers: it names nobody and no juz'. */
+export function cheerText(doneCount: number): string {
+  return `أتمّ أحد المشاركين جزءاً، فتمّ ${toArabicDigits(doneCount)} من ٣٠ جزءاً اليوم. بارك الله في قراءتكم.`;
+}
+
 /** `reminderTime` is the already formatted time of the day's reminder, or null with none. */
 export function notYetText(reminderTime: string | null): string {
   return reminderTime === null

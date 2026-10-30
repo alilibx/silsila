@@ -12,6 +12,7 @@ export const NOTE_KINDS = [
   "thanks",
   "reminder",
   "behind",
+  "cheer",
   "completed",
   "nowOrganizer",
   "organizerMoved",
@@ -119,6 +120,8 @@ export function noteText(n: NoteTextInput, now: number = Date.now()): string {
       return `الجزء ${juzList(n.juz)} في انتظارك، يسّر الله لك.`;
     case "behind":
       return `الختمة تحتاج ${behindPhrase(n.count ?? 0, n.until, now)}. هل تأخذ جزءاً؟`;
+    case "cheer":
+      return `أتمّ أحد الأعضاء جزءاً، فتمّ ${toArabicDigits(n.count ?? 0)} من ٣٠ جزءاً في ختمتكم. بارك الله في قراءتكم.`;
     case "completed":
       return "ختمنا القرآن معاً، الحمد لله";
     case "nowOrganizer":

@@ -1,3 +1,4 @@
+import { CHEER_MAX_GAP_MS } from "./cheer";
 import { isValidGrace, type Grace } from "./grace";
 import { SCHEDULES } from "./schedule";
 import type { SettingKey } from "./settings";
@@ -111,6 +112,14 @@ export const SETTING_SPECS: { [K in SettingKey]: SettingSpec } = {
     kind: "duration",
     min: 0,
     max: 6 * HOUR,
+    group: "notifications",
+  },
+  cheerOn: { kind: "bool", group: "notifications" },
+  cheerEveryone: { kind: "bool", group: "notifications" },
+  cheerGapMs: {
+    kind: "duration",
+    min: 0,
+    max: CHEER_MAX_GAP_MS,
     group: "notifications",
   },
   organizerInactiveMs: {
