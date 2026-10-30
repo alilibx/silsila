@@ -290,14 +290,6 @@ export function TodayPanel({
           {t.rota.pausedBanner}
         </p>
       )}
-      {view.archived && (
-        <p
-          role="note"
-          className="mb-3 rounded-ui border-2 border-line bg-paper-2 p-3 font-medium"
-        >
-          {t.rota.archivedBanner}
-        </p>
-      )}
 
       {day === null ? (
         noDay

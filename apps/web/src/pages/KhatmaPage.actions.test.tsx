@@ -388,6 +388,15 @@ describe("a session revoked elsewhere", () => {
     expect(toast()).toHaveTextContent(t.actions.errors.signedOut);
   });
 
+  it("a pool action refused because the khatma got archived says so", async () => {
+    m.take.mockRejectedValue(new ConvexError({ code: "archived" }));
+    const { user } = setup(makeView({ me: signedIn() }));
+    await user.click(screen.getByRole("button", { name: "خذ جزءاً" }));
+    await user.click(screen.getByRole("button", { name: t.take.confirm }));
+    expect(toast()).toHaveTextContent(t.actions.errors.archived);
+    expect(m.cleared).not.toHaveBeenCalled();
+  });
+
   it("another server error shows the generic copy, not the network copy", async () => {
     m.take.mockRejectedValue(new ConvexError({ code: "not_found" }));
     const { user } = setup(makeView({ me: signedIn() }));

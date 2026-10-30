@@ -15,7 +15,7 @@ import {
   tabParam,
   type KhatmaTab,
 } from "../components/KhatmaTabs";
-import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import { canSwitch, SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
 import { SwitchRow } from "../components/SwitchRow";
 import { WhatsAppSheet } from "../components/WhatsAppSheet";
 import { PoolGrid } from "../components/PoolGrid";
@@ -25,6 +25,7 @@ import { Ring } from "../components/Ring";
 import { ShareSheets } from "../components/ShareSheets";
 import { TakeSheet } from "../components/TakeSheet";
 import { Toast } from "../components/Toast";
+import { ArchivedBanner } from "../features/khatma/ArchivedActions";
 import { useKhatmaActions } from "../features/khatma/useKhatmaActions";
 import { useShareSheet } from "../features/share/useShareSheet";
 import { VerifySheet } from "../features/verify/VerifySheet";
@@ -163,7 +164,7 @@ export function KhatmaPage() {
           onTab={setTab}
           onShowTab={showTab}
           onSwitch={
-            mine !== undefined && mine.length >= 2
+            mine !== undefined && canSwitch(mine, inviteCode)
               ? () => setSwitching(true)
               : null
           }
@@ -338,16 +339,19 @@ function VisitorContent({
         {khatmaTitle(view)}
       </h1>
       <Chips view={view} />
+      {view.archived && <ArchivedBanner />}
       <Ring tiles={view.tiles} />
-      <MainCard
-        view={view}
-        onTake={onTake}
-        onFinish={onFinish}
-        onRelease={onRelease}
-        onStillReading={onStillReading}
-        busy={busy}
-      />
-      <PoolGrid tiles={view.tiles} onTake={onTake} />
+      {!view.archived && (
+        <MainCard
+          view={view}
+          onTake={onTake}
+          onFinish={onFinish}
+          onRelease={onRelease}
+          onStillReading={onStillReading}
+          busy={busy}
+        />
+      )}
+      <PoolGrid tiles={view.tiles} onTake={onTake} readOnly={view.archived} />
       <GroupTotal view={view} />
     </main>
   );
@@ -413,6 +417,7 @@ function MemberContent({
         )}
       </div>
       <Chips view={view} />
+      {view.archived && <ArchivedBanner />}
       <KhatmaTabs tab={tab} onChange={onTab} idPrefix={ids} />
 
       <section
@@ -422,7 +427,7 @@ function MemberContent({
       >
         {tab === "mine" && (
           <>
-            {notes.length > 0 && (
+            {!view.archived && notes.length > 0 && (
               <section aria-label={t.notes.heading} className="mt-4 grid gap-3">
                 {notes.map((note) => (
                   <NoteCard
@@ -446,36 +451,48 @@ function MemberContent({
               </section>
             )}
             <Ring tiles={view.tiles} />
-            <MainCard
-              view={view}
-              onTake={onTake}
-              onFinish={onFinish}
-              onRelease={onRelease}
-              onStillReading={onStillReading}
-              onPickYourself={() => onShowTab("pool")}
-              busy={busy}
-            />
+            {!view.archived && (
+              <MainCard
+                view={view}
+                onTake={onTake}
+                onFinish={onFinish}
+                onRelease={onRelease}
+                onStillReading={onStillReading}
+                onPickYourself={() => onShowTab("pool")}
+                busy={busy}
+              />
+            )}
           </>
         )}
-        {tab === "pool" && <PoolGrid tiles={view.tiles} onTake={onTake} />}
+        {tab === "pool" && (
+          <PoolGrid
+            tiles={view.tiles}
+            onTake={onTake}
+            readOnly={view.archived}
+          />
+        )}
         {tab === "group" && (
           <>
-            <div className="mt-4 grid gap-3">
-              <Button variant="whatsapp" onClick={onInvite}>
-                {t.share.inviteButton}
-              </Button>
-              {hasOpen && (
-                <Button variant="ghost" onClick={onRemind}>
-                  {t.share.remindButton}
-                </Button>
-              )}
-            </div>
-            <SwitchRow
-              label={t.khatmaSettings.notifications}
-              on={view.me.notificationsOn !== false}
-              disabled={busy}
-              onChange={onSetNotifications}
-            />
+            {!view.archived && (
+              <>
+                <div className="mt-4 grid gap-3">
+                  <Button variant="whatsapp" onClick={onInvite}>
+                    {t.share.inviteButton}
+                  </Button>
+                  {hasOpen && (
+                    <Button variant="ghost" onClick={onRemind}>
+                      {t.share.remindButton}
+                    </Button>
+                  )}
+                </div>
+                <SwitchRow
+                  label={t.khatmaSettings.notifications}
+                  on={view.me.notificationsOn !== false}
+                  disabled={busy}
+                  onChange={onSetNotifications}
+                />
+              </>
+            )}
             {view.isOrganizer && (
               <Link
                 to={`/j/${encodeURIComponent(inviteCode)}/settings`}

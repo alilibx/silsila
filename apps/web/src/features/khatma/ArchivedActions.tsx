@@ -1,0 +1,263 @@
+import { api } from "@convex/_generated/api";
+import { addDays, type ReadingDays } from "@convex/lib/rota";
+import { localDate } from "@convex/lib/wakingTime";
+import { useAction, useMutation } from "convex/react";
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { Button } from "../../components/Button";
+import { Sheet } from "../../components/Sheet";
+import { t } from "../../i18n/ar";
+import { getSessionToken } from "../../lib/session";
+import { DateLine } from "../rota/DateLine";
+import { firstReadingDay } from "../rota/dates";
+import { ErrorLine } from "../rota/ErrorLine";
+import { formatIsoDate } from "../rota/format";
+import { useRotaCall } from "../rota/useRotaCall";
+
+const errors: Record<string, string> = t.rota.errors;
+
+/** The red ghost button for anything that can't be undone. */
+const dangerClass = "border-[#8A2B1E] text-[#8A2B1E]";
+
+/** «هذه الختمة مؤرشفة»: at the top of an archived khatma's page, which is read-only. */
+export function ArchivedBanner() {
+  return (
+    <div
+      role="note"
+      className="mt-4 rounded-ui border-2 border-line bg-paper-2 p-3"
+    >
+      <p className="font-semibold">{t.archive.banner}</p>
+      <p className="text-ink-soft">{t.archive.bannerHint}</p>
+    </div>
+  );
+}
+
+/** Asks once more before `confirm` runs: a title, what it means, the one button that does it. */
+function ConfirmSheet({
+  title,
+  body,
+  confirm,
+  busyLabel,
+  busy,
+  error,
+  danger = false,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  body: string;
+  confirm: string;
+  busyLabel: string;
+  busy: boolean;
+  error: string | null;
+  danger?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet title={title} onClose={onClose}>
+      <p className="mt-1 leading-relaxed text-ink-soft">{body}</p>
+      <div className="mt-5 grid gap-3">
+        <Button
+          variant={danger ? "ghost" : "primary"}
+          className={danger ? dangerClass : ""}
+          disabled={busy}
+          onClick={onConfirm}
+        >
+          {busy ? busyLabel : confirm}
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          {t.archive.cancel}
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+    </Sheet>
+  );
+}
+
+/** The organizer's «أرشف الختمة»: messages stop, nothing is lost. For a khatma that is not archived. */
+export function ArchiveSection({ inviteCode }: { inviteCode: string }) {
+  const archive = useMutation(api.khatmaLifecycle.archive);
+  const [open, setOpen] = useState(false);
+  const { busy, error, run } = useRotaCall(errors);
+  return (
+    <section aria-label={t.archive.heading} className="mt-8">
+      <h2 className="mb-3 text-xl font-semibold">{t.archive.heading}</h2>
+      <p className="mb-3 leading-relaxed text-ink-soft">{t.archive.hint}</p>
+      <Button variant="ghost" onClick={() => setOpen(true)}>
+        {t.archive.button}
+      </Button>
+      {open && (
+        <ConfirmSheet
+          title={t.archive.title}
+          body={t.archive.body}
+          confirm={t.archive.confirm}
+          busyLabel={t.archive.archiving}
+          busy={busy}
+          error={error}
+          onConfirm={() =>
+            void run(
+              () =>
+                archive({
+                  sessionToken: getSessionToken() ?? undefined,
+                  inviteCode,
+                }),
+              () => setOpen(false),
+            )
+          }
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </section>
+  );
+}
+
+/** What a rota khatma starts again from: its days and the zone its dates are in. */
+export type Restart = { days: ReadingDays; timeZone: string };
+
+/** A new rota khatma with the same people, on the date picked (tomorrow, or the next reading day, to begin with). */
+function RestartSheet({
+  inviteCode,
+  restart,
+  onClose,
+}: {
+  inviteCode: string;
+  restart: Restart;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const startAgain = useAction(api.rota.startAgain);
+  const { busy, error, run } = useRotaCall(errors);
+  // `null` while the start follows "tomorrow"; only a picked date is kept.
+  const [picked, setPicked] = useState<string | null>(null);
+
+  const today = localDate(Date.now(), restart.timeZone);
+  const tomorrow = addDays(today, 1);
+  // The first day must be a reading day, so the start moves on to the next one.
+  const start = firstReadingDay(restart.days, picked ?? tomorrow);
+
+  let created: string | null = null;
+  return (
+    <Sheet title={t.archive.restartTitle} onClose={onClose}>
+      <p className="mt-1 mb-4 leading-relaxed text-ink-soft">
+        {t.archive.restartBody}
+      </p>
+      <DateLine
+        label={t.archive.restartDate}
+        value={
+          start === today
+            ? t.rota.today(formatIsoDate(start))
+            : start === tomorrow
+              ? t.rota.tomorrow(formatIsoDate(start))
+              : formatIsoDate(start)
+        }
+        inputLabel={t.rota.startDateInput}
+        // A start that is not a reading day moves on; the field shows where it landed.
+        inputValue={picked === null ? "" : start}
+        min={today}
+        onPick={setPicked}
+      />
+      <div className="mt-5 grid gap-3">
+        <Button
+          disabled={busy}
+          onClick={() =>
+            void run(
+              async () => {
+                const result = await startAgain({
+                  sessionToken: getSessionToken() ?? undefined,
+                  inviteCode,
+                  firstDate: start,
+                });
+                created = result.inviteCode;
+              },
+              () => {
+                if (created !== null) {
+                  void navigate(`/j/${encodeURIComponent(created)}/setup`);
+                }
+              },
+            )
+          }
+        >
+          {busy ? t.archive.starting : t.archive.restartConfirm}
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          {t.archive.cancel}
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+    </Sheet>
+  );
+}
+
+/** Deletes the archived khatma for good, then goes home. */
+function DeleteSheet({
+  inviteCode,
+  onClose,
+}: {
+  inviteCode: string;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const remove = useMutation(api.khatmaLifecycle.remove);
+  const { busy, error, run } = useRotaCall(errors);
+  return (
+    <ConfirmSheet
+      title={t.archive.deleteTitle}
+      body={t.archive.deleteBody}
+      confirm={t.archive.deleteConfirm}
+      busyLabel={t.archive.deleting}
+      busy={busy}
+      error={error}
+      danger
+      onConfirm={() =>
+        void run(
+          () =>
+            remove({
+              sessionToken: getSessionToken() ?? undefined,
+              inviteCode,
+            }),
+          () => void navigate("/", { replace: true }),
+        )
+      }
+      onClose={onClose}
+    />
+  );
+}
+
+/**
+ * What the organizer can still do with an archived khatma: start a rota khatma again with the same
+ * people (`restart` is null for a pool khatma, which has no such thing), or delete it.
+ */
+export function ArchivedSection({
+  inviteCode,
+  restart,
+}: {
+  inviteCode: string;
+  restart: Restart | null;
+}) {
+  const [open, setOpen] = useState<"restart" | "delete" | null>(null);
+  return (
+    <div className="mt-8 grid gap-3">
+      {restart && (
+        <Button onClick={() => setOpen("restart")}>{t.archive.restart}</Button>
+      )}
+      <Button
+        variant="ghost"
+        className={dangerClass}
+        onClick={() => setOpen("delete")}
+      >
+        {t.archive.delete}
+      </Button>
+      {open === "restart" && restart && (
+        <RestartSheet
+          inviteCode={inviteCode}
+          restart={restart}
+          onClose={() => setOpen(null)}
+        />
+      )}
+      {open === "delete" && (
+        <DeleteSheet inviteCode={inviteCode} onClose={() => setOpen(null)} />
+      )}
+    </div>
+  );
+}

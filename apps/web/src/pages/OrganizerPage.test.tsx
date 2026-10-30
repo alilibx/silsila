@@ -7,17 +7,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { OrganizerPage } from "./OrganizerPage";
 
-type Fn = "update" | "removeMember" | "unblock" | "handOver";
+type Fn =
+  "update" | "removeMember" | "unblock" | "handOver" | "archive" | "remove";
 
 const m = vi.hoisted(() => ({
   settings: undefined as unknown,
   /** What `api.rota.settings` answers: null for a pool khatma. */
   rotaSettings: null as unknown,
+  /** What `api.khatmas.view` answers: the pool khatma, which says whether it is archived. */
+  view: { archived: false } as unknown,
   fns: {
     update: vi.fn(),
     removeMember: vi.fn(),
     unblock: vi.fn(),
     handOver: vi.fn(),
+    archive: vi.fn(),
+    remove: vi.fn(),
   },
   resetInvite: vi.fn(),
   /** When set, navigate() does nothing, so a test can stop between the action and the route change. */
@@ -44,8 +49,14 @@ vi.mock("react-router", async () => {
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: (ref: never) =>
-      getFunctionName(ref) === "rota:settings" ? m.rotaSettings : m.settings,
+    useQuery: (ref: never) => {
+      const name = getFunctionName(ref);
+      return name === "rota:settings"
+        ? m.rotaSettings
+        : name === "khatmas:view"
+          ? m.view
+          : m.settings;
+    },
     useMutation: (ref: never) =>
       m.fns[getFunctionName(ref).split(":")[1] as Fn],
     useAction: () => m.resetInvite,
@@ -107,6 +118,7 @@ describe("OrganizerPage", () => {
     m.holdNavigation = false;
     m.settings = structuredClone(organizerView);
     m.rotaSettings = null;
+    m.view = { archived: false };
   });
 
   it("shows the rotating khatma's own settings for a rota khatma", () => {
@@ -563,5 +575,91 @@ describe("OrganizerPage", () => {
     m.settings = { forbidden: true };
     view.rerender(tree());
     expect(await screen.findByText("khatma-page")).toBeInTheDocument();
+  });
+
+  describe("archiving and deleting", () => {
+    it("waits for the khatma to say whether it is archived", () => {
+      m.view = undefined;
+      renderPage();
+      expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    });
+
+    it("archives after a confirmation that says messages stop and nothing is lost", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      expect(
+        screen.queryByRole("button", { name: t.archive.delete }),
+      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: t.archive.button }));
+      const sheet = screen.getByRole("dialog", { name: t.archive.title });
+      expect(within(sheet).getByText(t.archive.body)).toBeInTheDocument();
+      expect(m.fns.archive).not.toHaveBeenCalled();
+      await user.click(
+        within(sheet).getByRole("button", { name: t.archive.confirm }),
+      );
+      expect(m.fns.archive).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        inviteCode: "CODE",
+      });
+    });
+
+    it("an archived khatma hides every control that changes it", () => {
+      m.view = { archived: true };
+      renderPage();
+      expect(screen.getByText(t.rota.archivedSettings)).toBeInTheDocument();
+      // Names stay readable; no field, no save, no member action, no reset.
+      expect(screen.getByText("سارة")).toBeInTheDocument();
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(screen.queryByRole("radio")).toBeNull();
+      for (const name of [
+        t.organizer.save,
+        t.organizer.reset,
+        t.archive.button,
+      ]) {
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      }
+      expect(
+        screen.queryByRole("button", {
+          name: `${t.organizer.remove}: سارة`,
+        }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: new RegExp(t.organizer.allow) }),
+      ).toBeNull();
+    });
+
+    it("an archived pool khatma can be deleted, not started again", async () => {
+      m.view = { archived: true };
+      const user = userEvent.setup();
+      renderPage();
+      expect(
+        screen.queryByRole("button", { name: t.archive.restart }),
+      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: t.archive.delete }));
+      const sheet = screen.getByRole("dialog", { name: t.archive.deleteTitle });
+      expect(within(sheet).getByText(t.archive.deleteBody)).toBeInTheDocument();
+      expect(m.fns.remove).not.toHaveBeenCalled();
+      await user.click(
+        within(sheet).getByRole("button", { name: t.archive.deleteConfirm }),
+      );
+      expect(m.fns.remove).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        inviteCode: "CODE",
+      });
+    });
+
+    it("says an organizer change was refused because the khatma got archived", async () => {
+      m.fns.update.mockRejectedValue(new ConvexError({ code: "archived" }));
+      const user = userEvent.setup();
+      renderPage();
+      const name = section(t.organizer.nameHeading);
+      await user.type(within(name).getByRole("textbox"), "x");
+      await user.click(
+        within(name).getByRole("button", { name: t.organizer.save }),
+      );
+      expect(await within(name).findByRole("alert")).toHaveTextContent(
+        t.organizer.errors.archived,
+      );
+    });
   });
 });

@@ -19,7 +19,10 @@ const m = vi.hoisted(() => ({
     setPaused: vi.fn(),
     addPauseDate: vi.fn(),
     removePauseDate: vi.fn(),
+    archive: vi.fn(),
+    remove: vi.fn(),
   },
+  startAgain: vi.fn(),
 }));
 
 vi.mock("../lib/session", () => ({
@@ -33,6 +36,7 @@ vi.mock("convex/react", async () => {
     useQuery: () => m.settings,
     useMutation: (ref: never) =>
       m.fns[getFunctionName(ref).split(":")[1] as keyof typeof m.fns],
+    useAction: () => m.startAgain,
   };
 });
 
@@ -66,6 +70,8 @@ function renderPage() {
       <Routes>
         <Route path="/j/:inviteCode/settings" element={<RotaSettingsPage />} />
         <Route path="/j/:inviteCode" element={<Landing />} />
+        <Route path="/j/:inviteCode/setup" element={<Landing />} />
+        <Route path="/" element={<Landing />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -81,6 +87,7 @@ beforeEach(() => {
   for (const fn of Object.values(m.fns)) {
     fn.mockReset().mockResolvedValue({ ok: true });
   }
+  m.startAgain.mockReset().mockResolvedValue({ inviteCode: "NEWCODE" });
   m.settings = structuredClone(baseSettings);
 });
 afterEach(() => {
@@ -512,12 +519,86 @@ describe("RotaSettingsPage", () => {
     expect(
       within(section(t.rota.detailsHeading)).getByLabelText(t.rota.nameLabel),
     ).toBeDisabled();
+    // Everything that edits is off; only the two ways out of an archived khatma are left on.
+    const ways: string[] = [t.archive.restart, t.archive.delete];
     for (const button of screen.getAllByRole("button")) {
+      if (ways.includes(button.textContent ?? "")) continue;
       expect(button).toBeDisabled();
     }
     // The way back still works.
     expect(
       screen.getByRole("link", { name: t.organizer.back }),
     ).toBeInTheDocument();
+  });
+
+  describe("archiving, starting again and deleting", () => {
+    it("an active khatma can be archived after a confirmation, and has no restart or delete", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      expect(
+        screen.queryByRole("button", { name: t.archive.restart }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: t.archive.delete }),
+      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: t.archive.button }));
+      const sheet = screen.getByRole("dialog", { name: t.archive.title });
+      expect(within(sheet).getByText(t.archive.body)).toBeInTheDocument();
+      expect(m.fns.archive).not.toHaveBeenCalled();
+      await user.click(
+        within(sheet).getByRole("button", { name: t.archive.confirm }),
+      );
+      expect(m.fns.archive).toHaveBeenCalledWith(args);
+    });
+
+    it("an archived khatma can start again or be deleted, and can't be archived again", () => {
+      m.settings = { ...baseSettings, archived: true };
+      renderPage();
+      expect(
+        screen.getByRole("button", { name: t.archive.restart }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole("button", { name: t.archive.delete }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByRole("button", { name: t.archive.button }),
+      ).toBeNull();
+    });
+
+    it("starting again uses the khatma's own days and zone, then goes to the setup", async () => {
+      m.settings = {
+        ...baseSettings,
+        archived: true,
+        timeZone: "Asia/Dubai",
+        days: { kind: "daily" },
+      };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole("button", { name: t.archive.restart }));
+      await user.click(
+        screen.getByRole("button", { name: t.archive.restartConfirm }),
+      );
+      // 08:00 UTC on the 29th is noon in Dubai, so tomorrow is the 30th.
+      expect(m.startAgain).toHaveBeenCalledWith({
+        ...args,
+        firstDate: "2026-10-30",
+      });
+      expect(
+        await screen.findByText("landed /j/NEWCODE/setup"),
+      ).toBeInTheDocument();
+    });
+
+    it("deleting asks first, then goes home", async () => {
+      m.settings = { ...baseSettings, archived: true };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole("button", { name: t.archive.delete }));
+      expect(m.fns.remove).not.toHaveBeenCalled();
+      await user.click(
+        screen.getByRole("button", { name: t.archive.deleteConfirm }),
+      );
+      expect(m.fns.remove).toHaveBeenCalledWith(args);
+      expect(await screen.findByText("landed /")).toBeInTheDocument();
+    });
   });
 });

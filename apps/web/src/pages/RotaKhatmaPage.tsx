@@ -6,7 +6,11 @@ import { Link, useSearchParams } from "react-router";
 import { buttonClass } from "../components/Button";
 import { KhatmaTabs } from "../components/KhatmaTabs";
 import { NoteCard } from "../components/NoteCard";
-import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import { canSwitch, SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import {
+  ArchivedBanner,
+  ArchivedSection,
+} from "../features/khatma/ArchivedActions";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
 import { ErrorLine } from "../features/rota/ErrorLine";
 import { PeoplePanel } from "../features/rota/PeoplePanel";
@@ -217,7 +221,7 @@ export function RotaKhatmaPage({
           >
             {t.khatmaSettings.link}
           </Link>
-          {mine !== undefined && mine.length >= 2 && (
+          {mine !== undefined && canSwitch(mine, inviteCode) && (
             <button
               type="button"
               onClick={() => setSwitching(true)}
@@ -228,6 +232,7 @@ export function RotaKhatmaPage({
           )}
         </div>
 
+        {today.archived && <ArchivedBanner />}
         <KhatmaTabs tab={tab} onChange={setTab} idPrefix={ids} tabs={TABS} />
         <section
           role="tabpanel"
@@ -245,9 +250,15 @@ export function RotaKhatmaPage({
               />
             </>
           ) : (
-            <PeoplePanel inviteCode={inviteCode} />
+            <PeoplePanel inviteCode={inviteCode} archived={today.archived} />
           )}
         </section>
+        {today.archived && (
+          <ArchivedSection
+            inviteCode={inviteCode}
+            restart={{ days: settings.days, timeZone: settings.timeZone }}
+          />
+        )}
       </main>
       {signIn.sheet}
       {switching && mine && (

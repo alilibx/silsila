@@ -263,12 +263,22 @@ type Open =
   | { kind: "add"; juz: number }
   | { kind: "person"; juz: number; participantId: Id<"rotaParticipants"> };
 
-/** The organizer's People screen: the 30 ajza' of the next khatma and who reads each. */
-export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
+/**
+ * The organizer's People screen: the 30 ajza' of the next khatma and who reads each. Once the
+ * khatma is archived it is only a list: nothing to press, add or send.
+ */
+export function PeoplePanel({
+  inviteCode,
+  archived,
+}: {
+  inviteCode: string;
+  archived: boolean;
+}) {
   const sessionToken = useSessionToken();
   const view = useQuery(api.rota.people, { sessionToken, inviteCode });
   const [open, setOpen] = useState<Open | null>(null);
-  useEnsureJoinLink(inviteCode, view?.joinLink);
+  // An archived khatma refuses a new join link, and has no use for one.
+  useEnsureJoinLink(inviteCode, archived ? undefined : view?.joinLink);
 
   if (view === undefined) {
     return (
@@ -295,7 +305,7 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
           : t.rota.nextBanner(view.target.number, date)}
       </p>
 
-      <JoinRequests inviteCode={inviteCode} view={view} />
+      {!archived && <JoinRequests inviteCode={inviteCode} view={view} />}
 
       <ol className="mt-4 grid gap-2">
         {view.rows.map((row) => {
@@ -303,48 +313,58 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
           // The second juz' someone holds says so, so one person's rows read as a pair.
           const second = holder !== null && seen.has(holder.id);
           if (holder) seen.add(holder.id);
+          const look = `flex min-h-14 min-w-[12rem] flex-1 items-center gap-3 rounded-ui border-2 px-4 py-2 text-start ${
+            holder
+              ? "border-line bg-card"
+              : "border-dashed border-[#8A7D62] bg-transparent text-ink-soft"
+          }`;
+          const content = (
+            <>
+              <span className="w-7 shrink-0 text-center font-semibold text-green-deep">
+                {toArabicDigits(row.juz)}
+              </span>
+              {holder ? (
+                <>
+                  <span className="font-medium">
+                    {holder.isMe ? t.rota.me : holder.name}
+                  </span>
+                  {second && (
+                    <span className="ms-auto rounded-full bg-saffron-soft px-3 py-0.5 text-base font-semibold text-saffron-ink">
+                      {t.rota.secondJuz}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="font-medium text-green">
+                  {archived ? t.rota.noReader : t.rota.addReader(row.juz)}
+                </span>
+              )}
+            </>
+          );
           return (
             <li key={row.juz} className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setOpen(
-                    holder
-                      ? {
-                          kind: "person",
-                          juz: row.juz,
-                          participantId: holder.id,
-                        }
-                      : { kind: "add", juz: row.juz },
-                  )
-                }
-                className={`flex min-h-14 min-w-[12rem] flex-1 items-center gap-3 rounded-ui border-2 px-4 py-2 text-start ${
-                  holder
-                    ? "border-line bg-card"
-                    : "border-dashed border-[#8A7D62] bg-transparent text-ink-soft"
-                }`}
-              >
-                <span className="w-7 shrink-0 text-center font-semibold text-green-deep">
-                  {toArabicDigits(row.juz)}
-                </span>
-                {holder ? (
-                  <>
-                    <span className="font-medium">
-                      {holder.isMe ? t.rota.me : holder.name}
-                    </span>
-                    {second && (
-                      <span className="ms-auto rounded-full bg-saffron-soft px-3 py-0.5 text-base font-semibold text-saffron-ink">
-                        {t.rota.secondJuz}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="font-medium text-green">
-                    {t.rota.addReader(row.juz)}
-                  </span>
-                )}
-              </button>
-              {holder && !second && (
+              {archived ? (
+                <div className={look}>{content}</div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpen(
+                      holder
+                        ? {
+                            kind: "person",
+                            juz: row.juz,
+                            participantId: holder.id,
+                          }
+                        : { kind: "add", juz: row.juz },
+                    )
+                  }
+                  className={look}
+                >
+                  {content}
+                </button>
+              )}
+              {!archived && holder && !second && (
                 <JoinChip
                   person={holder}
                   isMe={holder.isMe}
@@ -358,13 +378,15 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
         })}
       </ol>
 
-      <div className="mt-5">
-        <ShareJoinLink
-          title={view.title}
-          daysKind={view.daysKind}
-          joinLink={view.joinLink}
-        />
-      </div>
+      {!archived && (
+        <div className="mt-5">
+          <ShareJoinLink
+            title={view.title}
+            daysKind={view.daysKind}
+            joinLink={view.joinLink}
+          />
+        </div>
+      )}
 
       {open?.kind === "add" && (
         <EmptyRowSheet

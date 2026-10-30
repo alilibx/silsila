@@ -11,6 +11,10 @@ import { Link, Navigate, useParams } from "react-router";
 import { Button } from "../components/Button";
 import { Sheet } from "../components/Sheet";
 import { SwitchRow } from "../components/SwitchRow";
+import {
+  ArchivedSection,
+  ArchiveSection,
+} from "../features/khatma/ArchivedActions";
 import { DateLine } from "../features/rota/DateLine";
 import { firstReadingDay } from "../features/rota/dates";
 import { formatIsoDate, formatTime } from "../features/rota/format";
@@ -397,6 +401,16 @@ function SettingsContent({
             </div>
           </Section>
         </fieldset>
+
+        {/* Outside the fieldset: an archived khatma can still start again or be deleted. */}
+        {settings.archived ? (
+          <ArchivedSection
+            inviteCode={inviteCode}
+            restart={{ days: settings.days, timeZone: settings.timeZone }}
+          />
+        ) : (
+          <ArchiveSection inviteCode={inviteCode} />
+        )}
       </main>
 
       {addingDate && (

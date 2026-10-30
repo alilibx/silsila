@@ -9,6 +9,10 @@ import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { Button } from "../components/Button";
 import { formatGrace, GraceField } from "../components/GraceField";
 import { Sheet } from "../components/Sheet";
+import {
+  ArchivedSection,
+  ArchiveSection,
+} from "../features/khatma/ArchivedActions";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { formatDate } from "../lib/format";
@@ -52,6 +56,8 @@ export function OrganizerPage() {
     sessionToken,
     inviteCode,
   });
+  // Whether the khatma is archived: then it can only be read, and deleted.
+  const view = useQuery(api.khatmas.view, { sessionToken, inviteCode });
   // Resetting the link kills the old code, so its query turns `forbidden` before the new code
   // is navigated to. That moment must not bounce the organizer to the dead address.
   const resetting = useRef(false);
@@ -62,6 +68,7 @@ export function OrganizerPage() {
   if (
     settings === undefined ||
     rotaSettings === undefined ||
+    view === undefined ||
     ("forbidden" in settings && resetting.current)
   ) {
     return (
@@ -80,6 +87,7 @@ export function OrganizerPage() {
       settings={settings}
       inviteCode={inviteCode}
       resetting={resetting}
+      archived={"archived" in view && view.archived}
     />
   );
 }
@@ -91,10 +99,12 @@ function OrganizerContent({
   settings,
   inviteCode,
   resetting,
+  archived,
 }: {
   settings: Settings;
   inviteCode: string;
   resetting: RefObject<boolean>;
+  archived: boolean;
 }) {
   const sessionToken = useSessionToken();
   const navigate = useNavigate();
@@ -234,83 +244,96 @@ function OrganizerContent({
           {t.khatmaSettings.link}
         </h1>
 
-        <Section
-          id="name"
-          heading={t.organizer.nameHeading}
-          feedback={feedback}
-        >
-          <label htmlFor="khatma-name" className="block font-medium">
-            {t.create.nameLabel}
-          </label>
-          <input
-            id="khatma-name"
-            type="text"
-            maxLength={60}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder={t.create.namePlaceholder(formatDate(Date.now()))}
-            className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
-          />
-          <SaveButton
-            disabled={busy || !nameChanged}
-            onClick={() =>
-              void save("name", { name: trimmed === "" ? null : trimmed })
-            }
-          />
-        </Section>
-
-        <Section
-          id="schedule"
-          heading={t.create.scheduleLegend}
-          feedback={feedback}
-        >
-          <div className="grid gap-2.5">
-            {SCHEDULES.map((value) => (
-              <label
-                key={value}
-                className="flex min-h-14 cursor-pointer items-center gap-3 rounded-ui border-2 border-line bg-card px-4 py-3 has-[:checked]:border-green has-[:checked]:bg-[#E7F5EC] has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-green"
-              >
-                <input
-                  type="radio"
-                  name="schedule"
-                  value={value}
-                  checked={schedule === value}
-                  onChange={() => setSchedule(value)}
-                  className="size-5 shrink-0 accent-green"
-                />
-                <span className="font-medium">{t.schedules[value]}</span>
-              </label>
-            ))}
-          </div>
-          <p className="mt-3 text-ink-soft">{t.organizer.scheduleNote}</p>
-          <SaveButton
-            disabled={busy || !scheduleChanged}
-            onClick={() => void save("schedule", { schedule })}
-          />
-        </Section>
-
-        <Section id="grace" heading={t.grace.label} feedback={feedback}>
-          <p className="leading-relaxed text-ink-soft">
-            {t.organizer.graceNote}
+        {archived && (
+          <p
+            role="note"
+            className="mt-4 rounded-ui border-2 border-line bg-paper-2 p-3 font-medium"
+          >
+            {t.rota.archivedSettings}
           </p>
-          <GraceField
-            value={grace}
-            schedule={settings.schedule}
-            onChange={(next) => {
-              setGrace(next);
-              setFeedback(null);
-            }}
-          />
-          {!sameGrace(settings.suggestedGrace, settings.grace) && (
-            <p className="mt-3 text-ink-soft">
-              {t.organizer.suggested(formatGrace(settings.suggestedGrace))}
-            </p>
-          )}
-          <SaveButton
-            disabled={busy || !graceChanged || !graceValid}
-            onClick={() => void save("grace", { grace })}
-          />
-        </Section>
+        )}
+
+        {!archived && (
+          <>
+            <Section
+              id="name"
+              heading={t.organizer.nameHeading}
+              feedback={feedback}
+            >
+              <label htmlFor="khatma-name" className="block font-medium">
+                {t.create.nameLabel}
+              </label>
+              <input
+                id="khatma-name"
+                type="text"
+                maxLength={60}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={t.create.namePlaceholder(formatDate(Date.now()))}
+                className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+              />
+              <SaveButton
+                disabled={busy || !nameChanged}
+                onClick={() =>
+                  void save("name", { name: trimmed === "" ? null : trimmed })
+                }
+              />
+            </Section>
+
+            <Section
+              id="schedule"
+              heading={t.create.scheduleLegend}
+              feedback={feedback}
+            >
+              <div className="grid gap-2.5">
+                {SCHEDULES.map((value) => (
+                  <label
+                    key={value}
+                    className="flex min-h-14 cursor-pointer items-center gap-3 rounded-ui border-2 border-line bg-card px-4 py-3 has-[:checked]:border-green has-[:checked]:bg-[#E7F5EC] has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-green"
+                  >
+                    <input
+                      type="radio"
+                      name="schedule"
+                      value={value}
+                      checked={schedule === value}
+                      onChange={() => setSchedule(value)}
+                      className="size-5 shrink-0 accent-green"
+                    />
+                    <span className="font-medium">{t.schedules[value]}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-3 text-ink-soft">{t.organizer.scheduleNote}</p>
+              <SaveButton
+                disabled={busy || !scheduleChanged}
+                onClick={() => void save("schedule", { schedule })}
+              />
+            </Section>
+
+            <Section id="grace" heading={t.grace.label} feedback={feedback}>
+              <p className="leading-relaxed text-ink-soft">
+                {t.organizer.graceNote}
+              </p>
+              <GraceField
+                value={grace}
+                schedule={settings.schedule}
+                onChange={(next) => {
+                  setGrace(next);
+                  setFeedback(null);
+                }}
+              />
+              {!sameGrace(settings.suggestedGrace, settings.grace) && (
+                <p className="mt-3 text-ink-soft">
+                  {t.organizer.suggested(formatGrace(settings.suggestedGrace))}
+                </p>
+              )}
+              <SaveButton
+                disabled={busy || !graceChanged || !graceValid}
+                onClick={() => void save("grace", { grace })}
+              />
+            </Section>
+          </>
+        )}
 
         <Section
           id="members"
@@ -328,7 +351,7 @@ function OrganizerContent({
                   <span className="ms-2 inline-block rounded-full bg-saffron-soft px-3 py-0.5 text-base font-semibold text-saffron-ink">
                     {t.organizer.organizerBadge}
                   </span>
-                ) : (
+                ) : archived ? null : (
                   <div className="mt-3 flex flex-wrap gap-2.5">
                     <button
                       type="button"
@@ -367,7 +390,7 @@ function OrganizerContent({
           </ul>
         </Section>
 
-        {settings.blocked.length > 0 && (
+        {!archived && settings.blocked.length > 0 && (
           <Section
             id="blocked"
             heading={t.organizer.blockedHeading}
@@ -410,19 +433,27 @@ function OrganizerContent({
           </Section>
         )}
 
-        <Section
-          id="reset"
-          heading={t.organizer.resetHeading}
-          feedback={feedback}
-        >
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => setConfirm({ kind: "reset" })}
+        {!archived && (
+          <Section
+            id="reset"
+            heading={t.organizer.resetHeading}
+            feedback={feedback}
           >
-            {t.organizer.reset}
-          </Button>
-        </Section>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setConfirm({ kind: "reset" })}
+            >
+              {t.organizer.reset}
+            </Button>
+          </Section>
+        )}
+
+        {archived ? (
+          <ArchivedSection inviteCode={inviteCode} restart={null} />
+        ) : (
+          <ArchiveSection inviteCode={inviteCode} />
+        )}
       </main>
 
       {confirm && sheet && (

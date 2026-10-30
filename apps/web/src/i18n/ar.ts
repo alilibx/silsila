@@ -253,7 +253,33 @@ export const ar = {
       maintenance: commonErrors.maintenance,
       network: commonErrors.network,
       generic: commonErrors.generic,
+      archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
     },
+  },
+  archive: {
+    banner: "هذه الختمة مؤرشفة",
+    bannerHint: "للقراءة فقط، ولا تصل منها رسائل.",
+    heading: "أرشفة الختمة",
+    hint: "عندما تنتهون منها، تتوقف الرسائل وتبقى الختمة للقراءة فقط.",
+    button: "أرشف الختمة",
+    title: "أرشفة الختمة؟",
+    body: "تتوقف الرسائل، ولا يضيع شيء: تبقى الختمة وأسماء من فيها للقراءة، وتجدها في «المؤرشفة».",
+    confirm: "نعم، أرشف الختمة",
+    archiving: "جارٍ الأرشفة",
+    restart: "ابدأ من جديد بالأشخاص أنفسهم",
+    restartTitle: "ابدأ ختمة جديدة؟",
+    restartBody:
+      "تبدأ ختمة جديدة بالأشخاص أنفسهم وأجزائهم. كلٌّ منهم يرسل رسالة الانضمام من جديد، ولا تصل الرسائل إلى من لم يرسلها.",
+    restartDate: "تبدأ الختمة الأولى",
+    restartConfirm: "ابدأ الختمة الجديدة",
+    starting: "جارٍ البدء",
+    delete: "احذف الختمة",
+    deleteTitle: "حذف الختمة؟",
+    deleteBody:
+      "لا يمكن التراجع عن الحذف. تُحذف الختمة ورابطها، ويبقى المشاركون المحفوظون عندك.",
+    deleteConfirm: "نعم، احذف الختمة",
+    deleting: "جارٍ الحذف",
+    cancel: "تراجع",
   },
   nav: {
     label: "التنقل",
@@ -396,6 +422,7 @@ export const ar = {
   actions: {
     errors: {
       notHolding: "ليس معك جزء الآن.",
+      archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
       /** The session ended on another device (signed out from there, say). */
       signedOut: "خرجتَ من حسابك على هذا الجهاز. سجّل دخولك من جديد لتكمل.",
       shared: {
@@ -432,6 +459,7 @@ export const ar = {
     settings: "إعداداتي",
     doneOf: (done: string, total: string) => `${done} من ${total} تمّت`,
     yours: (n: string, name: string) => `جزؤك: الجزء ${n} «${name}»`,
+    archived: "المؤرشفة",
     loadError: commonErrors.network,
   },
   create: {
@@ -514,6 +542,7 @@ export const ar = {
       not_reading_date: "هذا اليوم ليس يوم قراءة.",
       past: "هذا اليوم مضى.",
       archived: "هذه الختمة مؤرشفة، فلا يمكن تغييرها.",
+      not_archived: "أرشِف الختمة أولاً، ثم ابدأ منها من جديد أو احذفها.",
     } as Record<string, string>,
     setupTitle: "من سيقرأ معك؟",
     personName: "الاسم",
@@ -601,7 +630,6 @@ export const ar = {
     ended: "انتهت أيام القراءة المحددة.",
     pausedBanner:
       "الختمة موقوفة الآن. لا رسائل ولا يتقدّم رقم الختمة حتى تعيد تشغيلها.",
-    archivedBanner: "هذه الختمة مؤرشفة.",
     archivedSettings: "هذه الختمة مؤرشفة، فلا يمكن تغيير إعداداتها.",
     setupNotDone: "أضف من سيقرأ معك، ثم اضغط «ابدأ الختمة».",
     startKhatma: "ابدأ الختمة",
@@ -639,6 +667,7 @@ export const ar = {
       `الختمة ${toArabicDigits(number)}${date ? ` يوم ${date}` : ""}. هذا جزء كل مشارك فيها، ويتقدّم كلٌّ منهم جزءاً في كل ختمة.`,
     addReader: (juz: number) => `+ أضف قارئاً للجزء ${toArabicDigits(juz)}`,
     secondJuz: "جزء ثانٍ",
+    noReader: "بلا قارئ",
     readerTitle: (juz: number) => `قارئ الجزء ${toArabicDigits(juz)}`,
     walk: (juz: number, number: number) => {
       // Each khatma moves a reader up one juz', and after 30 it goes back to 1.

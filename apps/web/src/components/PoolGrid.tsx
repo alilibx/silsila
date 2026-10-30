@@ -3,11 +3,16 @@ import { toArabicDigits } from "@convex/lib/digits";
 import { t } from "../i18n/ar";
 import { Tile } from "./Tile";
 
-type Props = { tiles: TileView[]; onTake: (juz: number) => void };
+type Props = {
+  tiles: TileView[];
+  onTake: (juz: number) => void;
+  /** An archived khatma: the grid shows, but nothing can be taken. */
+  readOnly?: boolean;
+};
 
 const swatch = "me-1.5 inline-block size-3 rounded-full align-[-1px]";
 
-export function PoolGrid({ tiles, onTake }: Props) {
+export function PoolGrid({ tiles, onTake, readOnly = false }: Props) {
   const open = tiles.filter((x) => x.state === "open").length;
   return (
     <section id="pool" className="scroll-mt-4">
@@ -33,7 +38,12 @@ export function PoolGrid({ tiles, onTake }: Props) {
       </ul>
       <div className="grid grid-cols-3 gap-2.5">
         {tiles.map((tile) => (
-          <Tile key={tile.juz} tile={tile} onTake={onTake} />
+          <Tile
+            key={tile.juz}
+            tile={tile}
+            onTake={onTake}
+            readOnly={readOnly}
+          />
         ))}
       </div>
     </section>

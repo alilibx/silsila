@@ -42,7 +42,10 @@ const m = vi.hoisted(() => ({
     declineJoinRequest: vi.fn(),
     finishSetup: vi.fn(),
     dismiss: vi.fn(),
+    archive: vi.fn(),
+    remove: vi.fn(),
   },
+  startAgain: vi.fn(),
 }));
 
 vi.mock("../lib/session", () => ({
@@ -73,6 +76,7 @@ vi.mock("convex/react", async () => {
     },
     useMutation: (ref: never) =>
       m.fns[getFunctionName(ref).split(":")[1] as keyof typeof m.fns],
+    useAction: () => m.startAgain,
   };
 });
 
@@ -194,6 +198,8 @@ function renderAt(url = "/j/CODE") {
     <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route path="/j/:inviteCode" element={<Page />} />
+        <Route path="/j/:inviteCode/setup" element={<p>setup page</p>} />
+        <Route path="/" element={<p>home page</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -225,6 +231,7 @@ beforeEach(() => {
   m.me = { displayName: "علي" };
   m.joinLink = JOIN_LINK;
   m.notes = [];
+  m.startAgain.mockReset().mockResolvedValue({ inviteCode: "NEWCODE" });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -660,6 +667,141 @@ describe("page", () => {
     expect(screen.getByRole("list")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "اليوم" }));
     expect(screen.getByText("٢٧ / ٣٠")).toBeInTheDocument();
+  });
+});
+
+describe("an archived khatma", () => {
+  beforeEach(() => {
+    m.today = todayView({ archived: true });
+    m.settings = { ...settings, archived: true };
+  });
+
+  it("says so once, on Today and on People", () => {
+    const { unmount } = renderAt();
+    expect(screen.getAllByText(t.archive.banner)).toHaveLength(1);
+    unmount();
+    renderAt("/j/CODE?tab=people");
+    expect(screen.getAllByText(t.archive.banner)).toHaveLength(1);
+  });
+
+  it("offers to start again with the same people, and to delete", () => {
+    renderAt();
+    expect(
+      screen.getByRole("button", { name: t.archive.restart }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: t.archive.delete }),
+    ).toBeEnabled();
+  });
+
+  it("an active khatma offers neither", () => {
+    m.today = todayView();
+    m.settings = settings;
+    renderAt();
+    expect(screen.queryByText(t.archive.banner)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: t.archive.restart }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: t.archive.delete })).toBeNull();
+  });
+
+  it("start again asks for the first day, then opens the setup of the new khatma", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.restart }));
+    const sheet = screen.getByRole("dialog", { name: t.archive.restartTitle });
+    // Tuesday the 10th, noon in the khatma's zone: tomorrow is Wednesday the 11th.
+    expect(sheet).toHaveTextContent("غداً، الأربعاء ١١ نوفمبر");
+    await user.click(
+      within(sheet).getByRole("button", { name: t.archive.restartConfirm }),
+    );
+    expect(m.startAgain).toHaveBeenCalledWith({
+      ...args,
+      firstDate: "2026-11-11",
+    });
+    expect(await screen.findByText("setup page")).toBeInTheDocument();
+  });
+
+  it("delete asks first, then goes home", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.delete }));
+    expect(m.fns.remove).not.toHaveBeenCalled();
+    await user.click(
+      screen.getByRole("button", { name: t.archive.deleteConfirm }),
+    );
+    expect(m.fns.remove).toHaveBeenCalledWith(args);
+    expect(await screen.findByText("home page")).toBeInTheDocument();
+  });
+
+  it("Today: no tile opens", () => {
+    renderAt();
+    for (const tile of within(grid()).getAllByRole("button")) {
+      expect(tile).toBeDisabled();
+    }
+  });
+
+  it("People: the readers show, but nothing can be pressed, added or shared", () => {
+    m.people = peopleView(roster, undefined, {
+      requests: [
+        {
+          id: "q1",
+          name: "نور",
+          phoneMasked: "+971 50 ••• 0009",
+          createdAt: 1,
+        },
+      ],
+    });
+    renderAt("/j/CODE?tab=people");
+    const rows = within(
+      document.querySelector("ol") as HTMLElement,
+    ).getAllByRole("listitem");
+    expect(rows).toHaveLength(30);
+    expect(rows[1]).toHaveTextContent("مريم");
+    expect(
+      within(document.querySelector("ol") as HTMLElement).queryAllByRole(
+        "button",
+      ),
+    ).toHaveLength(0);
+    expect(screen.queryByText(/أضف قارئاً/)).toBeNull();
+    expect(screen.queryByRole("link", { name: t.rota.shareJoin })).toBeNull();
+    expect(screen.queryByText(t.rota.requestsHeading)).toBeNull();
+    expect(screen.queryByRole("link", { name: t.rota.notJoined })).toBeNull();
+  });
+
+  it("People: no join link is asked for", () => {
+    m.people = peopleView(roster);
+    (m.people as { joinLink: string | null }).joinLink = null;
+    renderAt("/j/CODE?tab=people");
+    expect(m.fns.ensureJoinLink).not.toHaveBeenCalled();
+  });
+
+  it("the switch button counts only active khatmas", () => {
+    const card = {
+      name: "ختمة",
+      createdAt: 0,
+      done: 0,
+      holding: null,
+      hasNote: false,
+      schedule: "daily",
+    };
+    m.mine = [
+      { ...card, inviteCode: "CODE", kind: "rota", archived: true },
+      { ...card, inviteCode: "OLD", archived: true },
+    ];
+    const { unmount } = renderAt();
+    expect(
+      screen.queryByRole("button", { name: t.nav.switchKhatma }),
+    ).toBeNull();
+    unmount();
+    m.mine = [
+      { ...card, inviteCode: "CODE", kind: "rota", archived: true },
+      { ...card, inviteCode: "OTHER" },
+    ];
+    renderAt();
+    expect(
+      screen.getByRole("button", { name: t.nav.switchKhatma }),
+    ).toBeInTheDocument();
   });
 });
 
