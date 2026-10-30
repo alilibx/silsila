@@ -197,6 +197,18 @@ html.dark {
 }
 
 /* What the rota pages need from the website's theme, until plan 2 rebuilds them. */
+:root {
+  --paper: var(--background);
+  --paper-2: var(--muted);
+  --ink: var(--foreground);
+  --ink-soft: var(--muted-foreground);
+  --line: var(--border);
+  --green: var(--primary);
+  --green-deep: var(--primary);
+  --gold: var(--sidebar-primary);
+  --wa: var(--good);
+}
+
 .dark .bg-white {
   background-color: var(--card);
 }

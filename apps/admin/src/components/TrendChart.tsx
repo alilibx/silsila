@@ -43,7 +43,7 @@ export function TrendChart({ points, format, label, period }: Props) {
     .map((p) => p.value)
     .filter((v): v is number => v !== null);
   if (values.length === 0) {
-    return <p className="py-8 text-center text-ink-soft">{t.stats.noData}</p>;
+    return <p className="py-8 text-center text-muted-foreground">{t.stats.noData}</p>;
   }
   const max = Math.max(...values, 0) || 1;
   const width = points.length * SLOT;
@@ -56,7 +56,7 @@ export function TrendChart({ points, format, label, period }: Props) {
 
   return (
     <figure className="flex flex-col gap-2">
-      <p role="status" className="min-h-5 text-sm text-ink-soft">
+      <p role="status" className="min-h-5 text-sm text-muted-foreground">
         {describe(shown)}
       </p>
       <svg
@@ -78,7 +78,7 @@ export function TrendChart({ points, format, label, period }: Props) {
           y1={HEIGHT - 0.5}
           x2={width}
           y2={HEIGHT - 0.5}
-          stroke="var(--line)"
+          stroke="var(--border)"
           strokeWidth={1}
         />
         {points.map((p, i) => {
@@ -92,7 +92,7 @@ export function TrendChart({ points, format, label, period }: Props) {
                   x2={x + BAR}
                   y1={HEIGHT - 2}
                   y2={HEIGHT - 2}
-                  stroke="var(--line)"
+                  stroke="var(--border)"
                   strokeDasharray="2 2"
                 />
               ) : (
@@ -103,7 +103,7 @@ export function TrendChart({ points, format, label, period }: Props) {
                     HEIGHT - Math.max(1, (p.value / max) * (HEIGHT - 4)),
                     BAR,
                   )}
-                  fill={i === active ? "var(--green-deep)" : "var(--green)"}
+                  fill={i === active ? "var(--sidebar-primary)" : "var(--chart-1)"}
                 />
               )}
               <rect

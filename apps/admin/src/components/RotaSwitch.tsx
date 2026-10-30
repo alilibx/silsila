@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch";
+
 type Props = {
   checked: boolean;
   onToggle: () => void;
@@ -9,22 +11,11 @@ type Props = {
 /** The «يمكنه إنشاء ختمة بالتناوب» switch. It only asks: the caller confirms and saves. */
 export function RotaSwitch({ checked, onToggle, labelledBy, label }: Props) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
+    <Switch
+      checked={checked}
+      onCheckedChange={onToggle}
       aria-labelledby={labelledBy}
       aria-label={label}
-      onClick={onToggle}
-      className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-        checked ? "bg-green" : "bg-line"
-      }`}
-    >
-      <span
-        className={`absolute top-1 size-6 rounded-full bg-white transition-all ${
-          checked ? "start-7" : "start-1"
-        }`}
-      />
-    </button>
+    />
   );
 }
