@@ -377,6 +377,30 @@ test("importable lists the organizer's live pool khatmas that have other members
   ).toEqual([]);
 });
 
+test("importable leaves out a pool whose members are all in the khatma already", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const [a, b] = await members(t, 2);
+  const source = await pool(t, s, [a!, b!]);
+  const list = () =>
+    t.query(api.rota.importable, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+    });
+  expect(await list()).toMatchObject([{ inviteCode: source, memberCount: 2 }]);
+
+  // One is typed in by number, which counts too: one is left to bring.
+  await add(t, s, { name: "أم سالم", phone: a!.phone });
+  expect(await list()).toMatchObject([{ inviteCode: source, memberCount: 1 }]);
+
+  await t.mutation(api.rota.importMembers, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    sourceInviteCode: source,
+  });
+  expect(await list()).toEqual([]);
+});
+
 test("importMembers adds the pool's members in join order and never shows their phones", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
@@ -639,6 +663,81 @@ test("an imported member who was removed and asks back keeps their number hidden
   const outputs = JSON.stringify([await peopleView(t, s), await saved(t, s)]);
   expect(outputs).not.toContain(digits(m!.phone));
   expect(await contactRows(t)).toMatchObject([{ phone: null }]);
+});
+
+test("a contact removed from the saved list keeps its number hidden when they ask to join later", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const [m] = await members(t, 1);
+  const source = await pool(t, s, [m!]);
+  await t.mutation(api.rota.importMembers, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    sourceInviteCode: source,
+  });
+  const [contact] = await contactRows(t);
+  const removed = await t.mutation(api.rota.removeSaved, {
+    sessionToken: s.token,
+    contactId: contact!._id,
+  });
+  expect(removed).toEqual({ ok: true });
+
+  // The row stays, only to say the number is hidden; no list shows it.
+  expect(await contactRows(t)).toMatchObject([
+    { phone: null, personId: m!.personId, removedAt: expect.any(Number) },
+  ]);
+  expect(await saved(t, s)).toEqual([]);
+  expect(
+    await t.query(api.people.savedPeople, { sessionToken: s.token }),
+  ).toEqual([]);
+  expect(
+    await t.mutation(api.rota.addSaved, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+      contactId: contact!._id,
+    }),
+  ).toEqual({ error: "not_found" });
+  expect(
+    await t.mutation(api.rota.removeSaved, {
+      sessionToken: s.token,
+      contactId: contact!._id,
+    }),
+  ).toEqual({ error: "not_found" });
+
+  // They leave the khatma and the pool, then ask to join.
+  const [imported] = (await participantRows(t, s.inviteCode)).filter(
+    (r) => r.personId === m!.personId,
+  );
+  await t.mutation(api.rota.removeParticipant, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    participantId: imported!._id,
+  });
+  await t.run(async (ctx) => {
+    const row = await ctx.db
+      .query("members")
+      .withIndex("by_person", (q) => q.eq("personId", m!.personId))
+      .unique();
+    await ctx.db.patch(row!._id, { status: "former" });
+  });
+  const accepted = await accept(t, s, await requestFrom(t, s, m!.phone));
+
+  expect(accepted).toHaveProperty("ok", true);
+  const back = (await participantRows(t, s.inviteCode)).find(
+    (r) => r.removedAt === null && r.personId === m!.personId,
+  );
+  expect(back).toMatchObject({ phone: m!.phone, phoneHidden: true });
+  const outputs = JSON.stringify([
+    await peopleView(t, s),
+    await saved(t, s),
+    await t.query(api.people.savedPeople, { sessionToken: s.token }),
+  ]);
+  expect(outputs).not.toContain(digits(m!.phone));
+  // Added again, they are back on the list, still without a number.
+  expect(await contactRows(t)).toMatchObject([{ phone: null }]);
+  expect((await saved(t, s))?.map((c) => [c.name, c.phone])).toEqual([
+    ["اسم واتساب", null],
+  ]);
 });
 
 test("a member of the organizer's pool khatma accepted from a request stays hidden, and is saved without a number", async () => {

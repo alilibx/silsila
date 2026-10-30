@@ -93,6 +93,78 @@ async function defaultMessages(ctx: QueryCtx): Promise<RotaMessages> {
 }
 
 /**
+ * The row of a new rota khatma, created by `person`. `null` on an invite or
+ * join code collision. `countsAgainstLimit` is whether it counts against their
+ * daily allowance of new khatmas, which refuses with `rate_limited`.
+ */
+async function insertRotaRow(
+  ctx: MutationCtx,
+  person: Doc<"people">,
+  spec: {
+    name: Doc<"khatmas">["name"];
+    inviteCode: string;
+    joinCode: string;
+    rota: NonNullable<Doc<"khatmas">["rota"]>;
+  },
+  countsAgainstLimit: boolean,
+  now: number,
+): Promise<Id<"khatmas"> | null> {
+  const taken = await ctx.db
+    .query("khatmas")
+    .withIndex("by_inviteCode", (q) => q.eq("inviteCode", spec.inviteCode))
+    .first();
+  if (taken) return null;
+  const joinTaken = await ctx.db
+    .query("khatmas")
+    .withIndex("by_joinCode", (q) => q.eq("joinCode", spec.joinCode))
+    .first();
+  if (joinTaken) return null;
+
+  if (countsAgainstLimit) {
+    const allowed = await checkRateLimit(
+      ctx,
+      `khatmaCreate:${person._id}`,
+      await getSetting(ctx, "createsPerPersonPerDay"),
+      DAY_MS,
+    );
+    if (!allowed) throw new ConvexError({ code: "rate_limited" });
+  }
+
+  return ctx.db.insert("khatmas", {
+    name: spec.name,
+    schedule: "none",
+    grace: DEFAULT_GRACE.none,
+    creatorPersonId: person._id,
+    inviteCode: spec.inviteCode,
+    joinCode: spec.joinCode,
+    completedRounds: 0,
+    createdAt: now,
+    kind: "rota",
+    rota: spec.rota,
+  });
+}
+
+/** The organizer's membership of a khatma they create. */
+async function insertOrganizerMembership(
+  ctx: MutationCtx,
+  khatmaId: Id<"khatmas">,
+  personId: Id<"people">,
+  shareToken: string,
+  now: number,
+): Promise<void> {
+  await ctx.db.insert("members", {
+    khatmaId,
+    personId,
+    joinedAt: now,
+    shareToken,
+    status: "active",
+    notificationsOn: true,
+    lastNudgeAt: null,
+    lastCelebratedRound: 0,
+  });
+}
+
+/**
  * Inserts a rota khatma with `person` as its organizer and as participant 1 on
  * slot 1, within the cap and with valid dates. `null` on a code collision. No
  * membership: with `pendingOrganizer`, it comes with the person's join message.
@@ -130,53 +202,33 @@ export async function insertRotaKhatma(
     throw new ConvexError({ code: "invalid_dates" });
   }
 
-  const taken = await ctx.db
-    .query("khatmas")
-    .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
-    .first();
-  if (taken) return null;
-  const joinTaken = await ctx.db
-    .query("khatmas")
-    .withIndex("by_joinCode", (q) => q.eq("joinCode", args.joinCode))
-    .first();
-  if (joinTaken) return null;
-
-  // An admin setting one up is not the organizer creating: it leaves their daily allowance alone.
-  if (!pendingOrganizer) {
-    const allowed = await checkRateLimit(
-      ctx,
-      `khatmaCreate:${person._id}`,
-      await getSetting(ctx, "createsPerPersonPerDay"),
-      DAY_MS,
-    );
-    if (!allowed) throw new ConvexError({ code: "rate_limited" });
-  }
-
   const now = Date.now();
-  const khatmaId = await ctx.db.insert("khatmas", {
-    name: args.name,
-    schedule: "none",
-    grace: DEFAULT_GRACE.none,
-    creatorPersonId: person._id,
-    inviteCode: args.inviteCode,
-    joinCode: args.joinCode,
-    completedRounds: 0,
-    createdAt: now,
-    kind: "rota",
-    rota: {
-      days: args.days,
-      firstDate: args.firstDate,
-      endDate: args.endDate,
-      timeZone: person.timeZone,
-      messages: await defaultMessages(ctx),
-      pausedAt: null,
-      pauseDates: [],
-      archivedAt: null,
-      // No day starts until the organizer finishes adding people (`finishSetup`).
-      setupDoneAt: null,
-      ...(pendingOrganizer ? { pendingOrganizer: true } : {}),
+  // An admin setting one up is not the organizer creating: it leaves their daily allowance alone.
+  const khatmaId = await insertRotaRow(
+    ctx,
+    person,
+    {
+      name: args.name,
+      inviteCode: args.inviteCode,
+      joinCode: args.joinCode,
+      rota: {
+        days: args.days,
+        firstDate: args.firstDate,
+        endDate: args.endDate,
+        timeZone: person.timeZone,
+        messages: await defaultMessages(ctx),
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+        // No day starts until the organizer finishes adding people (`finishSetup`).
+        setupDoneAt: null,
+        ...(pendingOrganizer ? { pendingOrganizer: true } : {}),
+      },
     },
-  });
+    !pendingOrganizer,
+    now,
+  );
+  if (khatmaId === null) return null;
   const participantId = await ctx.db.insert("rotaParticipants", {
     khatmaId,
     name: person.displayName,
@@ -212,16 +264,13 @@ export const insertRota = internalMutation({
     }
     const khatmaId = await insertRotaKhatma(ctx, person, args, false);
     if (khatmaId === null) return null;
-    await ctx.db.insert("members", {
+    await insertOrganizerMembership(
+      ctx,
       khatmaId,
-      personId: person._id,
-      joinedAt: Date.now(),
-      shareToken: args.shareToken,
-      status: "active",
-      notificationsOn: true,
-      lastNudgeAt: null,
-      lastCelebratedRound: 0,
-    });
+      person._id,
+      args.shareToken,
+      Date.now(),
+    );
     return { inviteCode: args.inviteCode };
   },
 });
@@ -302,58 +351,37 @@ export const insertAgain = internalMutation({
       throw new ConvexError({ code: "invalid_dates" });
     }
 
-    const taken = await ctx.db
-      .query("khatmas")
-      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
-      .first();
-    if (taken) return null;
-    const joinTaken = await ctx.db
-      .query("khatmas")
-      .withIndex("by_joinCode", (q) => q.eq("joinCode", args.joinCode))
-      .first();
-    if (joinTaken) return null;
-
-    const allowed = await checkRateLimit(
-      ctx,
-      `khatmaCreate:${person._id}`,
-      await getSetting(ctx, "createsPerPersonPerDay"),
-      DAY_MS,
-    );
-    if (!allowed) throw new ConvexError({ code: "rate_limited" });
-
     const now = Date.now();
-    const khatmaId = await ctx.db.insert("khatmas", {
-      name: source.name,
-      schedule: "none",
-      grace: DEFAULT_GRACE.none,
-      creatorPersonId: person._id,
-      inviteCode: args.inviteCode,
-      joinCode: args.joinCode,
-      completedRounds: 0,
-      createdAt: now,
-      kind: "rota",
-      rota: {
-        days: rota.days,
-        firstDate: args.firstDate,
-        endDate: null,
-        timeZone: rota.timeZone,
-        messages: rota.messages,
-        pausedAt: null,
-        pauseDates: [],
-        archivedAt: null,
-        setupDoneAt: null,
+    const khatmaId = await insertRotaRow(
+      ctx,
+      person,
+      {
+        name: source.name,
+        inviteCode: args.inviteCode,
+        joinCode: args.joinCode,
+        rota: {
+          days: rota.days,
+          firstDate: args.firstDate,
+          endDate: null,
+          timeZone: rota.timeZone,
+          messages: rota.messages,
+          pausedAt: null,
+          pauseDates: [],
+          archivedAt: null,
+          setupDoneAt: null,
+        },
       },
-    });
-    await ctx.db.insert("members", {
+      true,
+      now,
+    );
+    if (khatmaId === null) return null;
+    await insertOrganizerMembership(
+      ctx,
       khatmaId,
-      personId: person._id,
-      joinedAt: now,
-      shareToken: args.shareToken,
-      status: "active",
-      notificationsOn: true,
-      lastNudgeAt: null,
-      lastCelebratedRound: 0,
-    });
+      person._id,
+      args.shareToken,
+      now,
+    );
 
     const participants = (
       await ctx.db
@@ -607,7 +635,13 @@ export const removeSaved = sessionMutation({
     if (!contact || contact.ownerPersonId !== person._id) {
       return { error: "not_found" };
     }
-    await ctx.db.delete(contact._id);
+    if (contact.removedAt !== undefined) return { error: "not_found" };
+    if (contact.phone === null) {
+      // The row also records that their number stays hidden from this organizer.
+      await ctx.db.patch(contact._id, { removedAt: Date.now() });
+    } else {
+      await ctx.db.delete(contact._id);
+    }
     return { ok: true };
   },
 });
@@ -615,7 +649,10 @@ export const removeSaved = sessionMutation({
 // ---------------------------------------------------------------------------
 // Pool import
 
-/** The pool khatmas the organizer runs that are live and have members besides them. */
+/**
+ * The pool khatmas the organizer runs that are live and have members besides
+ * them that this khatma doesn't have yet: one whose members are all in is left out.
+ */
 export const importable = sessionQuery({
   args: { inviteCode: v.string() },
   handler: async (
@@ -625,6 +662,10 @@ export const importable = sessionQuery({
     const found = await organizerOf(ctx, args.inviteCode, ctx.person);
     if (!found || found.khatma.kind !== "rota") return [];
     const { person } = found;
+    const { phones, personIds } = await ops.activeIdentities(
+      ctx,
+      found.khatma._id,
+    );
     const memberships = await ctx.db
       .query("members")
       .withIndex("by_person", (q) => q.eq("personId", person._id))
@@ -645,11 +686,18 @@ export const importable = sessionQuery({
       const others = (await membersByJoin(ctx, khatma._id)).filter(
         (m) => m.status === "active" && m.personId !== person._id,
       );
-      if (others.length === 0) continue;
+      let addable = 0;
+      for (const member of others) {
+        const them = await ctx.db.get(member.personId);
+        if (them && !personIds.has(them._id) && !phones.has(them.phone)) {
+          addable += 1;
+        }
+      }
+      if (addable === 0) continue;
       list.push({
         inviteCode: khatma.inviteCode,
         title: khatmaTitle(khatma),
-        memberCount: others.length,
+        memberCount: addable,
       });
     }
     return list.sort((a, b) => a.title.localeCompare(b.title, "ar"));
@@ -706,9 +754,10 @@ export const importMembers = sessionMutation({
       added += 1;
       personIds.add(them._id);
       phones.add(them.phone);
-      await ops.saveContact(ctx, khatma, {
+      await ops.saveContact(ctx, person, {
         name: them.displayName,
-        phone: null,
+        phone: them.phone,
+        hidden: true,
         personId: them._id,
       });
     }

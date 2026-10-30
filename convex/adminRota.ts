@@ -68,18 +68,12 @@ async function requireLiveRota(
   return found;
 }
 
-/**
- * Records one operation of an admin on the khatma and returns its result. A
- * refused one writes nothing, and neither does one that `changed` says did nothing.
- */
-async function audited<Result extends object>(
+/** Writes the audit row for one operation of an admin on the khatma. */
+async function record(
   ctx: AdminMutationCtx,
   { khatmaId, ...after }: { khatmaId: Id<"khatmas"> },
   note: string,
-  result: Result,
-  changed = true,
-): Promise<Result> {
-  if ("error" in result || !changed) return result;
+): Promise<void> {
   await writeAudit(ctx, {
     actor: ctx.admin,
     action: "rota.adminChange",
@@ -89,6 +83,21 @@ async function audited<Result extends object>(
     after,
     note,
   });
+}
+
+/**
+ * Records one operation of an admin on the khatma and returns its result. A
+ * refused one writes nothing, and neither does one that `changed` says did nothing.
+ */
+async function audited<Result extends object>(
+  ctx: AdminMutationCtx,
+  args: { khatmaId: Id<"khatmas"> },
+  note: string,
+  result: Result,
+  changed = true,
+): Promise<Result> {
+  if ("error" in result || !changed) return result;
+  await record(ctx, args, note);
   return result;
 }
 
@@ -374,12 +383,14 @@ export const acceptJoinRequest = adminMutation({
   },
   handler: async (ctx, args): ReturnType<typeof ops.acceptJoinRequest> => {
     const { khatma, rota } = await requireLiveRota(ctx, args.khatmaId);
-    return audited(
-      ctx,
-      args,
-      "acceptJoinRequest",
-      await ops.acceptJoinRequest(ctx, khatma, rota, args),
-    );
+    const result = await ops.acceptJoinRequest(ctx, khatma, rota, args);
+    // A number added meanwhile is an error to the caller, yet the request was
+    // closed and the person welcomed: that is a change to record.
+    if ("error" in result && result.error === "already_added") {
+      await record(ctx, args, "acceptJoinRequest");
+      return result;
+    }
+    return audited(ctx, args, "acceptJoinRequest", result);
   },
 });
 

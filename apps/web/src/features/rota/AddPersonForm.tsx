@@ -18,11 +18,14 @@ export function AddPersonForm({
   inviteCode,
   juz,
   variant = "ghost",
+  onStart,
   onAdded,
 }: {
   inviteCode: string;
   juz?: number;
   variant?: "ghost" | "primary";
+  /** Called when the organizer presses add, before the call. */
+  onStart?: () => void;
   /** Called after the person is added, once the fields are empty. */
   onAdded?: () => void;
 }) {
@@ -36,6 +39,7 @@ export function AddPersonForm({
 
   function onAdd(event: FormEvent) {
     event.preventDefault();
+    onStart?.();
     void run(
       () =>
         addParticipant({

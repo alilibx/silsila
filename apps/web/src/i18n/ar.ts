@@ -705,8 +705,6 @@ export const ar = {
     savedHint: "اختر من أضفتَهم من قبل.",
     savedInKhatma: "في الختمة",
     savedErrors: {
-      bad_name: "اكتب اسم الشخص.",
-      bad_phone: "الرقم غير صحيح. اكتبه مع رمز الدولة، مثل \u200E+971",
       no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
       juz_taken: "هذا الجزء له قارئ. حاول مرة أخرى.",
       already_added: "هذا الشخص مضاف في الختمة.",

@@ -259,7 +259,7 @@ describe("privacy policy: saved lists, imports and setting up for someone", () =
       "The organizer of a khatma where members take their own juz' sees members' names only",
     );
     expect(en).toContain(
-      "unless that person is in, or was copied from, a khatma they run where members take their own juz'",
+      "unless that person is in, or was copied from, one of the organizer's own khatmas where members take their own juz'",
     );
     expect(en).not.toContain("The organizer sees members' names only");
     expect(flat("واتساب")).toContain(

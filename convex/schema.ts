@@ -225,6 +225,11 @@ export default defineSchema({
     phone: v.union(v.string(), v.null()), // E.164
     personId: v.union(v.id("people"), v.null()),
     createdAt: v.number(),
+    /**
+     * The organizer removed it from their list. Only a contact without a number
+     * is kept this way: it is how a number stays hidden from them afterwards.
+     */
+    removedAt: v.optional(v.number()),
   })
     .index("by_owner", ["ownerPersonId"])
     .index("by_owner_phone", ["ownerPersonId", "phone"])

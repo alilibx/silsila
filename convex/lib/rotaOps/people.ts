@@ -305,7 +305,15 @@ export async function addParticipant(
     args.juz,
   );
   if ("error" in placed) return placed;
-  await saveContact(ctx, khatma, { name, phone, personId: null });
+  const organizer = await ctx.db.get(khatma.creatorPersonId);
+  if (organizer) {
+    await saveContact(ctx, organizer, {
+      name,
+      phone,
+      hidden: false,
+      personId: null,
+    });
+  }
   return { ok: true, ...placed };
 }
 
@@ -424,33 +432,34 @@ export async function removeParticipant(
  * another one in a tap. One row per phone (the name follows the latest
  * spelling) or, for someone imported from a pool khatma, per person; a person
  * whose number was typed before joins that row. The organizer's own row isn't
- * saved.
+ * saved. `who.phone` is always their number; `hidden` keeps it out of the row.
+ * A contact the organizer removed comes back when they are added again.
  */
 export async function saveContact(
   ctx: MutationCtx,
-  khatma: Doc<"khatmas">,
-  who: { name: string; phone: string | null; personId: Id<"people"> | null },
+  organizer: Pick<Doc<"people">, "_id" | "phone">,
+  who: {
+    name: string;
+    phone: string;
+    /** Imported from a pool khatma: the row has no number. */
+    hidden: boolean;
+    personId: Id<"people"> | null;
+  },
 ): Promise<void> {
-  const organizer = await ctx.db.get(khatma.creatorPersonId);
-  if (!organizer) return;
   if (who.phone === organizer.phone || who.personId === organizer._id) return;
   const { personId } = who;
-  const person = personId === null ? null : await ctx.db.get(personId);
-  const phone = who.phone ?? person?.phone ?? null;
-  if (phone !== null) {
-    const same = await ctx.db
-      .query("rotaContacts")
-      .withIndex("by_owner_phone", (q) =>
-        q.eq("ownerPersonId", organizer._id).eq("phone", phone),
-      )
-      .first();
-    if (same) {
-      await ctx.db.patch(same._id, {
-        name: who.name,
-        ...(personId !== null ? { personId } : {}),
-      });
-      return;
-    }
+  const same = await ctx.db
+    .query("rotaContacts")
+    .withIndex("by_owner_phone", (q) =>
+      q.eq("ownerPersonId", organizer._id).eq("phone", who.phone),
+    )
+    .first();
+  if (same) {
+    await ctx.db.patch(same._id, {
+      name: who.name,
+      ...(personId !== null ? { personId } : {}),
+    });
+    return;
   }
   if (personId !== null) {
     const linked = await ctx.db
@@ -460,12 +469,20 @@ export async function saveContact(
       )
       .first();
     // A number typed once stays as it is, and a hidden one stays hidden.
-    if (linked) return;
+    if (linked) {
+      if (linked.removedAt !== undefined) {
+        await ctx.db.patch(linked._id, {
+          name: who.name,
+          removedAt: undefined,
+        });
+      }
+      return;
+    }
   }
   await ctx.db.insert("rotaContacts", {
     ownerPersonId: organizer._id,
     name: who.name,
-    phone: who.phone,
+    phone: who.hidden ? null : who.phone,
     personId,
     createdAt: Date.now(),
   });
@@ -510,6 +527,7 @@ export async function saved(
     .withIndex("by_owner", (q) => q.eq("ownerPersonId", khatma.creatorPersonId))
     .collect();
   return contacts
+    .filter((c) => c.removedAt === undefined)
     .map((c) => ({
       id: c._id,
       name: c.name,
@@ -532,7 +550,11 @@ export async function addSaved(
   | { error: "not_found" | "no_free_juz" | "juz_taken" | "already_added" }
 > {
   const contact = await ctx.db.get(args.contactId);
-  if (!contact || contact.ownerPersonId !== khatma.creatorPersonId) {
+  if (
+    !contact ||
+    contact.ownerPersonId !== khatma.creatorPersonId ||
+    contact.removedAt !== undefined
+  ) {
     return { error: "not_found" };
   }
   // A contact without a number is someone from a pool khatma: it stays hidden.
@@ -570,8 +592,9 @@ export async function addSaved(
 
 /**
  * Whether this person's number stays hidden from the organizer: they came in
- * from a pool khatma (their saved contact has no number), or are in a pool
- * khatma the organizer runs.
+ * from a pool khatma (their saved contact has no number, even one the organizer
+ * removed from their list: that row is kept for this), or are in a pool khatma
+ * the organizer runs.
  */
 async function numberHiddenFrom(
   ctx: QueryCtx,
@@ -699,11 +722,15 @@ export async function acceptJoinRequest(
     // `juz` was given, so a juz' is always chosen.
     return { error: "juz_taken" };
   }
-  await saveContact(ctx, khatma, {
-    name,
-    phone: phoneHidden ? null : request.phone,
-    personId,
-  });
+  const organizer = await ctx.db.get(khatma.creatorPersonId);
+  if (organizer) {
+    await saveContact(ctx, organizer, {
+      name,
+      phone: request.phone,
+      hidden: phoneHidden,
+      personId,
+    });
+  }
   await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
   await enqueue(ctx, welcomeRow(khatma._id, placed.participantId));
   return { ok: true, participantId: placed.participantId };

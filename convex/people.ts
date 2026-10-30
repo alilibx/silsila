@@ -109,6 +109,7 @@ export const savedPeople = sessionQuery({
       .withIndex("by_owner", (q) => q.eq("ownerPersonId", person._id))
       .collect();
     return contacts
+      .filter((c) => c.removedAt === undefined)
       .map((c) => ({ id: c._id, name: c.name, phone: c.phone }))
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
   },

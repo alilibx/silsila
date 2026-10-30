@@ -21,10 +21,12 @@ function GiveJuzSheet({
   inviteCode,
   view,
   onClose,
+  onStart,
 }: {
   inviteCode: string;
   view: View;
   onClose: () => void;
+  onStart: () => void;
 }) {
   const backend = useRotaBackend(inviteCode);
   const give = useMutation(backend.giveJuz);
@@ -33,14 +35,16 @@ function GiveJuzSheet({
   // Everyone has a reader now, so there is nothing left to ask.
   if (juz === undefined) return null;
 
-  const choose = (participantId: View["participants"][number]["id"]) =>
-    run(() =>
+  const choose = (participantId: View["participants"][number]["id"]) => {
+    onStart();
+    return run(() =>
       give({
         ...backend.authArgs(),
         participantId,
         juz,
       }),
     );
+  };
 
   return (
     <Sheet title={t.rota.giveTitle(juz)} onClose={onClose}>
@@ -78,7 +82,8 @@ type Pool = { inviteCode: string; title: string; memberCount: number };
 /**
  * Ways to fill the ajza' without typing: the members of one of the organizer's pool khatmas
  * (names only, their numbers stay hidden), or people saved from earlier khatmas. Shows only what
- * applies, and nothing when neither does.
+ * applies, and nothing when neither does and there is no import result or error to read.
+ * `onStart` runs when the organizer starts adding a saved person.
  */
 function BringPeopleInList({
   inviteCode,
@@ -87,6 +92,7 @@ function BringPeopleInList({
   error = null,
   result = null,
   onBringIn,
+  onStart,
 }: {
   inviteCode: string;
   pools?: Pool[] | undefined;
@@ -94,6 +100,7 @@ function BringPeopleInList({
   error?: string | null;
   result?: string | null;
   onBringIn?: (sourceInviteCode: string) => void;
+  onStart?: () => void;
 }) {
   const backend = useRotaBackend(inviteCode);
   const saved = useQuery(backend.saved, backend.scope);
@@ -101,7 +108,8 @@ function BringPeopleInList({
 
   const hasPools = pools !== undefined && pools.length > 0;
   const hasSaved = saved !== undefined && saved !== null && saved.length > 0;
-  if (!hasPools && !hasSaved) return null;
+  // An import takes its pool off the list, but what it did stays to be read.
+  if (!hasPools && !hasSaved && !result && !error) return null;
 
   return (
     <section className="mb-5 grid gap-3">
@@ -138,6 +146,7 @@ function BringPeopleInList({
         <SavedPicker
           inviteCode={inviteCode}
           onClose={() => setPicking(false)}
+          onStart={onStart}
         />
       )}
     </section>
@@ -149,23 +158,25 @@ function BringPoolMembersIn({
   inviteCode,
   importable,
   importMembers,
+  result,
+  onResult,
 }: {
   inviteCode: string;
   importable: NonNullable<RotaBackend["importable"]>;
   importMembers: NonNullable<RotaBackend["importMembers"]>;
+  result: string | null;
+  onResult: (result: string | null) => void;
 }) {
   const backend = useRotaBackend(inviteCode);
   const pools = useQuery(importable, backend.scope);
   const bring = useMutation(importMembers);
   const { busy, error, run } = useRotaCall(importErrors);
-  const [result, setResult] = useState<string | null>(null);
 
   const bringIn = (sourceInviteCode: string) => {
-    setResult(null);
+    onResult(null);
     return run(async () => {
       const done = await bring({ ...backend.authArgs(), sourceInviteCode });
-      if ("ok" in done)
-        setResult(t.rota.importResult(done.added, done.skipped));
+      if ("ok" in done) onResult(t.rota.importResult(done.added, done.skipped));
       return done;
     });
   };
@@ -178,20 +189,31 @@ function BringPoolMembersIn({
       error={error}
       result={result}
       onBringIn={(code) => void bringIn(code)}
+      onStart={() => onResult(null)}
     />
   );
 }
 
-function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
+function BringPeopleIn({
+  inviteCode,
+  result,
+  onResult,
+}: {
+  inviteCode: string;
+  result: string | null;
+  onResult: (result: string | null) => void;
+}) {
   const { importable, importMembers } = useRotaBackend(inviteCode);
   return importable && importMembers ? (
     <BringPoolMembersIn
       inviteCode={inviteCode}
       importable={importable}
       importMembers={importMembers}
+      result={result}
+      onResult={onResult}
     />
   ) : (
-    <BringPeopleInList inviteCode={inviteCode} />
+    <BringPeopleInList inviteCode={inviteCode} onStart={() => onResult(null)} />
   );
 }
 
@@ -212,6 +234,8 @@ export function RotaPeopleSetupContent({
   const finishSetup = useMutation(backend.finishSetup);
   const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
+  // What the last import did: it stays until the organizer starts something else.
+  const [importResult, setImportResult] = useState<string | null>(null);
   useEnsureJoinLink(inviteCode, view?.archived ? undefined : view?.joinLink);
 
   if (view === undefined) return null;
@@ -228,8 +252,15 @@ export function RotaPeopleSetupContent({
       <StepBar step={2} />
 
       <div className="mt-5">
-        <BringPeopleIn inviteCode={inviteCode} />
-        <AddPersonForm inviteCode={inviteCode} />
+        <BringPeopleIn
+          inviteCode={inviteCode}
+          result={importResult}
+          onResult={setImportResult}
+        />
+        <AddPersonForm
+          inviteCode={inviteCode}
+          onStart={() => setImportResult(null)}
+        />
       </div>
 
       <ol
@@ -306,6 +337,7 @@ export function RotaPeopleSetupContent({
           inviteCode={inviteCode}
           view={view}
           onClose={() => setGiving(false)}
+          onStart={() => setImportResult(null)}
         />
       )}
     </>

@@ -636,6 +636,19 @@ test("a person's view lists a khatma they organize once, and not as waiting", as
   expect(view?.khatmas).toMatchObject([{ khatmaId, pending: false }]);
 });
 
+test("a person's view leaves out an archived khatma that was waiting for them", async () => {
+  const t = convexTest(schema, modules);
+  const { khatmaId } = await running(t);
+  const personId = await t.run(
+    async (ctx) => (await ctx.db.get(khatmaId))!.creatorPersonId,
+  );
+  await t.mutation(api.adminRota.archive, { adminToken, khatmaId });
+
+  const view = await t.query(api.adminLookup.person, { adminToken, personId });
+
+  expect(view?.khatmas).toEqual([]);
+});
+
 test("the khatma view says whether a pool khatma is archived", async () => {
   const t = convexTest(schema, modules);
   await admin(t);
@@ -644,6 +657,54 @@ test("the khatma view says whether a pool khatma is archived", async () => {
   expect((await view())?.archived).toBe(false);
   await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
   expect((await view())?.archived).toBe(true);
+});
+
+test("accepting a request from a number already added still closes it, and is recorded", async () => {
+  const t = convexTest(schema, modules);
+  const { khatmaId } = await running(t);
+  const requestId = await t.run((ctx) =>
+    ctx.db.insert("rotaJoinRequests", {
+      khatmaId,
+      phone: "+971500009001",
+      profileName: "قارئ",
+      createdAt: NOW,
+      resolvedAt: null,
+      outcome: null,
+    }),
+  );
+  const before = (await auditRows(t)).length;
+
+  expect(
+    await t.mutation(api.adminRota.acceptJoinRequest, {
+      adminToken,
+      khatmaId,
+      requestId,
+      juz: 9,
+    }),
+  ).toEqual({ error: "already_added" });
+
+  expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+    resolvedAt: expect.any(Number),
+    outcome: "accepted",
+  });
+  const rows = await auditRows(t);
+  expect(rows).toHaveLength(before + 1);
+  expect(rows.at(-1)).toMatchObject({
+    action: "rota.adminChange",
+    note: "acceptJoinRequest",
+    after: { requestId, juz: 9 },
+  });
+
+  // The request is closed now, so asking again does nothing and records nothing.
+  expect(
+    await t.mutation(api.adminRota.acceptJoinRequest, {
+      adminToken,
+      khatmaId,
+      requestId,
+      juz: 9,
+    }),
+  ).toEqual({ error: "not_found" });
+  expect(await auditRows(t)).toHaveLength(before + 1);
 });
 
 test("an operation that changes nothing writes no audit row", async () => {

@@ -239,7 +239,7 @@ async function waitingKhatmas(ctx: QueryCtx, p: Doc<"people">) {
   const waiting = [];
   for (const row of rows) {
     const k = await ctx.db.get(row.khatmaId);
-    if (k?.rota?.pendingOrganizer !== true) continue;
+    if (k?.rota?.pendingOrganizer !== true || isArchived(k)) continue;
     if (k.creatorPersonId !== p._id) continue;
     waiting.push({
       khatmaId: k._id,

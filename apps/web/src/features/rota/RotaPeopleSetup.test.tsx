@@ -128,6 +128,50 @@ describe("RotaPeopleSetup: bringing people in", () => {
     expect(status).toHaveTextContent("شخصين");
   });
 
+  it("keeps the result when the import leaves nothing to bring, and drops it once another add starts", async () => {
+    const user = userEvent.setup();
+    m.saved = [];
+    m.fns.importMembers = vi.fn().mockImplementation(async () => {
+      // Everyone is in now, so the pool is no longer offered.
+      m.importable = [];
+      return { ok: true, added: 3, skipped: 0 };
+    });
+    renderSetup();
+    await user.click(
+      screen.getByRole("button", {
+        name: new RegExp(t.rota.importTitle("ختمة الجيران")),
+      }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      t.rota.importResult(3, 0),
+    );
+    expect(screen.queryByText(t.rota.importHint)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: t.rota.add }));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("drops the result when a saved person is added", async () => {
+    const user = userEvent.setup();
+    m.fns.importMembers = vi
+      .fn()
+      .mockResolvedValue({ ok: true, added: 1, skipped: 0 });
+    renderSetup();
+    await user.click(
+      screen.getByRole("button", {
+        name: new RegExp(t.rota.importTitle("ختمة الجيران")),
+      }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      t.rota.importResult(1, 0),
+    );
+
+    await user.click(screen.getByRole("button", { name: t.rota.savedFrom }));
+    const picker = screen.getByRole("dialog", { name: t.rota.savedTitle });
+    await user.click(within(picker).getByRole("button", { name: /أم خالد/ }));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
   it("a refusal is said plainly", async () => {
     const user = userEvent.setup();
     m.fns.importMembers = vi.fn().mockResolvedValue({ error: "not_found" });

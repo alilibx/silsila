@@ -19,11 +19,14 @@ export function SavedPicker({
   inviteCode,
   juz,
   onClose,
+  onStart,
   onAdded,
 }: {
   inviteCode: string;
   juz?: number;
   onClose: () => void;
+  /** Called when a person is pressed, before the call. */
+  onStart?: () => void;
   onAdded?: () => void;
 }) {
   const backend = useRotaBackend(inviteCode);
@@ -31,8 +34,9 @@ export function SavedPicker({
   const addSaved = useMutation(backend.addSaved);
   const { busy, error, run } = useRotaCall(savedErrors);
 
-  const add = (contactId: NonNullable<typeof saved>[number]["id"]) =>
-    run(
+  const add = (contactId: NonNullable<typeof saved>[number]["id"]) => {
+    onStart?.();
+    return run(
       () =>
         addSaved({
           ...backend.authArgs(),
@@ -44,6 +48,7 @@ export function SavedPicker({
         onAdded?.();
       },
     );
+  };
 
   return (
     <Sheet title={t.rota.savedTitle} onClose={onClose}>
