@@ -58,7 +58,8 @@ export const plan = internalQuery({
 export const markSent = internalMutation({
   args: { noteId: v.id("notes") },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.noteId, { whatsappSentAt: Date.now() });
+    const note = await ctx.db.get(args.noteId);
+    if (note) await ctx.db.patch(note._id, { whatsappSentAt: Date.now() });
   },
 });
 

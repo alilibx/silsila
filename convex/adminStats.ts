@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { adminQuery } from "./lib/adminSession";
+import { isArchived } from "./lib/khatma";
 import { DAY_MS, dubaiDay } from "./lib/stats";
 import { dayCounts, type DayCounts } from "./stats";
 
@@ -73,7 +74,7 @@ async function stalled(
   for (const round of quiet.slice(0, STALLED_CAP)) {
     if (round.lastFinishedAt === null && round.startedAt >= cutoff) continue;
     const khatma = await ctx.db.get(round.khatmaId);
-    if (khatma?.currentRoundId !== round._id) continue;
+    if (khatma?.currentRoundId !== round._id || isArchived(khatma)) continue;
     if (!(await hasActiveMember(ctx, khatma._id))) continue;
     count++;
   }

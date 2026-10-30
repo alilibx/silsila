@@ -489,7 +489,26 @@ test("a message for a closed day is skipped", async () => {
 test("a message in an archived khatma is skipped", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t, { archivedAt: NOW - 1 });
+  await queue(t, ids, "complete");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent).toEqual([]);
+  expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);
+});
+
+test("a cycle thank-you still goes out in an archived khatma", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { archivedAt: NOW - 1 });
   await queue(t, ids, "cycle");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(sent.map((s) => s.text)).toEqual(["[wirdak_rota_cycle] ختمة العائلة"]);
+  expect((await rows(t))[0]?.sentAt).toBeGreaterThanOrEqual(NOW);
+});
+
+test("a cycle thank-you to someone who stopped is skipped in an archived khatma", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t, { archivedAt: NOW - 1 });
+  await queue(t, ids, "cycle");
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { stoppedAt: NOW }));
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(sent).toEqual([]);
   expect((await rows(t))[0]?.skippedAt).toBeGreaterThanOrEqual(NOW);

@@ -317,8 +317,9 @@ function compose(
 
 /**
  * What `deliver` sends for a row: null when it no longer calls for a message
- * (already sent or skipped, the participant isn't reachable, the khatma is
- * archived, or a day's reading is closed or done), `retryAt` when it's quiet
+ * (already sent or skipped, the participant isn't reachable, the khatma is gone,
+ * or archived unless the row is a cycle thank-you, which is for reading already
+ * finished, or a day's reading is closed or done), `retryAt` when it's quiet
  * hours in the khatma's time zone, or the phone and the message to send. Inside
  * the phone's 24-hour window the message is free-form, outside it a template.
  */
@@ -338,7 +339,8 @@ export const plan = internalQuery({
     if (!reachable(participant)) return null;
     const khatma = await ctx.db.get(row.khatmaId);
     const rota = khatma?.rota;
-    if (!khatma || !rota || rota.archivedAt !== null) return null;
+    if (!khatma || !rota) return null;
+    if (rota.archivedAt !== null && row.kind !== "cycle") return null;
     let waiting: number[] | null = null;
     if (
       row.dayId !== null &&

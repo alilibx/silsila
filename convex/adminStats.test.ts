@@ -222,6 +222,19 @@ test("stalled khatmas: an open current round, a member, and 14 quiet days", asyn
   expect((await overview(t)).stalledKhatmas).toBe(2);
 });
 
+test("an archived khatma is not stalled", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const quiet = { startedAt: NOW - 30 * DAY, lastFinishedAt: NOW - 15 * DAY };
+  const archived = await khatmaWithRound(t, quiet);
+  await khatmaWithRound(t, quiet);
+  expect((await overview(t)).stalledKhatmas).toBe(2);
+
+  await t.run((ctx) => ctx.db.patch(archived.khatmaId, { archivedAt: NOW }));
+
+  expect((await overview(t)).stalledKhatmas).toBe(1);
+});
+
 test("days per round is the median over the last 30 days", async () => {
   const t = convexTest(schema, modules);
   await admin(t);

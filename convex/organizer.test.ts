@@ -628,6 +628,100 @@ test("the pool organizer controls refuse a rota khatma", async () => {
   );
 });
 
+/** An archived khatma with an active member and a blocked one. */
+async function archivedSetup() {
+  const { t, org, code, khatma } = await setup();
+  const member = await signedIn(t, "عضو");
+  const blocked = await signedIn(t, "محظور");
+  await join(t, khatma._id, member, { shareToken: "memberShare" });
+  await join(t, khatma._id, blocked, { status: "blocked" });
+  const base = { sessionToken: org.token, inviteCode: code };
+  await t.mutation(api.khatmaLifecycle.archive, base);
+  return {
+    t,
+    org,
+    code,
+    khatma,
+    base,
+    memberId: (await memberOf(t, khatma._id, member))._id,
+    blockedId: (await memberOf(t, khatma._id, blocked))._id,
+  };
+}
+
+test("update refuses an archived khatma", async () => {
+  const { t, code, base } = await archivedSetup();
+  await expect(
+    t.mutation(api.organizer.update, { ...base, name: "جديد" }),
+  ).rejects.toMatchObject({ data: { code: "archived" } });
+  expect((await khatmaOf(t, code)).name).toBe("ختمة الأسرة");
+});
+
+test("resetInvite refuses an archived khatma before drawing a code", async () => {
+  const { t, org, code, base } = await archivedSetup();
+  await expect(t.action(api.organizer.resetInvite, base)).rejects.toThrow(
+    /archived/,
+  );
+  await expect(
+    t.query(internal.organizer.activeMemberCount, {
+      personId: org.personId,
+      inviteCode: code,
+    }),
+  ).rejects.toMatchObject({ data: { code: "archived" } });
+  expect((await khatmaOf(t, code)).inviteCode).toBe(code);
+});
+
+test("applyInviteReset refuses an archived khatma", async () => {
+  const { t, org, code } = await archivedSetup();
+  await expect(
+    t.mutation(internal.organizer.applyInviteReset, {
+      personId: org.personId,
+      inviteCode: code,
+      newInviteCode: "newInvite123",
+      shareTokens: [],
+    }),
+  ).rejects.toMatchObject({ data: { code: "archived" } });
+  expect((await khatmaOf(t, code)).inviteCode).toBe(code);
+});
+
+test("removeMember refuses an archived khatma", async () => {
+  const { t, base, memberId } = await archivedSetup();
+  await expect(
+    t.mutation(api.organizer.removeMember, { ...base, memberId }),
+  ).rejects.toMatchObject({ data: { code: "archived" } });
+  expect((await t.run((ctx) => ctx.db.get(memberId)))?.status).toBe("active");
+});
+
+test("unblock refuses an archived khatma", async () => {
+  const { t, base, blockedId } = await archivedSetup();
+  await expect(
+    t.mutation(api.organizer.unblock, { ...base, memberId: blockedId }),
+  ).rejects.toMatchObject({ data: { code: "archived" } });
+  expect((await t.run((ctx) => ctx.db.get(blockedId)))?.status).toBe("blocked");
+});
+
+test("handOver refuses an archived khatma", async () => {
+  const { t, org, code, base, memberId } = await archivedSetup();
+  await expect(
+    t.mutation(api.organizer.handOver, { ...base, memberId }),
+  ).rejects.toMatchObject({ data: { code: "archived" } });
+  expect((await khatmaOf(t, code)).creatorPersonId).toBe(org.personId);
+  expect(await notesOf(t, org)).toEqual([]);
+});
+
+test("an archived khatma's organizer can still read its settings and delete it", async () => {
+  const { t, org, code, base, khatma } = await archivedSetup();
+  expect(await settingsOf(t, code, org)).toMatchObject({
+    name: "ختمة الأسرة",
+  });
+  expect(await t.mutation(api.khatmaLifecycle.archive, base)).toEqual({
+    ok: true,
+  });
+  expect(await t.mutation(api.khatmaLifecycle.remove, base)).toEqual({
+    ok: true,
+  });
+  expect(await t.run((ctx) => ctx.db.get(khatma._id))).toBeNull();
+});
+
 test("touch updates lastSeenAt and timeZone", async () => {
   const { t, org } = await setup();
   const person = () => t.run((ctx) => ctx.db.get(org.personId));

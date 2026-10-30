@@ -359,6 +359,64 @@ test("archive stamps a rota khatma, skips its unsent rows and closes its open da
   expect(day?.closedAt).toBe(stamp);
 });
 
+test("archive leaves a rota khatma's unsent cycle thank-you to go out", async () => {
+  const t = convexTest(schema, modules);
+  const org = await signedIn(t, "المنظم");
+  const { code, khatmaId, participantId, dayId } = await rotaKhatma(t, org);
+  const cycleId = await t.run((ctx) =>
+    ctx.db.insert("rotaOutbox", {
+      khatmaId,
+      participantId,
+      dayId,
+      kind: "cycle",
+      juz: [],
+      number: 30,
+      createdAt: NOW,
+      sentAt: null,
+      skippedAt: null,
+    }),
+  );
+
+  await t.mutation(api.khatmaLifecycle.archive, {
+    sessionToken: org.token,
+    inviteCode: code,
+  });
+
+  expect(await t.run((ctx) => ctx.db.get(cycleId))).toMatchObject({
+    sentAt: null,
+    skippedAt: null,
+  });
+});
+
+test("archive clears a rota organizer's notes, so none waits on quiet hours or sticks to the card", async () => {
+  const t = convexTest(schema, modules);
+  const org = await signedIn(t, "المنظم");
+  const { code, khatmaId } = await rotaKhatma(t, org);
+  const noteId = await noteFor(t, org, khatmaId);
+  await t.run((ctx) =>
+    ctx.db.insert("pushSubscriptions", {
+      personId: org.personId,
+      sessionId: org.sessionId,
+      endpoint: "https://push.example/org",
+      p256dh: "p",
+      auth: "a",
+      createdAt: NOW,
+    }),
+  );
+  const hasNote = async () =>
+    (await t.query(api.khatmas.mine, { sessionToken: org.token }))[0]?.hasNote;
+  expect(await hasNote()).toBe(true);
+  expect(await t.query(internal.push.deliveryPlan, { noteId })).not.toBeNull();
+
+  await t.mutation(api.khatmaLifecycle.archive, {
+    sessionToken: org.token,
+    inviteCode: code,
+  });
+
+  expect(await hasNote()).toBe(false);
+  expect(await t.query(internal.push.deliveryPlan, { noteId })).toBeNull();
+});
+
 test("only the khatma's organizer can archive or delete it", async () => {
   const t = convexTest(schema, modules);
   const org = await signedIn(t, "المنظم");
@@ -850,6 +908,17 @@ test("a deleted rota khatma's queued jobs return quietly, before and after the p
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   await runAll();
   expect(await t.run((ctx) => ctx.db.get(unsentId))).toBeNull();
+});
+
+test("marking a note that the purge took returns quietly", async () => {
+  const t = convexTest(schema, modules);
+  const org = await signedIn(t, "المنظم");
+  const { khatma } = await poolKhatma(t, org);
+  const noteId = await noteFor(t, org, khatma._id);
+  await t.run((ctx) => ctx.db.delete(noteId));
+
+  await t.mutation(internal.whatsappNotes.markSent, { noteId });
+  await t.mutation(internal.push.markPushed, { noteId });
 });
 
 test("a message from a deleted rota khatma's phone, before the purge, changes nothing", async () => {

@@ -11,9 +11,10 @@ import { requireOrganizer } from "./organizer";
 const PURGE_BATCH = 200;
 
 /**
- * Stops a khatma and leaves it read-only: a pool khatma's uncleared notes go,
- * a rota khatma's unsent messages are skipped and its open day closes, so a
- * late reply can't change it. Does nothing for one already archived.
+ * Stops a khatma and leaves it read-only: its uncleared notes go, and a rota
+ * khatma's unsent messages are skipped, all but the cycle thank-you, which is
+ * for reading already finished. Its open day closes, so a late reply can't
+ * change it. Does nothing for one already archived.
  */
 export async function archiveKhatma(
   ctx: MutationCtx,
@@ -21,30 +22,32 @@ export async function archiveKhatma(
 ): Promise<void> {
   if (isArchived(khatma)) return;
   const now = Date.now();
-  if (khatma.rota) {
-    await ctx.db.patch(khatma._id, {
-      rota: { ...khatma.rota, archivedAt: now },
-    });
-    const unsent = await ctx.db
-      .query("rotaOutbox")
-      .withIndex("by_khatma_unsent", (q) =>
-        q.eq("khatmaId", khatma._id).eq("sentAt", null).eq("skippedAt", null),
-      )
-      .collect();
-    for (const row of unsent) await ctx.db.patch(row._id, { skippedAt: now });
-    const day = await lastRotaDay(ctx, khatma._id);
-    if (day && day.closedAt === null) {
-      await ctx.db.patch(day._id, { closedAt: now });
-    }
-    return;
-  }
-  await ctx.db.patch(khatma._id, { archivedAt: now });
   const notes = await ctx.db
     .query("notes")
     .withIndex("by_khatma_kind", (q) => q.eq("khatmaId", khatma._id))
     .filter((q) => q.eq(q.field("clearedAt"), null))
     .collect();
   for (const note of notes) await ctx.db.patch(note._id, { clearedAt: now });
+  if (!khatma.rota) {
+    await ctx.db.patch(khatma._id, { archivedAt: now });
+    return;
+  }
+  await ctx.db.patch(khatma._id, {
+    rota: { ...khatma.rota, archivedAt: now },
+  });
+  const unsent = await ctx.db
+    .query("rotaOutbox")
+    .withIndex("by_khatma_unsent", (q) =>
+      q.eq("khatmaId", khatma._id).eq("sentAt", null).eq("skippedAt", null),
+    )
+    .collect();
+  for (const row of unsent) {
+    if (row.kind !== "cycle") await ctx.db.patch(row._id, { skippedAt: now });
+  }
+  const day = await lastRotaDay(ctx, khatma._id);
+  if (day && day.closedAt === null) {
+    await ctx.db.patch(day._id, { closedAt: now });
+  }
 }
 
 export const archive = sessionMutation({

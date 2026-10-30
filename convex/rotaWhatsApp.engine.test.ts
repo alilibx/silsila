@@ -408,6 +408,59 @@ test("closing a number-30 day queues the cycle message for readers who held a sl
   expect(await outbox(t, "cycle")).toHaveLength(1);
 });
 
+test("the day that ends the khatma on number 30 still sends its cycle thank-you", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 2 }], { firstDate: "2027-01-01" });
+  const [reader] = s.participants;
+  await t.run(async (ctx) => {
+    const khatma = await ctx.db.get(s.khatmaId);
+    if (!khatma?.rota) throw new Error("bad fixture");
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...khatma.rota, endDate: "2027-01-15" },
+    });
+    const day = async (n: number, date: string, closed: boolean) => {
+      const dayId = await ctx.db.insert("rotaDays", {
+        khatmaId: s.khatmaId,
+        n,
+        number: n,
+        cycle: 1,
+        date,
+        startedAt: dubai(`${date}T08:00`),
+        closesAt: dubai(`${date}T08:00`) + 24 * 3_600_000,
+        completedAt: null,
+        closedAt: closed ? 1 : null,
+        unreadSentAt: null,
+        summarySentAt: null,
+      });
+      await ctx.db.insert("rotaReads", {
+        dayId,
+        khatmaId: s.khatmaId,
+        juz: 2,
+        slot: 2,
+        holderId: reader!,
+        readerId: reader!,
+        doneAt: null,
+        doneByOrganizer: false,
+        reassignedAt: null,
+      });
+    };
+    await day(1, "2027-01-01", true);
+    await day(30, "2027-01-15", false);
+  });
+
+  await tickAt(t, s, "2027-01-16T08:00");
+
+  const khatma = await t.run((ctx) => ctx.db.get(s.khatmaId));
+  expect(khatma?.rota?.archivedAt).toBe(dubai("2027-01-16T08:00"));
+  const rows = await t.run((ctx) => ctx.db.query("rotaOutbox").collect());
+  const cycle = rows.filter((r) => r.kind === "cycle");
+  expect(cycle).toHaveLength(1);
+  expect(cycle[0]).toMatchObject({ sentAt: null, skippedAt: null });
+  expect(
+    await t.query(internal.rotaOutbox.plan, { outboxId: cycle[0]!._id }),
+  ).not.toBeNull();
+});
+
 test("celebrateIfComplete leaves out the participant who gets the dua in a reply, and only runs once", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t, [{ slot: 2 }, { slot: 3 }]);

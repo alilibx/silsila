@@ -363,9 +363,10 @@ async function sendCycleMessages(
 }
 
 /**
- * Closes a day: the one place `closedAt` is set, so the silence count and
- * the cycle messages run once per day. Does nothing for a closed day. A day
- * closing while the khatma is paused doesn't count toward silence.
+ * Closes a day and runs its silence count and cycle messages, once per day:
+ * it does nothing for a closed day. (Archiving a khatma closes its open day
+ * without them.) A day closing while the khatma is paused doesn't count toward
+ * silence.
  */
 async function closeDay(
   ctx: MutationCtx,

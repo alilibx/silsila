@@ -389,6 +389,49 @@ test("hand over moves the organizer and tells both", async () => {
   });
 });
 
+test("an admin moves an archived khatma quietly, with the usual audit row", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971500000001", "علي");
+  const sara = await person(t, "+971500000002", "سارة");
+  const { khatmaId, memberIds } = await khatma(t, ali, [sara]);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+
+  expect(
+    await t.mutation(api.adminOps.handOver, {
+      adminToken: "admin",
+      khatmaId,
+      memberId: memberIds[1]!,
+    }),
+  ).toEqual({ ok: true });
+
+  const after = await t.run(async (ctx) => ({
+    organizer: (await ctx.db.get(khatmaId))?.creatorPersonId,
+    notes: await ctx.db.query("notes").collect(),
+  }));
+  expect(after.organizer).toBe(sara);
+  expect(after.notes).toEqual([]);
+  expect((await audit(t)).at(-1)).toMatchObject({
+    action: "khatma.handOver",
+    before: ali,
+    after: sara,
+  });
+});
+
+test("an admin can reset an archived khatma's invite", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const ali = await person(t, "+971500000001", "علي");
+  const { khatmaId } = await khatma(t, ali, []);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+
+  await t.action(api.adminOps.resetInvite, { adminToken: "admin", khatmaId });
+
+  expect((await t.run((ctx) => ctx.db.get(khatmaId)))?.inviteCode).not.toBe(
+    "familyKhatma",
+  );
+});
+
 test("members can't reach lookups or operations", async () => {
   const t = convexTest(schema, modules);
   const sara = await person(t, "+971500000002");
