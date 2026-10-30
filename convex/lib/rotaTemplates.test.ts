@@ -3,6 +3,7 @@ import { DUAS } from "./duas";
 import {
   alreadyText,
   assignedTemplate,
+  assignedText,
   clockText,
   closedText,
   completeTemplate,
@@ -15,6 +16,7 @@ import {
   notOnListText,
   notYetText,
   reminderTemplate,
+  reminderText,
   ROTA_BUTTONS,
   stopText,
   thanksText,
@@ -126,6 +128,12 @@ test("the free texts use Arabic digits", () => {
   );
   expect(juzText(3, three)).toBe(
     "الختمة ٣ اليوم. قراءتك: الأجزاء ٣، ٥ و٦ من هذه الختمة.",
+  );
+  expect(reminderText(two)).toBe(
+    "تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة الجزأين ٥ و٦ في هذه الختمة.",
+  );
+  expect(assignedText(three, 7)).toBe(
+    "تحديث على قراءتك: أُسندت إليك قراءة الأجزاء ٣، ٥ و٦ في الختمة ٧ لهذا اليوم.",
   );
   expect(thanksText(12)).toBe("تقبّل الله منك. ١٢ من ٣٠ جزءاً تمّت اليوم.");
   expect(notYetText("٤:٠٠ م")).toBe("لا بأس، نذكّرك الساعة ٤:٠٠ م.");
