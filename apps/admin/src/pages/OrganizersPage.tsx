@@ -74,7 +74,7 @@ function PersonRow({
               >
                 {k.name ?? t.lookup.unnamed}
               </Link>
-              <span className="text-muted-foreground">
+              <span className="shrink-0 text-muted-foreground">
                 {t.lookup.members(k.memberCount)}
               </span>
             </li>
@@ -172,12 +172,15 @@ export function OrganizersPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title={t.organizers.title} />
-      <Link to="/rota/new" className={buttonVariants({ variant: "outline" })}>
+      <Link
+        to="/rota/new"
+        className={`${buttonVariants({ variant: "outline" })} sm:self-start`}
+      >
         {t.organizers.createFor}
       </Link>
 
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void find();
@@ -192,7 +195,11 @@ export function OrganizersPage() {
           onChange={(e) => setPhone(e.target.value)}
           className="rounded-lg border bg-card p-3"
         />
-        <Button type="submit" disabled={phone.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={phone.trim() === ""}
+        >
           {t.lookup.find}
         </Button>
         {found?.kind === "invalid" && (

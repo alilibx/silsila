@@ -70,7 +70,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <StatTile
           label={t.stats.activeKhatmas}
           value={formatCount(o.activeKhatmas)}
@@ -192,7 +192,10 @@ export function HomePage() {
     <div className="flex flex-col gap-4">
       <PageHeader title={t.home.title} />
       <OpenHelpCard adminToken={adminToken} />
-      <Link to="/rota/new" className={buttonVariants({ variant: "outline" })}>
+      <Link
+        to="/rota/new"
+        className={`${buttonVariants({ variant: "outline" })} sm:self-start`}
+      >
         {t.rota.create}
       </Link>
       <Dashboard adminToken={adminToken} />

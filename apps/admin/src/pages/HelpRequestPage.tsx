@@ -171,7 +171,11 @@ export function HelpRequestPage() {
             {error}
           </p>
         )}
-        <Button type="submit" disabled={busy || text.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={busy || text.trim() === ""}
+        >
           {t.help.send}
         </Button>
       </form>

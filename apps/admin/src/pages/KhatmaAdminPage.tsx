@@ -134,7 +134,10 @@ export function KhatmaAdminPage() {
             </p>
           )}
           <div className="mt-3 grid gap-2">
-            <Link to={`/khatmas/${khatmaId}/rota`} className={buttonVariants()}>
+            <Link
+              to={`/khatmas/${khatmaId}/rota`}
+              className={`${buttonVariants()} sm:self-start`}
+            >
               {t.rota.help}
             </Link>
             {joinLink && (

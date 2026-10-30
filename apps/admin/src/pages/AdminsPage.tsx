@@ -78,7 +78,7 @@ export function AdminsPage() {
         ))}
       </ul>
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void run(() => add({ adminToken, phone })).then((ok) => {
@@ -95,7 +95,11 @@ export function AdminsPage() {
           dir="ltr"
           className="rounded-lg border bg-card p-3"
         />
-        <Button type="submit" disabled={busy || phone.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={busy || phone.trim() === ""}
+        >
           {t.admins.add}
         </Button>
       </form>

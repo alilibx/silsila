@@ -74,7 +74,7 @@ export function SearchPage() {
       <PageHeader title={t.lookup.title} />
 
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void findKhatmas();
@@ -87,7 +87,11 @@ export function SearchPage() {
           onChange={(e) => setKhatmaQuery(e.target.value)}
           className="rounded-lg border bg-card p-3"
         />
-        <Button type="submit" disabled={khatmaQuery.trim().length < 2}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={khatmaQuery.trim().length < 2}
+        >
           {t.lookup.find}
         </Button>
         {hits !== null && hits.length === 0 && (
@@ -115,7 +119,7 @@ export function SearchPage() {
       </form>
 
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void findPerson();
@@ -130,7 +134,11 @@ export function SearchPage() {
           onChange={(e) => setPhone(e.target.value)}
           className="rounded-lg border bg-card p-3"
         />
-        <Button type="submit" disabled={phone.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={phone.trim() === ""}
+        >
           {t.lookup.find}
         </Button>
         {phoneResult?.kind === "invalid" && (

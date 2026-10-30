@@ -88,6 +88,23 @@ export async function adminSession(phone: string): Promise<string> {
   return JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as string;
 }
 
+/** Where `playwright.config.ts` serves the admin site's build. */
+export const ADMIN_URL = "http://localhost:5174";
+/** The key `apps/admin/src/lib/adminSession.ts` keeps its token under. */
+const ADMIN_TOKEN_KEY = "wirdak.admin.session";
+/** One fixed admin, so runs don't leave a new admin row each time on the shared local backend. */
+const ADMIN_PHONE = "+971500000077";
+
+/** Opens every later page in this browser as a signed-in admin. */
+export async function signInAsAdmin(page: Page): Promise<void> {
+  await blockExternal(page.context());
+  const token = await adminSession(ADMIN_PHONE);
+  await page.addInitScript(
+    ([key, value]) => localStorage.setItem(key ?? "", value ?? ""),
+    [ADMIN_TOKEN_KEY, token],
+  );
+}
+
 const FONTS_DIR = new URL("../node_modules/@fontsource/", import.meta.url)
   .pathname;
 

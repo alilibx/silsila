@@ -163,6 +163,10 @@
     font-weight: 350;
     -webkit-tap-highlight-color: transparent;
   }
+  /* A long Arabic name has no spaces to break on, and must not push a row wider. */
+  main {
+    overflow-wrap: anywhere;
+  }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -215,6 +219,14 @@ html.dark {
 
 .dark .bg-green {
   background-color: #2a7459;
+}
+
+.dark .bg-\[\#E7F5EC\] {
+  background-color: var(--accent);
+}
+
+.dark .bg-\[\#FBF1D9\] {
+  background-color: var(--saffron-soft);
 }
 
 @keyframes sheet-fade {

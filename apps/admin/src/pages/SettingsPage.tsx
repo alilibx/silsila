@@ -211,9 +211,7 @@ export function SettingsPage() {
                   ? t.settings.changedTab
                   : t.settings.groups[name]}{" "}
                 <span
-                  className={
-                    selected ? "opacity-70" : "text-muted-foreground"
-                  }
+                  className={selected ? "opacity-70" : "text-muted-foreground"}
                 >
                   {toArabicDigits(count)}
                 </span>
