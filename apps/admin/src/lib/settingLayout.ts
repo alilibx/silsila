@@ -17,7 +17,10 @@ export type SettingSection =
   | "organizer"
   | "notes"
   | "helpLimits"
-  | "helpRetention";
+  | "helpRetention"
+  | "rotaTimes"
+  | "rotaLimits"
+  | "rotaSilence";
 
 /**
  * Where each setting sits on the settings page. A missing group is a type
@@ -114,5 +117,27 @@ export const SETTING_LAYOUT: Record<
       keys: ["organizerInactiveMs", "successorActiveMs"],
     },
     { section: "notes", keys: ["notesRetentionMs", "notesUnclearedCapMs"] },
+  ],
+  rota: [
+    {
+      section: "rotaTimes",
+      keys: [
+        "rotaDayAt",
+        "rotaReminderAt",
+        "rotaReminderOn",
+        "rotaUnreadAt",
+        "rotaUnreadOn",
+        "rotaSummaryAt",
+        "rotaSummaryOn",
+      ],
+    },
+    {
+      section: "rotaLimits",
+      keys: ["rotaMaxActivePerOrganizer", "rotaMaxSlotsPerPerson"],
+    },
+    {
+      section: "rotaSilence",
+      keys: ["rotaSilenceNoticeDays", "rotaSilenceStopDays"],
+    },
   ],
 };
