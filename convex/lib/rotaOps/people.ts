@@ -418,8 +418,9 @@ export async function removeParticipant(
 /**
  * Remembers someone added to the khatma, so its organizer can add them to
  * another one in a tap. One row per phone (the name follows the latest
- * spelling) or, for someone imported from a pool khatma, per person. The
- * organizer's own row isn't saved.
+ * spelling) or, for someone imported from a pool khatma, per person; a person
+ * whose number was typed before joins that row. The organizer's own row isn't
+ * saved.
  */
 export async function saveContact(
   ctx: MutationCtx,
@@ -429,7 +430,9 @@ export async function saveContact(
   const organizer = await ctx.db.get(khatma.creatorPersonId);
   if (!organizer) return;
   if (who.phone === organizer.phone || who.personId === organizer._id) return;
-  const { phone, personId } = who;
+  const { personId } = who;
+  const person = personId === null ? null : await ctx.db.get(personId);
+  const phone = who.phone ?? person?.phone ?? null;
   if (phone !== null) {
     const same = await ctx.db
       .query("rotaContacts")
@@ -438,7 +441,10 @@ export async function saveContact(
       )
       .first();
     if (same) {
-      await ctx.db.patch(same._id, { name: who.name });
+      await ctx.db.patch(same._id, {
+        name: who.name,
+        ...(personId !== null ? { personId } : {}),
+      });
       return;
     }
   }
@@ -455,7 +461,7 @@ export async function saveContact(
   await ctx.db.insert("rotaContacts", {
     ownerPersonId: organizer._id,
     name: who.name,
-    phone,
+    phone: who.phone,
     personId,
     createdAt: Date.now(),
   });
@@ -558,6 +564,38 @@ export async function addSaved(
 // ---------------------------------------------------------------------------
 // Joining
 
+/**
+ * Whether this person's number stays hidden from the organizer: they came in
+ * from a pool khatma (their saved contact has no number), or are in a pool
+ * khatma the organizer runs.
+ */
+async function numberHiddenFrom(
+  ctx: QueryCtx,
+  organizerId: Id<"people">,
+  personId: Id<"people">,
+): Promise<boolean> {
+  if (personId === organizerId) return false;
+  const contacts = await ctx.db
+    .query("rotaContacts")
+    .withIndex("by_owner_person", (q) =>
+      q.eq("ownerPersonId", organizerId).eq("personId", personId),
+    )
+    .collect();
+  if (contacts.some((c) => c.phone === null)) return true;
+  const memberships = await ctx.db
+    .query("members")
+    .withIndex("by_person", (q) => q.eq("personId", personId))
+    .collect();
+  for (const membership of memberships) {
+    if (membership.status !== "active") continue;
+    const khatma = await ctx.db.get(membership.khatmaId);
+    if (khatma?.kind !== "rota" && khatma?.creatorPersonId === organizerId) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** The welcome for a member accepted from a join request: they were told the organizer would let them know. */
 function welcomeRow(
   khatmaId: Id<"khatmas">,
@@ -590,7 +628,8 @@ async function openRequest(
  * next day to start, already joined (their join message was the opt-in), and
  * is welcomed. If the number was added meanwhile, the request is closed, that
  * person counts as joined and is welcomed. A number that sent «إيقاف» after
- * asking withdrew the request: it is declined, and `not_found`.
+ * asking withdrew the request: it is declined, and `not_found`. Someone whose
+ * number is hidden from the organizer stays hidden, in the khatma and the saved list.
  */
 export async function acceptJoinRequest(
   ctx: MutationCtx,
@@ -640,17 +679,27 @@ export async function acceptJoinRequest(
     .query("people")
     .withIndex("by_phone", (q) => q.eq("phone", request.phone))
     .first();
-  const who = {
-    name: cleanDisplayName(request.profileName ?? "") ?? NEW_MEMBER_NAME,
-    phone: request.phone,
-    personId: person?._id ?? null,
-  };
-  const placed = await placeNewParticipant(ctx, khatma, who, args.juz, now);
+  const personId = person?._id ?? null;
+  const phoneHidden =
+    personId !== null &&
+    (await numberHiddenFrom(ctx, khatma.creatorPersonId, personId));
+  const name = cleanDisplayName(request.profileName ?? "") ?? NEW_MEMBER_NAME;
+  const placed = await placeNewParticipant(
+    ctx,
+    khatma,
+    { name, phone: request.phone, personId, phoneHidden },
+    args.juz,
+    now,
+  );
   if ("error" in placed) {
     // `juz` was given, so a juz' is always chosen.
     return { error: "juz_taken" };
   }
-  await saveContact(ctx, khatma, who);
+  await saveContact(ctx, khatma, {
+    name,
+    phone: phoneHidden ? null : request.phone,
+    personId,
+  });
   await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
   await enqueue(ctx, welcomeRow(khatma._id, placed.participantId));
   return { ok: true, participantId: placed.participantId };

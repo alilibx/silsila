@@ -1,7 +1,7 @@
 import { convexTest, type TestConvexForDataModel } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
-import type { DataModel, Doc } from "./_generated/dataModel";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
 import schema from "./schema";
 
@@ -544,6 +544,135 @@ test("addSaved of an imported contact keeps the phone hidden", async () => {
   expect(back).toMatchObject({ phone: m!.phone, phoneHidden: true });
   expect(JSON.stringify(await peopleView(t, s))).not.toContain(
     digits(m!.phone),
+  );
+});
+
+test("a contact typed first and imported later stays one row, with the typed number", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const [m] = await members(t, 1);
+  const source = await pool(t, s, [m!]);
+  const typed = await add(t, s, { name: "أم سالم", phone: m!.phone });
+  if (!("ok" in typed)) throw new Error(JSON.stringify(typed));
+  await t.mutation(api.rota.removeParticipant, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    participantId: typed.participantId,
+  });
+
+  await t.mutation(api.rota.importMembers, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    sourceInviteCode: source,
+  });
+
+  expect(await contactRows(t)).toMatchObject([
+    { name: "عضو 1", phone: m!.phone, personId: m!.personId },
+  ]);
+});
+
+// ---------------------------------------------------------------------------
+// Hidden numbers and join requests
+
+/** An open join request from `phone` on the khatma; `accept` takes it on juz' 5. */
+async function requestFrom(t: T, s: Setup, phone: string) {
+  const khatma = await t.run((ctx) =>
+    ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", s.inviteCode))
+      .unique(),
+  );
+  return await t.run((ctx) =>
+    ctx.db.insert("rotaJoinRequests", {
+      khatmaId: khatma!._id,
+      phone,
+      profileName: "اسم واتساب",
+      createdAt: NOW,
+      resolvedAt: null,
+      outcome: null,
+    }),
+  );
+}
+
+const accept = (t: T, s: Setup, requestId: Id<"rotaJoinRequests">) =>
+  t.mutation(api.rota.acceptJoinRequest, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    requestId,
+    juz: 5,
+  });
+
+test("an imported member who was removed and asks back keeps their number hidden", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const [m] = await members(t, 1);
+  const source = await pool(t, s, [m!]);
+  await t.mutation(api.rota.importMembers, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    sourceInviteCode: source,
+  });
+  const [imported] = (await participantRows(t, s.inviteCode)).filter(
+    (r) => r.personId === m!.personId,
+  );
+  await t.mutation(api.rota.removeParticipant, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    participantId: imported!._id,
+  });
+  // No longer in the pool either: the saved contact alone says the number is hidden.
+  await t.run(async (ctx) => {
+    const row = await ctx.db
+      .query("members")
+      .withIndex("by_person", (q) => q.eq("personId", m!.personId))
+      .unique();
+    await ctx.db.patch(row!._id, { status: "former" });
+  });
+
+  const accepted = await accept(t, s, await requestFrom(t, s, m!.phone));
+
+  expect(accepted).toHaveProperty("ok", true);
+  const back = (await participantRows(t, s.inviteCode)).find(
+    (r) => r.removedAt === null && r.personId === m!.personId,
+  );
+  expect(back).toMatchObject({ phone: m!.phone, phoneHidden: true });
+  const outputs = JSON.stringify([await peopleView(t, s), await saved(t, s)]);
+  expect(outputs).not.toContain(digits(m!.phone));
+  expect(await contactRows(t)).toMatchObject([{ phone: null }]);
+});
+
+test("a member of the organizer's pool khatma accepted from a request stays hidden, and is saved without a number", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const [m] = await members(t, 1);
+  await pool(t, s, [m!]);
+
+  const accepted = await accept(t, s, await requestFrom(t, s, m!.phone));
+
+  expect(accepted).toHaveProperty("ok", true);
+  const row = (await participantRows(t, s.inviteCode)).find(
+    (r) => r.phone === m!.phone,
+  );
+  expect(row).toMatchObject({ personId: m!.personId, phoneHidden: true });
+  const outputs = JSON.stringify([await peopleView(t, s), await saved(t, s)]);
+  expect(outputs).not.toContain(digits(m!.phone));
+  expect(await contactRows(t)).toMatchObject([
+    { phone: null, personId: m!.personId },
+  ]);
+});
+
+test("a member of someone else's pool khatma accepted from a request shows their number", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const other = await person(t);
+  const [m] = await members(t, 1);
+  await pool(t, other, [m!]);
+
+  await accept(t, s, await requestFrom(t, s, m!.phone));
+
+  const view = await peopleView(t, s);
+  expect(view?.participants.find((p) => p.juz.includes(5))?.phone).toBe(
+    m!.phone,
   );
 });
 
