@@ -9,7 +9,8 @@ import { getSessionToken } from "../../lib/session";
 
 /** What the People screens know of someone's WhatsApp: the fields `api.rota.people` adds. */
 export type JoinState = {
-  phone: string;
+  /** Null for someone imported from a pool khatma: there is no chat to open. */
+  phone: string | null;
   joined: boolean;
   stopped: boolean;
   silenced: boolean;
@@ -86,7 +87,7 @@ export function JoinChip({
     );
   }
   const waiting = `${chip} bg-saffron-soft text-saffron-ink`;
-  if (joinLink === null) {
+  if (joinLink === null || (!isMe && person.phone === null)) {
     return (
       <span className={`${waiting} min-h-9`}>{t.rota.notJoinedShort}</span>
     );
@@ -95,7 +96,7 @@ export function JoinChip({
   const href = isMe
     ? joinLink
     : waLink(
-        person.phone.replace(/\D/g, ""),
+        (person.phone ?? "").replace(/\D/g, ""),
         t.rota.shareMessage(title, joinLink, daysKind),
       );
   return (

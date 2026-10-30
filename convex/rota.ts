@@ -7,7 +7,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { organizerOf, requireOrganizer } from "./organizer";
+import { membersByJoin, organizerOf, requireOrganizer } from "./organizer";
 import { randomToken } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
 import { isArchived } from "./lib/khatma";
@@ -35,7 +35,7 @@ import {
   targetDay,
 } from "./lib/rotaPlace";
 import type { SessionContext } from "./lib/session";
-import { sessionMutation, sessionQuery } from "./lib/session";
+import { requirePerson, sessionMutation, sessionQuery } from "./lib/session";
 import { getSetting, quietHours } from "./lib/settings";
 import {
   cleanDisplayName,
@@ -247,6 +247,169 @@ export const create = action({
 });
 
 /**
+ * Inserts a new rota khatma from an archived one: the same name, days, messages,
+ * time zone and active participants on the same slots, and a membership for the
+ * organizer. Nobody has joined it: everyone sends their own join message again.
+ * `null` on invite or join code collision.
+ */
+export const insertAgain = internalMutation({
+  args: {
+    personId: v.id("people"),
+    sourceInviteCode: v.string(),
+    firstDate: v.string(),
+    inviteCode: v.string(),
+    joinCode: v.string(),
+    shareToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ inviteCode: string } | null> => {
+    if (await getSetting(ctx, "maintenanceMode")) {
+      throw new ConvexError({ code: "maintenance" });
+    }
+    const person = await ctx.db.get(args.personId);
+    if (!person) throw new ConvexError({ code: "not_signed_in" });
+    // The organizer runs one already, so `rotaAllowed` isn't asked again.
+    const found = await organizerOf(ctx, args.sourceInviteCode, person);
+    const rota = found?.khatma.rota;
+    if (!found || found.khatma.kind !== "rota" || !rota) {
+      throw new ConvexError({ code: "forbidden" });
+    }
+    const source = found.khatma;
+    if (!isArchived(source)) throw new ConvexError({ code: "not_archived" });
+    if (
+      (await activeRotaCount(ctx, person._id)) >=
+      (await getSetting(ctx, "rotaMaxActivePerOrganizer"))
+    ) {
+      throw new ConvexError({ code: "rota_cap" });
+    }
+    const today = localDate(Date.now(), rota.timeZone);
+    if (
+      !isDate(args.firstDate) ||
+      args.firstDate < today ||
+      !isReadingDate(rota.days, args.firstDate, args.firstDate)
+    ) {
+      throw new ConvexError({ code: "invalid_dates" });
+    }
+
+    const taken = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
+      .first();
+    if (taken) return null;
+    const joinTaken = await ctx.db
+      .query("khatmas")
+      .withIndex("by_joinCode", (q) => q.eq("joinCode", args.joinCode))
+      .first();
+    if (joinTaken) return null;
+
+    const allowed = await checkRateLimit(
+      ctx,
+      `khatmaCreate:${person._id}`,
+      await getSetting(ctx, "createsPerPersonPerDay"),
+      DAY_MS,
+    );
+    if (!allowed) throw new ConvexError({ code: "rate_limited" });
+
+    const now = Date.now();
+    const khatmaId = await ctx.db.insert("khatmas", {
+      name: source.name,
+      schedule: "none",
+      grace: DEFAULT_GRACE.none,
+      creatorPersonId: person._id,
+      inviteCode: args.inviteCode,
+      joinCode: args.joinCode,
+      completedRounds: 0,
+      createdAt: now,
+      kind: "rota",
+      rota: {
+        days: rota.days,
+        firstDate: args.firstDate,
+        endDate: null,
+        timeZone: rota.timeZone,
+        messages: rota.messages,
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+        setupDoneAt: null,
+      },
+    });
+    await ctx.db.insert("members", {
+      khatmaId,
+      personId: person._id,
+      joinedAt: now,
+      shareToken: args.shareToken,
+      status: "active",
+      notificationsOn: true,
+      lastNudgeAt: null,
+      lastCelebratedRound: 0,
+    });
+
+    const participants = (
+      await ctx.db
+        .query("rotaParticipants")
+        .withIndex("by_khatma", (q) => q.eq("khatmaId", source._id))
+        .collect()
+    )
+      .filter((p) => p.removedAt === null)
+      .sort(
+        (a, b) => a.addedAt - b.addedAt || a._creationTime - b._creationTime,
+      );
+    for (const old of participants) {
+      const participantId = await ctx.db.insert("rotaParticipants", {
+        khatmaId,
+        name: old.name,
+        phone: old.phone,
+        personId: old.personId,
+        addedAt: now,
+        removedAt: null,
+        ...(old.phoneHidden === true ? { phoneHidden: true } : {}),
+      });
+      const slots = await ctx.db
+        .query("rotaSlots")
+        .withIndex("by_participant", (q) => q.eq("participantId", old._id))
+        .collect();
+      for (const slot of slots) {
+        await ctx.db.insert("rotaSlots", {
+          khatmaId,
+          slot: slot.slot,
+          participantId,
+        });
+      }
+    }
+    return { inviteCode: args.inviteCode };
+  },
+});
+
+/**
+ * Starts a rota khatma again from an archived one of the same organizer: its
+ * settings and people on the same slots, first read on `firstDate`.
+ */
+export const startAgain = action({
+  args: {
+    sessionToken: v.optional(v.string()),
+    inviteCode: v.string(),
+    firstDate: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ inviteCode: string }> => {
+    const personId = await ctx.runQuery(internal.khatmas.personIdForToken, {
+      sessionToken: args.sessionToken,
+    });
+    if (!personId) throw new ConvexError({ code: "not_signed_in" });
+    for (let attempt = 0; attempt < INVITE_CODE_ATTEMPTS; attempt++) {
+      const created = await ctx.runMutation(internal.rota.insertAgain, {
+        personId,
+        sourceInviteCode: args.inviteCode,
+        firstDate: args.firstDate,
+        inviteCode: randomToken(9),
+        joinCode: randomJoinCode(),
+        shareToken: randomToken(8),
+      });
+      if (created) return created;
+    }
+    throw new Error("could not allocate an invite or join code");
+  },
+});
+
+/**
  * The rota khatma's join code, drawing and storing one when it has none (a
  * khatma created before join codes). For mutations: `by_joinCode` is checked
  * inside the transaction, so a drawn code is never taken. A join code is not a
@@ -338,9 +501,12 @@ function isJuz(juz: number): boolean {
   return Number.isInteger(juz) && juz >= 1 && juz <= ROTA_SIZE;
 }
 
-/** What the organizer sees of one participant; the phone is the one they typed. */
+/**
+ * What the organizer sees of one participant; the phone is the one they typed,
+ * and null for someone imported from a pool khatma (the organizer never sees it).
+ */
 type PersonState = {
-  phone: string;
+  phone: string | null;
   /** They sent their own join message. */
   joined: boolean;
   /** They sent «إيقاف». */
@@ -387,7 +553,7 @@ type PeopleView = {
 
 function personState(p: Doc<"rotaParticipants">): PersonState {
   return {
-    phone: p.phone,
+    phone: p.phoneHidden === true ? null : p.phone,
     joined: p.joinedAt != null,
     stopped: p.stoppedAt != null,
     silenced: p.silencedAt != null,
@@ -488,7 +654,13 @@ export const people = sessionQuery({
 async function placeNewParticipant(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
-  who: { name: string; phone: string; personId: Id<"people"> | null },
+  who: {
+    name: string;
+    phone: string;
+    personId: Id<"people"> | null;
+    /** Imported from a pool khatma: no client gets the phone. */
+    phoneHidden?: boolean;
+  },
   juz: number | undefined,
   joinedAt?: number,
 ): Promise<
@@ -510,9 +682,12 @@ async function placeNewParticipant(
 
   const participantId = await ctx.db.insert("rotaParticipants", {
     khatmaId: khatma._id,
-    ...who,
+    name: who.name,
+    phone: who.phone,
+    personId: who.personId,
     addedAt: Date.now(),
     removedAt: null,
+    ...(who.phoneHidden === true ? { phoneHidden: true } : {}),
     ...(joinedAt !== undefined ? { joinedAt } : {}),
   });
   await ctx.db.insert("rotaSlots", {
@@ -544,7 +719,7 @@ export const addParticipant = sessionMutation({
           | "already_added";
       }
   > => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const { person, khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
     const name = cleanDisplayName(args.name);
     if (name === null) return { error: "bad_name" };
     const phone = normalizePhone(args.phone);
@@ -566,6 +741,7 @@ export const addParticipant = sessionMutation({
       args.juz,
     );
     if ("error" in placed) return placed;
+    await saveContact(ctx, person, { name, phone, personId: null });
     return { ok: true, ...placed };
   },
 });
@@ -701,6 +877,276 @@ export const removeParticipant = sessionMutation({
 });
 
 // ---------------------------------------------------------------------------
+// Saved participants
+
+/**
+ * Remembers someone the organizer added, so they can be added to another khatma
+ * in a tap. One row per phone (the name follows the latest spelling) or, for
+ * someone imported from a pool khatma, per person. The organizer's own row
+ * isn't saved.
+ */
+async function saveContact(
+  ctx: MutationCtx,
+  organizer: Doc<"people">,
+  who: { name: string; phone: string | null; personId: Id<"people"> | null },
+): Promise<void> {
+  if (who.phone === organizer.phone || who.personId === organizer._id) return;
+  const { phone, personId } = who;
+  if (phone !== null) {
+    const same = await ctx.db
+      .query("rotaContacts")
+      .withIndex("by_owner_phone", (q) =>
+        q.eq("ownerPersonId", organizer._id).eq("phone", phone),
+      )
+      .first();
+    if (same) {
+      await ctx.db.patch(same._id, { name: who.name });
+      return;
+    }
+  }
+  if (personId !== null) {
+    const linked = await ctx.db
+      .query("rotaContacts")
+      .withIndex("by_owner_person", (q) =>
+        q.eq("ownerPersonId", organizer._id).eq("personId", personId),
+      )
+      .first();
+    // A number typed once stays as it is, and a hidden one stays hidden.
+    if (linked) return;
+  }
+  await ctx.db.insert("rotaContacts", {
+    ownerPersonId: organizer._id,
+    name: who.name,
+    phone,
+    personId,
+    createdAt: Date.now(),
+  });
+}
+
+type SavedContact = {
+  id: Id<"rotaContacts">;
+  name: string;
+  /** Null for someone imported from a pool khatma. */
+  phone: string | null;
+  /** They are an active participant of this khatma. */
+  inKhatma: boolean;
+};
+
+/** Active participants of a khatma, by phone and by linked person. */
+async function activeIdentities(
+  ctx: QueryCtx,
+  khatmaId: Id<"khatmas">,
+): Promise<{ phones: Set<string>; personIds: Set<Id<"people">> }> {
+  const rows = (
+    await ctx.db
+      .query("rotaParticipants")
+      .withIndex("by_khatma", (q) => q.eq("khatmaId", khatmaId))
+      .collect()
+  ).filter((p) => p.removedAt === null);
+  return {
+    phones: new Set(rows.map((p) => p.phone)),
+    personIds: new Set(
+      rows.flatMap((p) => (p.personId === null ? [] : [p.personId])),
+    ),
+  };
+}
+
+/** The organizer's saved participants, by name, and which are in this khatma already. Organizer only. */
+export const saved = sessionQuery({
+  args: { inviteCode: v.string() },
+  handler: async (ctx, args): Promise<SavedContact[] | null> => {
+    const found = await organizerOf(ctx, args.inviteCode, ctx.person);
+    if (!found || found.khatma.kind !== "rota") return null;
+    const { person, khatma } = found;
+    const { phones, personIds } = await activeIdentities(ctx, khatma._id);
+    const contacts = await ctx.db
+      .query("rotaContacts")
+      .withIndex("by_owner", (q) => q.eq("ownerPersonId", person._id))
+      .collect();
+    return contacts
+      .map((c) => ({
+        id: c._id,
+        name: c.name,
+        phone: c.phone,
+        inKhatma:
+          (c.phone !== null && phones.has(c.phone)) ||
+          (c.personId !== null && personIds.has(c.personId)),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  },
+});
+
+/** Adds a saved contact to the khatma, as `addParticipant` does for a typed one. */
+export const addSaved = sessionMutation({
+  args: {
+    inviteCode: v.string(),
+    contactId: v.id("rotaContacts"),
+    juz: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    | { ok: true; participantId: Id<"rotaParticipants">; juz: number }
+    | { error: "not_found" | "no_free_juz" | "juz_taken" | "already_added" }
+  > => {
+    const { person, khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const contact = await ctx.db.get(args.contactId);
+    if (!contact || contact.ownerPersonId !== person._id) {
+      return { error: "not_found" };
+    }
+    // A contact without a number is someone from a pool khatma: it stays hidden.
+    const linked =
+      contact.phone === null && contact.personId !== null
+        ? await ctx.db.get(contact.personId)
+        : null;
+    const phone = contact.phone ?? linked?.phone ?? null;
+    if (phone === null) return { error: "not_found" };
+
+    const { phones, personIds } = await activeIdentities(ctx, khatma._id);
+    if (
+      phones.has(phone) ||
+      (contact.personId !== null && personIds.has(contact.personId))
+    ) {
+      return { error: "already_added" };
+    }
+    const placed = await placeNewParticipant(
+      ctx,
+      khatma,
+      {
+        name: contact.name,
+        phone,
+        personId: contact.personId,
+        phoneHidden: contact.phone === null,
+      },
+      args.juz,
+    );
+    if ("error" in placed) return placed;
+    return { ok: true, ...placed };
+  },
+});
+
+export const removeSaved = sessionMutation({
+  args: { contactId: v.id("rotaContacts") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true } | { error: "not_found" }> => {
+    const person = requirePerson(ctx);
+    const contact = await ctx.db.get(args.contactId);
+    if (!contact || contact.ownerPersonId !== person._id) {
+      return { error: "not_found" };
+    }
+    await ctx.db.delete(contact._id);
+    return { ok: true };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Pool import
+
+/** The pool khatmas the organizer runs that are live and have members besides them. */
+export const importable = sessionQuery({
+  args: { inviteCode: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ inviteCode: string; title: string; memberCount: number }[]> => {
+    const found = await organizerOf(ctx, args.inviteCode, ctx.person);
+    if (!found || found.khatma.kind !== "rota") return [];
+    const { person } = found;
+    const memberships = await ctx.db
+      .query("members")
+      .withIndex("by_person", (q) => q.eq("personId", person._id))
+      .collect();
+    const list: { inviteCode: string; title: string; memberCount: number }[] =
+      [];
+    for (const membership of memberships) {
+      if (membership.status !== "active") continue;
+      const khatma = await ctx.db.get(membership.khatmaId);
+      if (
+        !khatma ||
+        khatma.kind === "rota" ||
+        khatma.creatorPersonId !== person._id ||
+        isArchived(khatma)
+      ) {
+        continue;
+      }
+      const others = (await membersByJoin(ctx, khatma._id)).filter(
+        (m) => m.status === "active" && m.personId !== person._id,
+      );
+      if (others.length === 0) continue;
+      list.push({
+        inviteCode: khatma.inviteCode,
+        title: khatmaTitle(khatma),
+        memberCount: others.length,
+      });
+    }
+    return list.sort((a, b) => a.title.localeCompare(b.title, "ar"));
+  },
+});
+
+/**
+ * Adds the active members of one of the organizer's pool khatmas to the free
+ * ajza' in the order they joined it. The organizer never sees their numbers:
+ * the participants are marked `phoneHidden`, and each has to join on WhatsApp
+ * themselves. Stops when the ajza' run out; the rest count as skipped.
+ */
+export const importMembers = sessionMutation({
+  args: { inviteCode: v.string(), sourceInviteCode: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    { ok: true; added: number; skipped: number } | { error: "not_found" }
+  > => {
+    const { person, khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const source = await organizerOf(ctx, args.sourceInviteCode, person);
+    if (!source || source.khatma.kind === "rota" || isArchived(source.khatma)) {
+      return { error: "not_found" };
+    }
+    const { phones, personIds } = await activeIdentities(ctx, khatma._id);
+
+    const candidates = (await membersByJoin(ctx, source.khatma._id)).filter(
+      (m) => m.status === "active" && m.personId !== person._id,
+    );
+    let added = 0;
+    let skipped = 0;
+    for (const [index, member] of candidates.entries()) {
+      const them = await ctx.db.get(member.personId);
+      if (!them || personIds.has(them._id) || phones.has(them.phone)) {
+        skipped += 1;
+        continue;
+      }
+      const placed = await placeNewParticipant(
+        ctx,
+        khatma,
+        {
+          name: them.displayName,
+          phone: them.phone,
+          personId: them._id,
+          phoneHidden: true,
+        },
+        undefined,
+      );
+      if ("error" in placed) {
+        skipped += candidates.length - index;
+        break;
+      }
+      added += 1;
+      personIds.add(them._id);
+      phones.add(them.phone);
+      await saveContact(ctx, person, {
+        name: them.displayName,
+        phone: null,
+        personId: them._id,
+      });
+    }
+    return { ok: true, added, skipped };
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Joining
 
 /**
@@ -763,7 +1209,10 @@ export const acceptJoinRequest = sessionMutation({
     | { ok: true; participantId: Id<"rotaParticipants"> }
     | { error: "not_found" | "juz_taken" | "already_added" }
   > => {
-    const { khatma } = await requireRotaOrganizer(ctx, args.inviteCode);
+    const { person: organizer, khatma } = await requireRotaOrganizer(
+      ctx,
+      args.inviteCode,
+    );
     const request = await openRequest(ctx, khatma._id, args.requestId);
     if (!request) return { error: "not_found" };
     const now = Date.now();
@@ -803,21 +1252,17 @@ export const acceptJoinRequest = sessionMutation({
       .query("people")
       .withIndex("by_phone", (q) => q.eq("phone", request.phone))
       .first();
-    const placed = await placeNewParticipant(
-      ctx,
-      khatma,
-      {
-        name: cleanDisplayName(request.profileName ?? "") ?? NEW_MEMBER_NAME,
-        phone: request.phone,
-        personId: person?._id ?? null,
-      },
-      args.juz,
-      now,
-    );
+    const who = {
+      name: cleanDisplayName(request.profileName ?? "") ?? NEW_MEMBER_NAME,
+      phone: request.phone,
+      personId: person?._id ?? null,
+    };
+    const placed = await placeNewParticipant(ctx, khatma, who, args.juz, now);
     if ("error" in placed) {
       // `juz` was given, so a juz' is always chosen.
       return { error: "juz_taken" };
     }
+    await saveContact(ctx, organizer, who);
     await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
     await enqueue(ctx, welcomeRow(khatma._id, placed.participantId));
     return { ok: true, participantId: placed.participantId };

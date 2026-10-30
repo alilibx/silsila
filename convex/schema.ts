@@ -205,11 +205,29 @@ export default defineSchema({
     lastReplyAt: v.optional(nullableNumber),
     /** Reading days in a row they sent no reply. */
     silentDays: v.optional(v.number()),
+    /**
+     * Imported from a pool khatma: the organizer never sees this phone, so
+     * nothing returns it to a client (the join link is the only way in).
+     */
+    phoneHidden: v.optional(v.boolean()),
   })
     .index("by_khatma", ["khatmaId"])
     .index("by_khatma_phone", ["khatmaId", "phone"])
     // Every khatma a phone reads in, for its WhatsApp replies.
     .index("by_phone", ["phone"]),
+
+  /** Someone an organizer added before: they can be added to another rota khatma in a tap. */
+  rotaContacts: defineTable({
+    ownerPersonId: v.id("people"),
+    name: v.string(),
+    /** Null for someone imported from a pool khatma: the organizer never sees the number. */
+    phone: v.union(v.string(), v.null()), // E.164
+    personId: v.union(v.id("people"), v.null()),
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerPersonId"])
+    .index("by_owner_phone", ["ownerPersonId", "phone"])
+    .index("by_owner_person", ["ownerPersonId", "personId"]),
 
   /** Which participant owns each of the 30 slots. */
   rotaSlots: defineTable({
