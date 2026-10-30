@@ -71,6 +71,8 @@ vi.mock("convex/react", async () => {
       if (name === "rota:today") return m.today;
       if (name === "rota:settings") return m.settings;
       if (name === "rota:people") return m.people;
+      // Nobody saved and no pool khatma to bring from: the plain add form.
+      if (name === "rota:saved" || name === "rota:importable") return [];
       if (name === "khatmas:mine") return m.mine;
       if (name === "sessions:me") return m.me;
       if (name === "notes:forKhatma") return m.notes;

@@ -698,6 +698,39 @@ export const ar = {
       juz_taken: "هذا الجزء له قارئ الآن.",
       too_many: "لا يمكنه أن يقرأ أكثر من هذا.",
     } as Record<string, string>,
+    // Saved participants and pool members
+    savedFrom: "من ختمات سابقة",
+    savedTitle: "من ختمات سابقة",
+    savedHint: "اختر من أضفتَهم من قبل.",
+    savedInKhatma: "في الختمة",
+    savedErrors: {
+      bad_name: "اكتب اسم الشخص.",
+      bad_phone: "الرقم غير صحيح. اكتبه مع رمز الدولة، مثل \u200E+971",
+      no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
+      juz_taken: "هذا الجزء له قارئ. حاول مرة أخرى.",
+      already_added: "هذا الشخص مضاف في الختمة.",
+      not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
+    } as Record<string, string>,
+    importTitle: (title: string) => `أضف أعضاء ${title}`,
+    importCount: (n: number) =>
+      `${counted(n, { one: "عضو واحد", two: "عضوان", few: "أعضاء", many: "عضواً" })}، بالأسماء فقط`,
+    importHint: "لا ترى أرقامهم، وكلٌّ منهم ينضمّ بنفسه من رابط الانضمام.",
+    importResult: (added: number, skipped: number) => {
+      const people = (n: number) =>
+        counted(n, {
+          one: "شخصاً واحداً",
+          two: "شخصين",
+          few: "أشخاص",
+          many: "شخصاً",
+        });
+      const first = added > 0 ? `أضفنا ${people(added)}.` : "لم نضف أحداً.";
+      return skipped > 0
+        ? `${first} تركنا ${people(skipped)}، لأنهم في الختمة أو لأن الأجزاء اكتملت.`
+        : first;
+    },
+    importErrors: {
+      not_found: "لم نجد تلك الختمة. أعد تحميل الصفحة.",
+    } as Record<string, string>,
     // Settings
     pauseHeading: "الإيقاف",
     pauseNow: "أوقف الختمة الآن",
@@ -780,6 +813,19 @@ export const ar = {
     signedOutOthers: "سجّلنا خروج الأجهزة الأخرى.",
     signedOutOne: "سجّلنا خروج ذلك الجهاز.",
     numbers: "أرقامي",
+    savedHeading: "مشاركوني",
+    savedHint: "من أضفتَهم إلى ختماتك بالتناوب. تجدهم عند إضافة قارئ جديد.",
+    savedHidden: "مخفي",
+    savedRemove: "احذف",
+    savedRemoveLabel: (name: string) => `احذف ${name}`,
+    savedRemoveTitle: (name: string) => `احذف ${name} من مشاركيك؟`,
+    savedRemoveBody:
+      "يبقى في الختمات التي هو فيها الآن. فقط لا يظهر في قائمتك بعد اليوم.",
+    savedRemoveConfirm: "نعم، احذفه",
+    savedRemoveCancel: "تراجع",
+    savedErrors: {
+      not_found: "لم نجد هذا الشخص. أعد تحميل الصفحة.",
+    } as Record<string, string>,
     /** Whole juz' read: `جزءاً واحداً`, `جزأين`, `٤ أجزاء`, `١٢ جزءاً`. */
     juzRead: (n: number) =>
       `قرأتَ ${counted(n, {

@@ -11,6 +11,7 @@ import { AddPersonForm } from "./AddPersonForm";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
 import { JoinRequests } from "./JoinRequests";
+import { SavedPicker } from "./SavedPicker";
 import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate } from "./format";
 
@@ -201,8 +202,21 @@ function EmptyRowSheet({
   onClose: () => void;
 }) {
   const giveJuz = useMutation(api.rota.giveJuz);
+  const sessionToken = useSessionToken();
+  const saved = useQuery(api.rota.saved, { sessionToken, inviteCode });
+  const [picking, setPicking] = useState(false);
   const { busy, error, run } = useRotaCall(peopleErrors);
   const listId = useId();
+  if (picking) {
+    return (
+      <SavedPicker
+        inviteCode={inviteCode}
+        juz={juz}
+        onClose={() => setPicking(false)}
+        onAdded={onClose}
+      />
+    );
+  }
   return (
     <Sheet title={t.rota.readerTitle(juz)} onClose={onClose}>
       <p className="mb-4 leading-relaxed text-ink-soft">
@@ -214,6 +228,13 @@ function EmptyRowSheet({
         variant="primary"
         onAdded={onClose}
       />
+      {saved && saved.length > 0 && (
+        <div className="mt-4">
+          <Button variant="ghost" onClick={() => setPicking(true)}>
+            {t.rota.savedFrom}
+          </Button>
+        </div>
+      )}
       {view.participants.length > 0 && (
         <>
           <h3 id={listId} className="mt-6 font-medium">

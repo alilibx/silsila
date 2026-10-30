@@ -10,6 +10,7 @@ import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
+import { SavedPicker } from "./SavedPicker";
 import { StepBar } from "./StepBar";
 import { useRotaCall } from "./useRotaCall";
 
@@ -72,6 +73,81 @@ function GiveJuzSheet({
   );
 }
 
+const importErrors: Record<string, string> = t.rota.importErrors;
+
+/**
+ * Ways to fill the ajza' without typing: the members of one of the organizer's pool khatmas
+ * (names only, their numbers stay hidden), or people saved from earlier khatmas. Shows only what
+ * applies, and nothing when neither does.
+ */
+function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
+  const sessionToken = useSessionToken();
+  const pools = useQuery(api.rota.importable, { sessionToken, inviteCode });
+  const saved = useQuery(api.rota.saved, { sessionToken, inviteCode });
+  const importMembers = useMutation(api.rota.importMembers);
+  const { busy, error, run } = useRotaCall(importErrors);
+  const [result, setResult] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  const bringIn = (sourceInviteCode: string) => {
+    setResult(null);
+    return run(async () => {
+      const done = await importMembers({
+        sessionToken: getSessionToken() ?? undefined,
+        inviteCode,
+        sourceInviteCode,
+      });
+      if ("ok" in done)
+        setResult(t.rota.importResult(done.added, done.skipped));
+      return done;
+    });
+  };
+
+  const hasPools = pools !== undefined && pools.length > 0;
+  const hasSaved = saved !== undefined && saved !== null && saved.length > 0;
+  if (!hasPools && !hasSaved) return null;
+
+  return (
+    <section className="mb-5 grid gap-3">
+      {hasPools &&
+        pools.map((pool) => (
+          <button
+            key={pool.inviteCode}
+            type="button"
+            disabled={busy}
+            onClick={() => void bringIn(pool.inviteCode)}
+            className="min-h-14 w-full rounded-ui border-2 border-gold bg-[#FBF1D9] px-4 py-3 text-start disabled:opacity-50"
+          >
+            <span className="block font-medium">
+              {t.rota.importTitle(pool.title)}
+            </span>
+            <span className="block text-base text-ink-soft">
+              {t.rota.importCount(pool.memberCount)}
+            </span>
+          </button>
+        ))}
+      {hasPools && (
+        <p className="text-base text-ink-soft">{t.rota.importHint}</p>
+      )}
+      {hasSaved && (
+        <Button variant="ghost" onClick={() => setPicking(true)}>
+          {t.rota.savedFrom}
+        </Button>
+      )}
+      <ErrorLine error={error} />
+      <p role="status" className="font-medium text-green empty:hidden">
+        {result}
+      </p>
+      {picking && (
+        <SavedPicker
+          inviteCode={inviteCode}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </section>
+  );
+}
+
 /** Step 2 of 2: add people in order, hand out the leftover ajza', then start the khatma. */
 export function RotaPeopleSetup() {
   const { inviteCode = "" } = useParams();
@@ -98,6 +174,7 @@ export function RotaPeopleSetup() {
       <StepBar step={2} />
 
       <div className="mt-5">
+        <BringPeopleIn inviteCode={inviteCode} />
         <AddPersonForm inviteCode={inviteCode} />
       </div>
 
