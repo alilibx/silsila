@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { normalizeDigits } from "@convex/lib/digits";
 import { Button } from "@web/components/Button";
+import { WhatsAppIcon } from "@web/components/WhatsAppIcon";
 import { convexSiteUrl } from "@web/lib/env";
 import { deviceLabel } from "@web/lib/format";
 import { getClientKey } from "@web/lib/session";
@@ -165,6 +166,7 @@ export function SignInPage() {
             {t.signIn.intro}
           </p>
           <Button variant="whatsapp" disabled={busy} onClick={start}>
+            <WhatsAppIcon />
             {t.signIn.start}
           </Button>
         </>

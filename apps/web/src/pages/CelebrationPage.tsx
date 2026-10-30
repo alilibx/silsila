@@ -1,6 +1,7 @@
 import type { TileView } from "@convex/khatmas";
 import { toArabicDigits } from "@convex/lib/digits";
 import { buttonClass } from "../components/Button";
+import { WhatsAppIcon } from "../components/WhatsAppIcon";
 import { useHideHelpButton } from "../features/help/helpUi";
 import { useHideBottomBar } from "../features/nav/bottomBarUi";
 import { Ring } from "../components/Ring";
@@ -75,6 +76,7 @@ export function CelebrationPage({
             rel="noopener noreferrer"
             className={buttonClass("gold", "no-underline")}
           >
+            <WhatsAppIcon />
             {t.celebration.share}
           </a>
           <button
