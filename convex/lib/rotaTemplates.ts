@@ -18,10 +18,10 @@ export const ROTA_BUTTONS = {
   dua: "دعاء الختم",
 } as const;
 
-export const ROTA_JUZ = "wirdak_rota_juz";
+export const ROTA_JUZ = "wirdak_rota_juz_v2";
 export const ROTA_REMINDER = "wirdak_rota_reminder";
-export const ROTA_ASSIGNED = "wirdak_rota_assigned";
-export const ROTA_COVERED = "wirdak_rota_covered";
+export const ROTA_ASSIGNED = "wirdak_rota_assigned_v2";
+export const ROTA_COVERED = "wirdak_rota_covered_v2";
 export const ROTA_COMPLETE = "wirdak_rota_complete";
 export const ROTA_CYCLE = "wirdak_rota_cycle";
 
@@ -114,19 +114,19 @@ export function cycleTemplate(khatma: Khatma): TemplateMessage {
  * the same message in or out of the window.
  */
 export function reminderText(juz: number[]): string {
-  return `تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة ${juzPhraseGenitive(juz)}.`;
+  return `تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة ${juzPhraseGenitive(juz)} في هذه الختمة.`;
 }
 
 export function assignedText(juz: number[], number: number): string {
-  return `تحديث على قراءتك: أُسندت إليك اليوم قراءة ${juzPhraseGenitive(juz)} في الختمة ${toArabicDigits(number)}.`;
+  return `تحديث على قراءتك: سُجِّلت لك قراءة ${juzPhraseGenitive(juz)} في الختمة ${toArabicDigits(number)} لهذا اليوم.`;
 }
 
 export function completeText(number: number): string {
-  return `تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ${toArabicDigits(number)}.`;
+  return `تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ${toArabicDigits(number)} لهذا اليوم.`;
 }
 
 export function coveredText(juz: number[]): string {
-  return `تحديث على قراءتك: تمّت اليوم قراءة ${juzPhraseGenitive(juz)} عنك، فلم يعد عليك شيء منها.`;
+  return `تحديث على قراءتك: سُجِّلت اليوم قراءة ${juzPhraseGenitive(juz)} باسم قارئ آخر في هذه الختمة.`;
 }
 
 export const cycleText =
@@ -183,7 +183,7 @@ export const NEW_MEMBER_NAME = "مشارك جديد";
 
 /** The juz' message as free-form text; the done and not-yet buttons go with it. */
 export function juzText(number: number, juz: number[]): string {
-  return `الختمة ${toArabicDigits(number)} اليوم. قراءتك: ${juzPhrase(juz)}.`;
+  return `تحديث على قراءتك اليوم في الختمة ${toArabicDigits(number)}: المسجَّل لك ${juzPhrase(juz)} من هذه الختمة.`;
 }
 
 export function thanksText(doneCount: number): string {

@@ -366,6 +366,33 @@ test("the organizer gets one unread list at the set time", async () => {
   expect((await days(t, s))[0]?.unreadSentAt).toBe(dubai("2027-01-16T19:00"));
 });
 
+test("a day that starts after the unread and summary times sends neither that day", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, {
+    messages: { ...MESSAGES, summary: { at: 1260, on: true } },
+  });
+  await tickAt(t, s, "2027-01-16T21:30");
+  await tickAt(t, s, "2027-01-16T21:45");
+  expect(await days(t, s)).toHaveLength(1);
+  expect(await notes(t, s)).toHaveLength(0);
+
+  await tickAt(t, s, "2027-01-17T08:00");
+  await tickAt(t, s, "2027-01-17T19:00");
+  expect((await notes(t, s)).map((n) => n.kind)).toEqual(["rotaUnread"]);
+});
+
+test("a day that starts between the unread and summary times still sends the summary", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, {
+    messages: { ...MESSAGES, summary: { at: 1260, on: true } },
+  });
+  await tickAt(t, s, "2027-01-16T20:00");
+  expect(await notes(t, s)).toHaveLength(0);
+
+  await tickAt(t, s, "2027-01-16T21:00");
+  expect((await notes(t, s)).map((n) => n.kind)).toEqual(["rotaSummary"]);
+});
+
 test("a khatma still being set up starts no day", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t, { setupDoneAt: null });
