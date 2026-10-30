@@ -425,10 +425,40 @@ export async function removeParticipant(
 }
 
 /**
- * Renames someone in this khatma, for the organizer's eyes and their messages.
- * Their row in the saved list follows, unless the organizer removed it. Their
- * own account's name stays as it is.
+ * Sets someone's name in this khatma, and in the organizer's saved list unless
+ * they removed that row. Their own account's name stays as it is.
  */
+async function setParticipantName(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  participant: Doc<"rotaParticipants">,
+  name: string,
+): Promise<void> {
+  await ctx.db.patch(participant._id, { name });
+  const owner = khatma.creatorPersonId;
+  const { personId, phone } = participant;
+  const byPhone = await ctx.db
+    .query("rotaContacts")
+    .withIndex("by_owner_phone", (q) =>
+      q.eq("ownerPersonId", owner).eq("phone", phone),
+    )
+    .first();
+  const byPerson =
+    personId == null
+      ? null
+      : await ctx.db
+          .query("rotaContacts")
+          .withIndex("by_owner_person", (q) =>
+            q.eq("ownerPersonId", owner).eq("personId", personId),
+          )
+          .first();
+  for (const contact of [byPhone, byPerson]) {
+    if (contact && contact.removedAt === undefined) {
+      await ctx.db.patch(contact._id, { name });
+    }
+  }
+}
+
 export async function renameParticipant(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
@@ -443,27 +473,7 @@ export async function renameParticipant(
   if (!participant) return { error: "not_found" };
   const name = cleanDisplayName(args.name);
   if (name === null) return { error: "bad_name" };
-  await ctx.db.patch(participant._id, { name });
-  const owner = khatma.creatorPersonId;
-  const { personId, phone } = participant;
-  const contact =
-    (await ctx.db
-      .query("rotaContacts")
-      .withIndex("by_owner_phone", (q) =>
-        q.eq("ownerPersonId", owner).eq("phone", phone),
-      )
-      .first()) ??
-    (personId == null
-      ? null
-      : await ctx.db
-          .query("rotaContacts")
-          .withIndex("by_owner_person", (q) =>
-            q.eq("ownerPersonId", owner).eq("personId", personId),
-          )
-          .first());
-  if (contact && contact.removedAt === undefined) {
-    await ctx.db.patch(contact._id, { name });
-  }
+  await setParticipantName(ctx, khatma, participant, name);
   return { ok: true };
 }
 
@@ -681,18 +691,29 @@ function welcomeRow(
   };
 }
 
-/** Queues an accepted member's welcome. When it would go at once, it can carry today's free juz' too. */
+/**
+ * Queues an accepted member's welcome. On a first join, when it will go at
+ * once, it carries today's free juz'; a welcome that can't go leaves it free.
+ */
 async function welcomeAccepted(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
   rota: RotaConfig,
-  participant: { id: Id<"rotaParticipants">; phone: string },
+  participant: {
+    id: Id<"rotaParticipants">;
+    phone: string;
+    firstJoin: boolean;
+  },
   now: number,
 ): Promise<void> {
-  if (await welcomeGoesNow(ctx, rota, participant.phone, now)) {
+  const queued = await enqueue(ctx, welcomeRow(khatma._id, participant.id));
+  if (
+    queued !== null &&
+    participant.firstJoin &&
+    (await welcomeGoesNow(ctx, rota, participant.phone, now))
+  ) {
     await takeFreeJuzToday(ctx, rota, khatma._id, participant.id, now);
   }
-  await enqueue(ctx, welcomeRow(khatma._id, participant.id));
 }
 
 /** An open join request of this khatma, or null. */
@@ -757,12 +778,19 @@ export async function acceptJoinRequest(
     if (existing.joinedAt == null) {
       await ctx.db.patch(existing._id, { joinedAt: now });
     }
+    if (chosenName !== undefined) {
+      await setParticipantName(ctx, khatma, existing, chosenName);
+    }
     await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
     await welcomeAccepted(
       ctx,
       khatma,
       rota,
-      { id: existing._id, phone: existing.phone },
+      {
+        id: existing._id,
+        phone: existing.phone,
+        firstJoin: existing.joinedAt == null,
+      },
       now,
     );
     return { error: "already_added" };
@@ -805,7 +833,7 @@ export async function acceptJoinRequest(
     ctx,
     khatma,
     rota,
-    { id: placed.participantId, phone: request.phone },
+    { id: placed.participantId, phone: request.phone, firstJoin: true },
     now,
   );
   return { ok: true, participantId: placed.participantId };

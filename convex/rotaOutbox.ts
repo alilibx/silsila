@@ -201,7 +201,7 @@ async function openDayToday(
 }
 
 /**
- * Gives a member who joins during a day the ajza' their slots have that day,
+ * Gives a member joining for the first time during a day the ajza' their slots have that day,
  * where nobody has them: a day's assignments are fixed when its juz' message
  * goes out, so someone added since would otherwise wait for the next one. A
  * juz' given to someone else or already marked read stays as it is.

@@ -6,6 +6,7 @@ import { Button } from "../../components/Button";
 import { t } from "../../i18n/ar";
 import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
+import { fieldClass } from "./fieldClass";
 import { useRotaCall } from "./useRotaCall";
 
 type Request = PeopleView["requests"][number];
@@ -53,7 +54,7 @@ function JoinRequestCard({
             maxLength={60}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+            className={fieldClass}
           />
           <label htmlFor={selectId} className="mt-3 block font-medium">
             {t.rota.requestJuz}
@@ -62,7 +63,7 @@ function JoinRequestCard({
             id={selectId}
             value={juz}
             onChange={(event) => setChosen(Number(event.target.value))}
-            className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+            className={fieldClass}
           >
             {freeJuz.map((n) => (
               <option key={n} value={n}>

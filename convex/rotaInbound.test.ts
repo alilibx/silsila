@@ -356,6 +356,19 @@ test("a late joiner takes nothing from a day dated yesterday, still open before 
   expect(read?.readerId).toBeNull();
 });
 
+test("a member who joined before takes nothing by sending the join text again", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  const day = await startDay(t, s);
+  const pid = await addLate(t, s, 5);
+  await t.run((ctx) => ctx.db.patch(pid, { joinedAt: 1 }));
+
+  await send(t, LATE, joinText("ختمة", "JNC234"));
+
+  const read = (await readsOf(t, day._id)).find((r) => r.juz === 5);
+  expect(read?.readerId).toBeNull();
+});
+
 test("a late joiner's «أتممت» marks the juz' they took", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t, [{ slot: 1 }]);

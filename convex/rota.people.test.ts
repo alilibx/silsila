@@ -794,6 +794,48 @@ test("someone accepted outside their 24-hour window takes nothing today: no welc
   expect(taken).toEqual([]);
 });
 
+test("someone accepted in quiet hours takes nothing today: the welcome waits for morning", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const dayId = await openDay(t, s);
+  // 23:00 in Dubai
+  const night = Date.UTC(2027, 0, 15, 19, 0, 0);
+  vi.setSystemTime(night);
+  await contactedAt(t, night - 1000);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+
+  const taken = await t.run((ctx) =>
+    ctx.db
+      .query("rotaReads")
+      .withIndex("by_reader_day", (q) =>
+        q.eq("readerId", res.participantId).eq("dayId", dayId),
+      )
+      .collect(),
+  );
+  expect(taken).toEqual([]);
+});
+
+test("a name typed on a request for a number added meanwhile still applies", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const first = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in first)) throw new Error(JSON.stringify(first));
+  const second = await request(t, s);
+
+  expect(
+    await t.mutation(api.rota.acceptJoinRequest, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+      requestId: second,
+      juz: 8,
+      name: "أبو خالد",
+    }),
+  ).toEqual({ error: "already_added" });
+
+  expect((await participantRow(t, first.participantId))?.name).toBe("أبو خالد");
+});
+
 test("the organizer can give an accepted person another name", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
@@ -868,6 +910,52 @@ test("renaming refuses an empty name and leaves a removed saved contact removed"
   await rename(t, s, res.participantId, "أبو خالد");
   const contact = await t.run((ctx) => ctx.db.query("rotaContacts").first());
   expect(contact).toMatchObject({ name: "خالد", removedAt: 1 });
+});
+
+test("a removed row for the number doesn't stop a live row for the person following a rename", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  const khatma = await khatmaOf(t, s);
+  const personId = await t.run(async (ctx) => {
+    const id = await ctx.db.insert("people", {
+      phone: "+971501112233",
+      displayName: "خالد",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
+    });
+    await ctx.db.patch(res.participantId, { personId: id });
+    const typed = await ctx.db.query("rotaContacts").first();
+    await ctx.db.patch(typed!._id, { removedAt: 1 });
+    await ctx.db.insert("rotaContacts", {
+      ownerPersonId: khatma.creatorPersonId,
+      name: "خالد",
+      phone: null,
+      personId: id,
+      createdAt: 2,
+    });
+    return id;
+  });
+
+  await rename(t, s, res.participantId, "أبو خالد");
+
+  const contacts = await t.run((ctx) => ctx.db.query("rotaContacts").collect());
+  expect(contacts.find((c) => c.personId === personId)?.name).toBe("أبو خالد");
+});
+
+test("an archived khatma's people can't be renamed", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  const khatma = await khatmaOf(t, s);
+  await t.run((ctx) =>
+    ctx.db.patch(khatma._id, { rota: { ...khatma.rota!, archivedAt: 1 } }),
+  );
+  await expect(rename(t, s, res.participantId, "أبو خالد")).rejects.toThrow();
+  expect((await participantRow(t, res.participantId))?.name).toBe("خالد");
 });
 
 test("someone removed from the khatma can't be renamed", async () => {

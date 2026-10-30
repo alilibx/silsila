@@ -375,7 +375,9 @@ async function join(
     stoppedAt: null,
     personId: joined.personId,
   });
-  await takeFreeJuzToday(ctx, rota, khatma._id, joined._id, args.now);
+  if (participant.joinedAt == null) {
+    await takeFreeJuzToday(ctx, rota, khatma._id, joined._id, args.now);
+  }
   return [await welcome(ctx, khatma, joined, args.now)];
 }
 

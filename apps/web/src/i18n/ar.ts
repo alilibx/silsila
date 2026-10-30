@@ -687,6 +687,7 @@ export const ar = {
     giveMoreHint: (juz: number) =>
       `يقرأ معه الجزء ${toArabicDigits(juz)} كل يوم`,
     rename: "غيّر الاسم",
+    renameOf: (name: string) => `غيّر اسم ${name}`,
     renameTitle: "غيّر الاسم",
     renameSave: "احفظ الاسم",
     remove: "أزله من الختمة",
