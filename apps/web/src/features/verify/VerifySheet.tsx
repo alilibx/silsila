@@ -5,6 +5,7 @@ import posthog from "posthog-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, buttonClass } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
+import { WhatsAppIcon } from "../../components/WhatsAppIcon";
 import { t } from "../../i18n/ar";
 import { formatDate } from "../../lib/format";
 import { useSessionToken } from "../../lib/session";
@@ -121,6 +122,7 @@ function NameStep({ v }: StepProps) {
       )}
       <div className="mt-5 grid gap-3">
         <Button variant="whatsapp" type="submit" disabled={v.busy}>
+          <WhatsAppIcon />
           {v.busy ? t.verify.starting : t.verify.start}
         </Button>
       </div>
@@ -169,6 +171,7 @@ function WaitingStep({ v }: StepProps) {
               })
             }
           >
+            <WhatsAppIcon />
             {v.opened ? t.verify.reopenWhatsApp : t.verify.openWhatsApp}
           </a>
         </div>

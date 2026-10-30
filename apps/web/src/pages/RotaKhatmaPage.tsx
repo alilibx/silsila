@@ -7,6 +7,7 @@ import { buttonClass } from "../components/Button";
 import { KhatmaTabs } from "../components/KhatmaTabs";
 import { NoteCard } from "../components/NoteCard";
 import { canSwitch, SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
+import { WhatsAppIcon } from "../components/WhatsAppIcon";
 import {
   ArchivedBanner,
   ArchivedSection,
@@ -83,6 +84,7 @@ function WhatsAppPage({
           rel="noopener"
           className={buttonClass("whatsapp", "mt-5 no-underline")}
         >
+          <WhatsAppIcon />
           {t.rota.joinOnWhatsApp}
         </a>
       )}

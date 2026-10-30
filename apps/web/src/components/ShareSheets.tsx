@@ -4,6 +4,7 @@ import { t } from "../i18n/ar";
 import { inviteMessage, remindMessage, waShareLink } from "../lib/whatsapp";
 import { Button, buttonClass } from "./Button";
 import { Sheet } from "./Sheet";
+import { WhatsAppIcon } from "./WhatsAppIcon";
 
 type MessageSheetProps = {
   title: string;
@@ -52,6 +53,7 @@ function MessageSheet({
             rel="noopener"
             className={buttonClass("whatsapp", "no-underline")}
           >
+            <WhatsAppIcon />
             {t.share.send}
           </a>
         )}

@@ -2,6 +2,7 @@ import type { TileView } from "@convex/khatmas";
 import type { NoteView } from "@convex/notes";
 import { t } from "../i18n/ar";
 import { Button } from "./Button";
+import { WhatsAppIcon } from "./WhatsAppIcon";
 
 /**
  * The juz' a note's take button offers, or `null` for no button. Nobody who already holds a
@@ -82,6 +83,7 @@ export function NoteCard({
           <>
             {take(t.notes.takeJuz)}
             <Button variant="whatsapp" onClick={onInvite} disabled={busy}>
+              <WhatsAppIcon />
               {t.notes.sendInvite}
             </Button>
             <Button variant="ghost" onClick={onDismiss} disabled={busy}>
