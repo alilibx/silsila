@@ -132,13 +132,19 @@ export function OrganizersPage() {
 
   async function find() {
     setMessage(null);
-    const res = await convex.query(api.adminLookup.findPerson, {
-      adminToken,
-      phone,
-    });
-    if ("error" in res) setFound({ kind: "invalid" });
-    else if (res.personId) setFound({ kind: "person", personId: res.personId });
-    else setFound({ kind: "none" });
+    setFound(null);
+    try {
+      const res = await convex.query(api.adminLookup.findPerson, {
+        adminToken,
+        phone,
+      });
+      if ("error" in res) setFound({ kind: "invalid" });
+      else if (res.personId) {
+        setFound({ kind: "person", personId: res.personId });
+      } else setFound({ kind: "none" });
+    } catch {
+      setMessage(opsError("generic"));
+    }
   }
 
   async function confirm(note: string | undefined) {
@@ -205,7 +211,7 @@ export function OrganizersPage() {
 
       {message && <p role="status">{message}</p>}
 
-      {status !== "LoadingFirstPage" && results.length === 0 && (
+      {status === "Exhausted" && results.length === 0 && (
         <p className="text-ink-soft">{t.organizers.empty}</p>
       )}
       <ul className="flex flex-col gap-2">

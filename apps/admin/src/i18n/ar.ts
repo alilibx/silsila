@@ -357,6 +357,7 @@ export const ar = {
     devicesTitle: "أجهزته",
     helpTitle: "طلبات المساعدة",
     lastSeen: "آخر ظهور",
+    neverSeen: "لم يدخل بعد",
     joined: "انضم",
     statuses: { active: "عضو", blocked: "محظور", former: "سابق" },
     helpStatuses: { open: "مفتوح", answered: "تم الرد", closed: "مغلق" },

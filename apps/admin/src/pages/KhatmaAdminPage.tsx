@@ -82,6 +82,9 @@ export function KhatmaAdminPage() {
         <dt className="text-ink-soft">{t.lookup.openHelp}</dt>
         <dd>{formatCount(k.openHelpRequests)}</dd>
       </dl>
+      {!k.rota && k.archived && (
+        <p className="text-ink-soft">{t.lookup.rotaArchived}</p>
+      )}
 
       {k.rota && (
         <section className="rounded-ui border-2 border-line bg-card px-4 py-3">

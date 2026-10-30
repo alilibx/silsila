@@ -187,6 +187,10 @@ describe("RotaHelpPage", () => {
     await user.click(
       screen.getByRole("tab", { name: webT.khatmaSettings.link }),
     );
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      screen.getByRole("heading", { level: 2, name: webT.khatmaSettings.link }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: webT.rota.pauseNow }));
     expect(m.fns["adminRota:setPaused"]).toHaveBeenCalledWith({
       ...scope,

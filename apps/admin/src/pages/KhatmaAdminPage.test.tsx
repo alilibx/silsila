@@ -9,10 +9,12 @@ const m = vi.hoisted(() => ({
   reset: vi.fn(),
   handOver: vi.fn(),
   rota: null as unknown,
+  archived: false,
 }));
 vi.mock("convex/react", () => ({
   useQuery: () => ({
     kind: m.rota ? "rota" : "pool",
+    archived: m.archived,
     rota: m.rota,
     name: "ختمة العائلة",
     inviteCode: "familyKhatma",
@@ -47,6 +49,7 @@ vi.mock("../lib/adminSession", () => ({ useAdminToken: () => "tok" }));
 
 beforeEach(() => {
   m.rota = null;
+  m.archived = false;
   m.reset.mockReset().mockResolvedValue({ inviteCode: "newCode00001" });
   m.handOver.mockReset().mockResolvedValue({ ok: true });
 });
@@ -88,6 +91,15 @@ describe("KhatmaAdminPage", () => {
       khatmaId: "k1",
       note: "leaked",
     });
+  });
+
+  it("says when a pool khatma is archived", () => {
+    const { unmount } = renderPage();
+    expect(screen.queryByText(t.lookup.rotaArchived)).not.toBeInTheDocument();
+    unmount();
+    m.archived = true;
+    renderPage();
+    expect(screen.getByText(t.lookup.rotaArchived)).toBeInTheDocument();
   });
 
   it("shows nothing about rotation for a pool khatma", () => {

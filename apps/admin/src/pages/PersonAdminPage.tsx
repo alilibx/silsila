@@ -61,7 +61,8 @@ export function PersonAdminPage() {
         {p.phone} {p.blocked && `· ${t.lookup.blocked}`}
       </p>
       <p className="text-sm text-ink-soft">
-        {t.lookup.lastSeen}: {formatDate(p.lastSeenAt)}
+        {t.lookup.lastSeen}:{" "}
+        {p.lastSeenAt === 0 ? t.lookup.neverSeen : formatDate(p.lastSeenAt)}
       </p>
 
       <section>
@@ -76,9 +77,11 @@ export function PersonAdminPage() {
                 {k.name ?? t.lookup.unnamed}
               </Link>
               <span className="text-ink-soft">
-                {k.isOrganizer
-                  ? t.lookup.organizerBadge
-                  : t.lookup.statuses[k.status]}
+                {k.pending
+                  ? t.rota.pending
+                  : k.isOrganizer
+                    ? t.lookup.organizerBadge
+                    : t.lookup.statuses[k.status]}
               </span>
             </li>
           ))}

@@ -200,6 +200,42 @@ describe("OrganizersPage", () => {
     });
   });
 
+  it("says so when the search fails", async () => {
+    m.find.mockRejectedValue(new Error("offline"));
+    renderPage();
+    await userEvent.type(
+      screen.getByLabelText(t.organizers.searchLabel),
+      "+971509998877",
+    );
+    await userEvent.click(screen.getByRole("button", { name: t.lookup.find }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      t.ops.errors.generic,
+    );
+  });
+
+  it("clears the old result as soon as a new search starts", async () => {
+    m.find.mockResolvedValueOnce({ personId: null, blocked: false });
+    renderPage();
+    const box = screen.getByLabelText(t.organizers.searchLabel);
+    await userEvent.type(box, "+971500000000");
+    await userEvent.click(screen.getByRole("button", { name: t.lookup.find }));
+    expect(await screen.findByText(t.lookup.noAccount)).toBeInTheDocument();
+
+    m.find.mockReturnValueOnce(new Promise(() => {}));
+    await userEvent.click(screen.getByRole("button", { name: t.lookup.find }));
+    expect(screen.queryByText(t.lookup.noAccount)).not.toBeInTheDocument();
+  });
+
+  it("doesn't call an empty page with more to come the end of the list", () => {
+    m.results = [];
+    m.status = "CanLoadMore";
+    renderPage();
+    expect(screen.queryByText(t.organizers.empty)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: t.organizers.more }),
+    ).toBeInTheDocument();
+  });
+
   it("tells when a number has no account or is not valid", async () => {
     m.find.mockResolvedValueOnce({ personId: null, blocked: false });
     renderPage();

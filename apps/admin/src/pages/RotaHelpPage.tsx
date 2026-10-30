@@ -55,7 +55,11 @@ function Panels({
         )}
         {tab === "settings" && (
           <div className="mt-6">
-            <RotaSettingsContent settings={settings} inviteCode={khatmaId} />
+            <RotaSettingsContent
+              settings={settings}
+              inviteCode={khatmaId}
+              headingLevel="h2"
+            />
           </div>
         )}
       </section>
