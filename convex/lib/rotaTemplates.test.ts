@@ -118,9 +118,15 @@ test("welcome text names the day and time of the next message, if any", () => {
 });
 
 test("the free texts use Arabic digits", () => {
-  expect(juzText(3, one)).toBe("الختمة ٣ اليوم. قراءتك: الجزء ٢٦.");
-  expect(juzText(3, two)).toBe("الختمة ٣ اليوم. قراءتك: الجزآن ٥ و٦.");
-  expect(juzText(3, three)).toBe("الختمة ٣ اليوم. قراءتك: الأجزاء ٣، ٥ و٦.");
+  expect(juzText(3, one)).toBe(
+    "الختمة ٣ اليوم. قراءتك: الجزء ٢٦ من هذه الختمة.",
+  );
+  expect(juzText(3, two)).toBe(
+    "الختمة ٣ اليوم. قراءتك: الجزآن ٥ و٦ من هذه الختمة.",
+  );
+  expect(juzText(3, three)).toBe(
+    "الختمة ٣ اليوم. قراءتك: الأجزاء ٣، ٥ و٦ من هذه الختمة.",
+  );
   expect(thanksText(12)).toBe("تقبّل الله منك. ١٢ من ٣٠ جزءاً تمّت اليوم.");
   expect(notYetText("٤:٠٠ م")).toBe("لا بأس، نذكّرك الساعة ٤:٠٠ م.");
   expect(notYetText(null)).toBe("لا بأس.");

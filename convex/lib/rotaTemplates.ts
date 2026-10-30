@@ -114,15 +114,15 @@ export function cycleTemplate(khatma: Khatma): TemplateMessage {
  * the same message in or out of the window.
  */
 export function reminderText(juz: number[]): string {
-  return `تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة ${juzPhraseGenitive(juz)}.`;
+  return `تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة ${juzPhraseGenitive(juz)} في هذه الختمة.`;
 }
 
 export function assignedText(juz: number[], number: number): string {
-  return `تحديث على قراءتك: أُسندت إليك اليوم قراءة ${juzPhraseGenitive(juz)} في الختمة ${toArabicDigits(number)}.`;
+  return `تحديث على قراءتك: أُسندت إليك قراءة ${juzPhraseGenitive(juz)} في الختمة ${toArabicDigits(number)} لهذا اليوم.`;
 }
 
 export function completeText(number: number): string {
-  return `تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ${toArabicDigits(number)}.`;
+  return `تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ${toArabicDigits(number)} لهذا اليوم.`;
 }
 
 export function coveredText(juz: number[]): string {
@@ -183,7 +183,7 @@ export const NEW_MEMBER_NAME = "مشارك جديد";
 
 /** The juz' message as free-form text; the done and not-yet buttons go with it. */
 export function juzText(number: number, juz: number[]): string {
-  return `الختمة ${toArabicDigits(number)} اليوم. قراءتك: ${juzPhrase(juz)}.`;
+  return `الختمة ${toArabicDigits(number)} اليوم. قراءتك: ${juzPhrase(juz)} من هذه الختمة.`;
 }
 
 export function thanksText(doneCount: number): string {

@@ -279,7 +279,7 @@ test("a juz' message inside the window goes as interactive buttons", async () =>
   expect(sent).toEqual([
     {
       to: "971500000002",
-      text: `*ختمة العائلة*\nالختمة ١ اليوم. قراءتك: الجزآن ٢ و٣.\n[أتممت] ${done}\n[ليس بعد] ${notYet}`,
+      text: `*ختمة العائلة*\nالختمة ١ اليوم. قراءتك: الجزآن ٢ و٣ من هذه الختمة.\n[أتممت] ${done}\n[ليس بعد] ${notYet}`,
     },
   ]);
   expect((await rows(t))[0]?.sentAt).toBeGreaterThanOrEqual(NOW);
@@ -343,7 +343,7 @@ test("a completion message inside the window is the completion line, then the du
     },
   ]);
   expect(completeText(1)).toBe(
-    "تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ١.",
+    "تحديث على الختمة: اكتملت قراءة الأجزاء الثلاثين في الختمة ١ لهذا اليوم.",
   );
 });
 
