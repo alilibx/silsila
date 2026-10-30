@@ -100,6 +100,13 @@ export function addDays(date: string, n: number): string {
   return fromDayNumber(dayNumber(date) + n);
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar date written `YYYY-MM-DD`. */
+export function isDate(date: string): boolean {
+  return DATE_RE.test(date) && addDays(date, 0) === date;
+}
+
 /** Whether `date` is a reading day. Never before `firstDate`, which anchors every-two-weeks. */
 export function isReadingDate(
   days: ReadingDays,

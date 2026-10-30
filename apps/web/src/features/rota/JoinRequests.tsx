@@ -1,15 +1,14 @@
-import { api } from "@convex/_generated/api";
 import { toArabicDigits } from "@convex/lib/digits";
-import { useMutation, type useQuery } from "convex/react";
+import type { PeopleView } from "@convex/lib/rotaOps";
+import { useMutation } from "convex/react";
 import { useId, useState } from "react";
 import { Button } from "../../components/Button";
 import { t } from "../../i18n/ar";
-import { getSessionToken } from "../../lib/session";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { useRotaCall } from "./useRotaCall";
 
-type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
-type Request = View["requests"][number];
+type Request = PeopleView["requests"][number];
 
 /** One number that sent the join code: give it a juz' of the next khatma, or say no. */
 function JoinRequestCard({
@@ -21,14 +20,15 @@ function JoinRequestCard({
   request: Request;
   freeJuz: number[];
 }) {
-  const accept = useMutation(api.rota.acceptJoinRequest);
-  const decline = useMutation(api.rota.declineJoinRequest);
+  const backend = useRotaBackend(inviteCode);
+  const accept = useMutation(backend.acceptJoinRequest);
+  const decline = useMutation(backend.declineJoinRequest);
   const { busy, error, run } = useRotaCall(t.rota.joinRequestErrors);
   const selectId = useId();
   const [chosen, setChosen] = useState<number | null>(null);
   // The juz' may be taken while the card is open: fall back to the first free one.
   const juz = chosen !== null && freeJuz.includes(chosen) ? chosen : freeJuz[0];
-  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+  const args = backend.authArgs();
 
   return (
     <li className="rounded-ui border-2 border-gold bg-[#FBF1D9] p-4">
@@ -88,7 +88,7 @@ export function JoinRequests({
   view,
 }: {
   inviteCode: string;
-  view: View;
+  view: PeopleView;
 }) {
   const headingId = useId();
   if (view.requests.length === 0) return null;

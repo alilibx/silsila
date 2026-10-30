@@ -1,9 +1,8 @@
-import { api } from "@convex/_generated/api";
 import { useMutation } from "convex/react";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "../../components/Button";
 import { t } from "../../i18n/ar";
-import { getSessionToken } from "../../lib/session";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { useRotaCall } from "./useRotaCall";
 
@@ -27,7 +26,8 @@ export function AddPersonForm({
   /** Called after the person is added, once the fields are empty. */
   onAdded?: () => void;
 }) {
-  const addParticipant = useMutation(api.rota.addParticipant);
+  const backend = useRotaBackend(inviteCode);
+  const addParticipant = useMutation(backend.addParticipant);
   const ids = useId();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -39,8 +39,7 @@ export function AddPersonForm({
     void run(
       () =>
         addParticipant({
-          sessionToken: getSessionToken() ?? undefined,
-          inviteCode,
+          ...backend.authArgs(),
           name: name.trim(),
           phone: phone.trim(),
           ...(juz === undefined ? {} : { juz }),

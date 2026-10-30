@@ -1,4 +1,3 @@
-import { api } from "@convex/_generated/api";
 import { addDays, type ReadingDays } from "@convex/lib/rota";
 import { localDate } from "@convex/lib/wakingTime";
 import { useAction, useMutation } from "convex/react";
@@ -7,7 +6,7 @@ import { useNavigate } from "react-router";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken } from "../../lib/session";
+import { useRotaBackend } from "../rota/backend";
 import { DateLine } from "../rota/DateLine";
 import { firstReadingDay } from "../rota/dates";
 import { ErrorLine } from "../rota/ErrorLine";
@@ -83,7 +82,8 @@ function ConfirmSheet({
 
 /** The organizer's «أرشف الختمة»: messages stop, nothing is lost. For a khatma that is not archived. */
 export function ArchiveSection({ inviteCode }: { inviteCode: string }) {
-  const archive = useMutation(api.khatmaLifecycle.archive);
+  const backend = useRotaBackend(inviteCode);
+  const archive = useMutation(backend.archive);
   const [open, setOpen] = useState(false);
   const { busy, error, run } = useRotaCall(errors);
   return (
@@ -103,11 +103,7 @@ export function ArchiveSection({ inviteCode }: { inviteCode: string }) {
           error={error}
           onConfirm={() =>
             void run(
-              () =>
-                archive({
-                  sessionToken: getSessionToken() ?? undefined,
-                  inviteCode,
-                }),
+              () => archive(backend.authArgs()),
               () => setOpen(false),
             )
           }
@@ -132,7 +128,8 @@ function RestartSheet({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const startAgain = useAction(api.rota.startAgain);
+  const backend = useRotaBackend(inviteCode);
+  const startAgain = useAction(backend.startAgain);
   const { busy, error, run } = useRotaCall(errors);
   // `null` while the start follows "tomorrow"; only a picked date is kept.
   const [picked, setPicked] = useState<string | null>(null);
@@ -171,8 +168,7 @@ function RestartSheet({
             void run(
               async () => {
                 const result = await startAgain({
-                  sessionToken: getSessionToken() ?? undefined,
-                  inviteCode,
+                  ...backend.authArgs(),
                   firstDate: start,
                 });
                 created.current = result.inviteCode;
@@ -210,7 +206,8 @@ function DeleteSheet({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const remove = useMutation(api.khatmaLifecycle.remove);
+  const backend = useRotaBackend(inviteCode);
+  const remove = useMutation(backend.remove);
   const deleting = useDeleting(inviteCode);
   return (
     <ConfirmSheet
@@ -225,11 +222,7 @@ function DeleteSheet({
         // A failure is kept by `deleting.tsx` and shown under the buttons; the sheet closes.
         void startDelete(
           inviteCode,
-          () =>
-            remove({
-              sessionToken: getSessionToken() ?? undefined,
-              inviteCode,
-            }),
+          () => remove(backend.authArgs()),
           () => void navigate("/", { replace: true }),
         ).then((deleted) => {
           if (!deleted) onClose();

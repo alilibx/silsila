@@ -13,6 +13,7 @@ import {
 } from "../features/khatma/ArchivedActions";
 import { DeletingPage, useDeleting } from "../features/khatma/deleting";
 import { useSignInSheet } from "../features/verify/useSignInSheet";
+import { useRotaBackend } from "../features/rota/backend";
 import { ErrorLine } from "../features/rota/ErrorLine";
 import { PeoplePanel } from "../features/rota/PeoplePanel";
 import { TodayPanel } from "../features/rota/TodayPanel";
@@ -152,11 +153,9 @@ export function RotaKhatmaPage({
   const [search, setSearch] = useSearchParams();
   const tab: RotaTab = search.get("tab") === "people" ? "people" : "today";
   const ids = useId();
-  const today = useQuery(api.rota.today, { sessionToken, inviteCode });
-  const settings = useQuery(
-    api.rota.settings,
-    today ? { sessionToken, inviteCode } : "skip",
-  );
+  const backend = useRotaBackend(inviteCode);
+  const today = useQuery(backend.today, backend.scope);
+  const settings = useQuery(backend.settings, today ? backend.scope : "skip");
   const notes = useQuery(
     api.notes.forKhatma,
     today ? { sessionToken, inviteCode } : "skip",

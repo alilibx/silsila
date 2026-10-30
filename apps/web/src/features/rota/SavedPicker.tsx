@@ -1,8 +1,7 @@
-import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken, useSessionToken } from "../../lib/session";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { useRotaCall } from "./useRotaCall";
 
@@ -27,17 +26,16 @@ export function SavedPicker({
   onClose: () => void;
   onAdded?: () => void;
 }) {
-  const sessionToken = useSessionToken();
-  const saved = useQuery(api.rota.saved, { sessionToken, inviteCode });
-  const addSaved = useMutation(api.rota.addSaved);
+  const backend = useRotaBackend(inviteCode);
+  const saved = useQuery(backend.saved, backend.scope);
+  const addSaved = useMutation(backend.addSaved);
   const { busy, error, run } = useRotaCall(savedErrors);
 
   const add = (contactId: NonNullable<typeof saved>[number]["id"]) =>
     run(
       () =>
         addSaved({
-          sessionToken: getSessionToken() ?? undefined,
-          inviteCode,
+          ...backend.authArgs(),
           contactId,
           ...(juz === undefined ? {} : { juz }),
         }),

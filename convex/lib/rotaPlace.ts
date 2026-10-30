@@ -20,7 +20,7 @@ export type TargetDay = {
   started: false;
 };
 
-type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
+export type RotaConfig = NonNullable<Doc<"khatmas">["rota"]>;
 
 /** The rota settings of a khatma that has them (a pool khatma never reaches here). */
 function rotaOf(khatma: Doc<"khatmas">) {

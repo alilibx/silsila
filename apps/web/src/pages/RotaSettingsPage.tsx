@@ -1,9 +1,9 @@
-import { api } from "@convex/_generated/api";
 import {
   messageTimesError,
   type ReadingDays,
   type RotaMessages,
 } from "@convex/lib/rota";
+import type { SettingsView } from "@convex/lib/rotaOps";
 import { localDate } from "@convex/lib/wakingTime";
 import { useMutation, useQuery } from "convex/react";
 import { useState, type ReactNode } from "react";
@@ -16,6 +16,7 @@ import {
   ArchiveSection,
 } from "../features/khatma/ArchivedActions";
 import { DeletingPage, useDeleting } from "../features/khatma/deleting";
+import { useRotaBackend } from "../features/rota/backend";
 import { DateLine } from "../features/rota/DateLine";
 import { firstReadingDay } from "../features/rota/dates";
 import { formatIsoDate, formatTime } from "../features/rota/format";
@@ -23,11 +24,7 @@ import { ReadingDaysField } from "../features/rota/ReadingDaysField";
 import { TimeField } from "../features/rota/TimeField";
 import { useRotaCall } from "../features/rota/useRotaCall";
 import { t } from "../i18n/ar";
-import { getSessionToken, useSessionToken } from "../lib/session";
 
-type Settings = NonNullable<
-  ReturnType<typeof useQuery<typeof api.rota.settings>>
->;
 type SectionId = "pause" | "messages" | "details";
 type Feedback = { section: SectionId; kind: "saved" | "error"; text: string };
 type Message = "reminder" | "unread" | "summary";
@@ -83,8 +80,8 @@ function Section({
 /** A rotating khatma's settings for its organizer: pausing, the message times, the days and the name. */
 export function RotaSettingsPage() {
   const { inviteCode = "" } = useParams();
-  const sessionToken = useSessionToken();
-  const settings = useQuery(api.rota.settings, { sessionToken, inviteCode });
+  const backend = useRotaBackend(inviteCode);
+  const settings = useQuery(backend.settings, backend.scope);
   const deleting = useDeleting(inviteCode);
 
   // Deleted from here: the settings are about to turn null, and this page must not show that.
@@ -109,13 +106,14 @@ function SettingsContent({
   settings,
   inviteCode,
 }: {
-  settings: Settings;
+  settings: SettingsView;
   inviteCode: string;
 }) {
-  const update = useMutation(api.rota.update);
-  const setPaused = useMutation(api.rota.setPaused);
-  const addPauseDate = useMutation(api.rota.addPauseDate);
-  const removePauseDate = useMutation(api.rota.removePauseDate);
+  const backend = useRotaBackend(inviteCode);
+  const update = useMutation(backend.update);
+  const setPaused = useMutation(backend.setPaused);
+  const addPauseDate = useMutation(backend.addPauseDate);
+  const removePauseDate = useMutation(backend.removePauseDate);
   const [name, setName] = useState(settings.name);
   const [days, setDays] = useState<ReadingDays>(settings.days);
   const [endDate, setEndDate] = useState<string | null>(settings.endDate);
@@ -130,7 +128,7 @@ function SettingsContent({
     section: SectionId;
     saved: string | null;
   } | null>(null);
-  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+  const args = backend.authArgs();
 
   const paused = settings.pausedAt !== null;
   const { quiet } = settings;

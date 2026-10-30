@@ -1,4 +1,4 @@
-import { api } from "@convex/_generated/api";
+import type { PeopleView as View } from "@convex/lib/rotaOps";
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -6,8 +6,8 @@ import { toArabicDigits } from "@convex/lib/digits";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
 import { SavedPicker } from "./SavedPicker";
@@ -15,8 +15,6 @@ import { StepBar } from "./StepBar";
 import { useRotaCall } from "./useRotaCall";
 
 const giveErrors: Record<string, string> = t.rota.giveErrors;
-
-type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
 
 /** Who reads each leftover juz' too: one juz' at a time, until none is left. */
 function GiveJuzSheet({
@@ -28,7 +26,8 @@ function GiveJuzSheet({
   view: View;
   onClose: () => void;
 }) {
-  const give = useMutation(api.rota.giveJuz);
+  const backend = useRotaBackend(inviteCode);
+  const give = useMutation(backend.giveJuz);
   const { busy, error, run } = useRotaCall(giveErrors);
   const juz = view.freeJuz[0];
   // Everyone has a reader now, so there is nothing left to ask.
@@ -37,8 +36,7 @@ function GiveJuzSheet({
   const choose = (participantId: View["participants"][number]["id"]) =>
     run(() =>
       give({
-        sessionToken: getSessionToken() ?? undefined,
-        inviteCode,
+        ...backend.authArgs(),
         participantId,
         juz,
       }),
@@ -81,10 +79,10 @@ const importErrors: Record<string, string> = t.rota.importErrors;
  * applies, and nothing when neither does.
  */
 function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
-  const sessionToken = useSessionToken();
-  const pools = useQuery(api.rota.importable, { sessionToken, inviteCode });
-  const saved = useQuery(api.rota.saved, { sessionToken, inviteCode });
-  const importMembers = useMutation(api.rota.importMembers);
+  const backend = useRotaBackend(inviteCode);
+  const pools = useQuery(backend.importable, backend.scope);
+  const saved = useQuery(backend.saved, backend.scope);
+  const importMembers = useMutation(backend.importMembers);
   const { busy, error, run } = useRotaCall(importErrors);
   const [result, setResult] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -93,8 +91,7 @@ function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
     setResult(null);
     return run(async () => {
       const done = await importMembers({
-        sessionToken: getSessionToken() ?? undefined,
-        inviteCode,
+        ...backend.authArgs(),
         sourceInviteCode,
       });
       if ("ok" in done)
@@ -152,9 +149,9 @@ function BringPeopleIn({ inviteCode }: { inviteCode: string }) {
 export function RotaPeopleSetup() {
   const { inviteCode = "" } = useParams();
   const navigate = useNavigate();
-  const sessionToken = useSessionToken();
-  const view = useQuery(api.rota.people, { sessionToken, inviteCode });
-  const finishSetup = useMutation(api.rota.finishSetup);
+  const backend = useRotaBackend(inviteCode);
+  const view = useQuery(backend.people, backend.scope);
+  const finishSetup = useMutation(backend.finishSetup);
   const finishing = useRotaCall(t.rota.errors);
   const [giving, setGiving] = useState(false);
   const khatmaPath = `/j/${encodeURIComponent(inviteCode)}`;
@@ -237,11 +234,7 @@ export function RotaPeopleSetup() {
           disabled={finishing.busy}
           onClick={() =>
             void finishing.run(
-              () =>
-                finishSetup({
-                  sessionToken: getSessionToken() ?? undefined,
-                  inviteCode,
-                }),
+              () => finishSetup(backend.authArgs()),
               () => void navigate(khatmaPath),
             )
           }

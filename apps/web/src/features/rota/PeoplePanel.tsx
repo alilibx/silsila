@@ -1,13 +1,13 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { toArabicDigits } from "@convex/lib/digits";
+import type { PeopleView as View } from "@convex/lib/rotaOps";
 import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
 import { t } from "../../i18n/ar";
-import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
+import { useRotaBackend } from "./backend";
 import { ErrorLine } from "./ErrorLine";
 import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
 import { JoinRequests } from "./JoinRequests";
@@ -15,7 +15,6 @@ import { SavedPicker } from "./SavedPicker";
 import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate } from "./format";
 
-type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
 type Person = View["participants"][number];
 
 const peopleErrors: Record<string, string> = t.rota.peopleErrors;
@@ -38,17 +37,18 @@ function PersonSheet({
   juz: number;
   onClose: () => void;
 }) {
-  const moveJuz = useMutation(api.rota.moveJuz);
-  const giveJuz = useMutation(api.rota.giveJuz);
-  const freeJuz = useMutation(api.rota.freeJuz);
-  const removeParticipant = useMutation(api.rota.removeParticipant);
+  const backend = useRotaBackend(inviteCode);
+  const moveJuz = useMutation(backend.moveJuz);
+  const giveJuz = useMutation(backend.giveJuz);
+  const freeJuz = useMutation(backend.freeJuz);
+  const removeParticipant = useMutation(backend.removeParticipant);
   const holderOf = (n: number) => view.rows[n - 1]?.participant ?? null;
   const others = view.rows.filter((row) => row.juz !== juz);
   const free = others.find((row) => row.participant === null);
   const [target, setTarget] = useState(free?.juz ?? others[0]?.juz ?? juz);
   const [confirming, setConfirming] = useState(false);
   const { busy, error, run } = useRotaCall(peopleErrors);
-  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+  const args = backend.authArgs();
   const nextFree = view.freeJuz[0];
   const canGive = nextFree !== undefined && person.juz.length < view.maxSlots;
   const swapWith = holderOf(target);
@@ -201,9 +201,9 @@ function EmptyRowSheet({
   juz: number;
   onClose: () => void;
 }) {
-  const giveJuz = useMutation(api.rota.giveJuz);
-  const sessionToken = useSessionToken();
-  const saved = useQuery(api.rota.saved, { sessionToken, inviteCode });
+  const backend = useRotaBackend(inviteCode);
+  const giveJuz = useMutation(backend.giveJuz);
+  const saved = useQuery(backend.saved, backend.scope);
   const [picking, setPicking] = useState(false);
   const { busy, error, run } = useRotaCall(peopleErrors);
   const listId = useId();
@@ -250,8 +250,7 @@ function EmptyRowSheet({
                     void run(
                       () =>
                         giveJuz({
-                          sessionToken: getSessionToken() ?? undefined,
-                          inviteCode,
+                          ...backend.authArgs(),
                           participantId: person.id,
                           juz,
                         }),
@@ -295,8 +294,8 @@ export function PeoplePanel({
   inviteCode: string;
   archived: boolean;
 }) {
-  const sessionToken = useSessionToken();
-  const view = useQuery(api.rota.people, { sessionToken, inviteCode });
+  const backend = useRotaBackend(inviteCode);
+  const view = useQuery(backend.people, backend.scope);
   const [open, setOpen] = useState<Open | null>(null);
   // An archived khatma refuses a new join link, and has no use for one.
   useEnsureJoinLink(inviteCode, archived ? undefined : view?.joinLink);
