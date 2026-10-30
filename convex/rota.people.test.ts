@@ -794,6 +794,93 @@ test("someone accepted outside their 24-hour window takes nothing today: no welc
   expect(taken).toEqual([]);
 });
 
+test("the organizer can give an accepted person another name", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  const res = await t.mutation(api.rota.acceptJoinRequest, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    requestId: id,
+    juz: 7,
+    name: "  خالد الأحمد ",
+  });
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  expect((await participantRow(t, res.participantId))?.name).toBe(
+    "خالد الأحمد",
+  );
+});
+
+test("an accept with an empty name is refused and leaves the request open", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const id = await request(t, s);
+  expect(
+    await t.mutation(api.rota.acceptJoinRequest, {
+      sessionToken: s.token,
+      inviteCode: s.inviteCode,
+      requestId: id,
+      juz: 7,
+      name: "   ",
+    }),
+  ).toEqual({ error: "bad_name" });
+  const row = await t.run((ctx) => ctx.db.get(id));
+  expect(row?.resolvedAt).toBeNull();
+});
+
+const rename = (t: T, s: Setup, id: Id<"rotaParticipants">, name: string) =>
+  t.mutation(api.rota.renameParticipant, {
+    sessionToken: s.token,
+    inviteCode: s.inviteCode,
+    participantId: id,
+    name,
+  });
+
+test("the organizer can rename anyone, and the saved list follows", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+
+  expect(await rename(t, s, res.participantId, " أبو خالد ")).toEqual({
+    ok: true,
+  });
+
+  expect((await participantRow(t, res.participantId))?.name).toBe("أبو خالد");
+  const contacts = await t.run((ctx) => ctx.db.query("rotaContacts").collect());
+  expect(contacts.map((c) => c.name)).toEqual(["أبو خالد"]);
+});
+
+test("renaming refuses an empty name and leaves a removed saved contact removed", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  expect(await rename(t, s, res.participantId, "   ")).toEqual({
+    error: "bad_name",
+  });
+  expect((await participantRow(t, res.participantId))?.name).toBe("خالد");
+
+  await t.run(async (ctx) => {
+    const contact = await ctx.db.query("rotaContacts").first();
+    await ctx.db.patch(contact!._id, { removedAt: 1 });
+  });
+  await rename(t, s, res.participantId, "أبو خالد");
+  const contact = await t.run((ctx) => ctx.db.query("rotaContacts").first());
+  expect(contact).toMatchObject({ name: "خالد", removedAt: 1 });
+});
+
+test("someone removed from the khatma can't be renamed", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+  await t.run((ctx) => ctx.db.patch(res.participantId, { removedAt: 1 }));
+  expect(await rename(t, s, res.participantId, "أبو خالد")).toEqual({
+    error: "not_found",
+  });
+});
+
 test("a refused accept queues no welcome", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);

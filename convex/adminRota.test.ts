@@ -884,6 +884,12 @@ test("every admin rota mutation refuses anyone but an admin, and is on this list
         ...participant,
         juz: 8,
       }),
+    renameParticipant: () =>
+      t.mutation(api.adminRota.renameParticipant, {
+        adminToken: "nope",
+        ...participant,
+        name: "اسم",
+      }),
     removeParticipant: () =>
       t.mutation(api.adminRota.removeParticipant, {
         adminToken: "nope",

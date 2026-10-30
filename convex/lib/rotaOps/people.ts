@@ -424,6 +424,49 @@ export async function removeParticipant(
   return { ok: true };
 }
 
+/**
+ * Renames someone in this khatma, for the organizer's eyes and their messages.
+ * Their row in the saved list follows, unless the organizer removed it. Their
+ * own account's name stays as it is.
+ */
+export async function renameParticipant(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  _rota: RotaConfig,
+  args: { participantId: Id<"rotaParticipants">; name: string },
+): Promise<{ ok: true } | { error: "not_found" | "bad_name" }> {
+  const participant = await activeParticipant(
+    ctx,
+    khatma._id,
+    args.participantId,
+  );
+  if (!participant) return { error: "not_found" };
+  const name = cleanDisplayName(args.name);
+  if (name === null) return { error: "bad_name" };
+  await ctx.db.patch(participant._id, { name });
+  const owner = khatma.creatorPersonId;
+  const { personId, phone } = participant;
+  const contact =
+    (await ctx.db
+      .query("rotaContacts")
+      .withIndex("by_owner_phone", (q) =>
+        q.eq("ownerPersonId", owner).eq("phone", phone),
+      )
+      .first()) ??
+    (personId == null
+      ? null
+      : await ctx.db
+          .query("rotaContacts")
+          .withIndex("by_owner_person", (q) =>
+            q.eq("ownerPersonId", owner).eq("personId", personId),
+          )
+          .first());
+  if (contact && contact.removedAt === undefined) {
+    await ctx.db.patch(contact._id, { name });
+  }
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Saved participants
 
@@ -676,13 +719,16 @@ export async function acceptJoinRequest(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
   rota: RotaConfig,
-  args: { requestId: Id<"rotaJoinRequests">; juz: number },
+  args: { requestId: Id<"rotaJoinRequests">; juz: number; name?: string },
 ): Promise<
   | { ok: true; participantId: Id<"rotaParticipants"> }
-  | { error: "not_found" | "juz_taken" | "already_added" }
+  | { error: "not_found" | "juz_taken" | "already_added" | "bad_name" }
 > {
   const request = await openRequest(ctx, khatma._id, args.requestId);
   if (!request) return { error: "not_found" };
+  const chosenName =
+    args.name === undefined ? undefined : cleanDisplayName(args.name);
+  if (chosenName === null) return { error: "bad_name" };
   const now = Date.now();
   const stoppedSince = (
     await ctx.db
@@ -730,7 +776,10 @@ export async function acceptJoinRequest(
   const phoneHidden =
     personId !== null &&
     (await numberHiddenFrom(ctx, khatma.creatorPersonId, personId));
-  const name = cleanDisplayName(request.profileName ?? "") ?? NEW_MEMBER_NAME;
+  const name =
+    chosenName ??
+    cleanDisplayName(request.profileName ?? "") ??
+    NEW_MEMBER_NAME;
   const placed = await placeNewParticipant(
     ctx,
     khatma,

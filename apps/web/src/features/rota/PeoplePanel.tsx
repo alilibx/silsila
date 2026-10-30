@@ -42,11 +42,15 @@ function PersonSheet({
   const giveJuz = useMutation(backend.giveJuz);
   const freeJuz = useMutation(backend.freeJuz);
   const removeParticipant = useMutation(backend.removeParticipant);
+  const renameParticipant = useMutation(backend.renameParticipant);
   const holderOf = (n: number) => view.rows[n - 1]?.participant ?? null;
   const others = view.rows.filter((row) => row.juz !== juz);
   const free = others.find((row) => row.participant === null);
   const [target, setTarget] = useState(free?.juz ?? others[0]?.juz ?? juz);
   const [confirming, setConfirming] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(person.name);
+  const nameId = useId();
   const { busy, error, run } = useRotaCall(peopleErrors);
   const args = backend.authArgs();
   const nextFree = view.freeJuz[0];
@@ -89,6 +93,49 @@ function PersonSheet({
           </Button>
         </div>
         <ErrorLine error={error} />
+      </Sheet>
+    );
+  }
+
+  if (renaming) {
+    return (
+      <Sheet title={t.rota.renameTitle} onClose={onClose}>
+        <form
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(
+              () =>
+                renameParticipant({
+                  ...args,
+                  participantId: person.id,
+                  name: newName.trim(),
+                }),
+              onClose,
+            );
+          }}
+        >
+          <label htmlFor={nameId} className="block font-medium">
+            {t.rota.personName}
+          </label>
+          <input
+            id={nameId}
+            type="text"
+            maxLength={60}
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+          />
+          <ErrorLine error={error} />
+          <div className="mt-5 grid gap-3">
+            <Button type="submit" disabled={busy}>
+              {t.rota.renameSave}
+            </Button>
+            <Button variant="ghost" onClick={() => setRenaming(false)}>
+              {t.rota.cancel}
+            </Button>
+          </div>
+        </form>
       </Sheet>
     );
   }
@@ -141,6 +188,13 @@ function PersonSheet({
       </div>
 
       <div className="mt-5 grid gap-3">
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() => setRenaming(true)}
+        >
+          {t.rota.rename}
+        </Button>
         {canGive && (
           <Button
             variant="ghost"
