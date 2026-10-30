@@ -233,6 +233,7 @@ test("find a person by phone, and their page", async () => {
       inviteCode: "familyKhatma",
       isOrganizer: true,
       status: "active",
+      pending: false,
     },
   ]);
   expect(page?.blocked).toBe(false);

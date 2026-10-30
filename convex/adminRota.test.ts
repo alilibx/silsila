@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
+import * as adminRotaModule from "./adminRota";
 import { ADMIN_SESSION_TTL_MS } from "./lib/adminSession";
 import { sha256Hex } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
@@ -582,4 +583,322 @@ test("the admin lookup says who a rota khatma waits for, and its join link", asy
   const k = await t.query(api.adminLookup.khatma, { adminToken, khatmaId });
   expect(k?.rota?.pendingOrganizer).toBe(true);
   expect(k?.rota?.joinLink).toContain("https://wa.me/971500000000");
+});
+
+test("the organizers list keeps the paginator's fields", async () => {
+  const t = convexTest(schema, modules);
+  await running(t);
+  const result = await t.query(api.adminLookup.organizers, {
+    adminToken,
+    paginationOpts: { numItems: 10, cursor: null },
+  });
+  expect(result.page).toHaveLength(1);
+  expect(result).toHaveProperty("splitCursor");
+  expect(result).toHaveProperty("pageStatus");
+});
+
+test("a person's view lists the khatma waiting for them", async () => {
+  const t = convexTest(schema, modules);
+  const { khatmaId } = await running(t);
+  const personId = await t.run(
+    async (ctx) => (await ctx.db.get(khatmaId))!.creatorPersonId,
+  );
+
+  const view = await t.query(api.adminLookup.person, { adminToken, personId });
+
+  expect(view?.khatmas).toMatchObject([
+    { khatmaId, name: details.name, isOrganizer: true, pending: true },
+  ]);
+});
+
+test("a person's view lists a khatma they organize once, and not as waiting", async () => {
+  const t = convexTest(schema, modules);
+  const { khatmaId } = await running(t);
+  const personId = await t.run(async (ctx) => {
+    const khatma = (await ctx.db.get(khatmaId))!;
+    await ctx.db.patch(khatmaId, {
+      rota: { ...khatma.rota!, pendingOrganizer: false },
+    });
+    await ctx.db.insert("members", {
+      khatmaId,
+      personId: khatma.creatorPersonId,
+      joinedAt: NOW,
+      status: "active",
+      notificationsOn: true,
+      lastNudgeAt: null,
+      lastCelebratedRound: 0,
+    });
+    return khatma.creatorPersonId;
+  });
+
+  const view = await t.query(api.adminLookup.person, { adminToken, personId });
+
+  expect(view?.khatmas).toMatchObject([{ khatmaId, pending: false }]);
+});
+
+test("the khatma view says whether a pool khatma is archived", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  const khatmaId = await poolKhatma(t);
+  const view = () => t.query(api.adminLookup.khatma, { adminToken, khatmaId });
+  expect((await view())?.archived).toBe(false);
+  await t.run((ctx) => ctx.db.patch(khatmaId, { archivedAt: NOW }));
+  expect((await view())?.archived).toBe(true);
+});
+
+test("an operation that changes nothing writes no audit row", async () => {
+  const t = convexTest(schema, modules);
+  const { khatmaId, readerId } = await running(t);
+  const dayRead = await t.run(async (ctx) => {
+    const khatma = (await ctx.db.get(khatmaId))!;
+    const dayId = await ctx.db.insert("rotaDays", {
+      khatmaId,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2027-01-15",
+      startedAt: NOW,
+      closesAt: NOW + 3_600_000,
+      completedAt: null,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+      reminderSentAt: null,
+    });
+    await ctx.db.patch(khatmaId, {
+      rota: { ...khatma.rota!, firstDate: "2027-01-15" },
+    });
+    const row = {
+      dayId,
+      khatmaId,
+      holderId: readerId,
+      readerId,
+      doneByOrganizer: false,
+      reassignedAt: null,
+    };
+    const done = await ctx.db.insert("rotaReads", {
+      ...row,
+      juz: 8,
+      slot: 8,
+      doneAt: null,
+    });
+    const other = await ctx.db.insert("rotaReads", {
+      ...row,
+      juz: 9,
+      slot: 9,
+      doneAt: null,
+    });
+    return { done, other };
+  });
+  const args = { adminToken, khatmaId };
+  const auditCount = async () => (await auditRows(t)).length;
+  const date = "2027-01-22";
+  const unchanged = async (call: () => Promise<unknown>) => {
+    const before = await auditCount();
+    await call();
+    expect(await auditCount()).toBe(before);
+  };
+  const changed = async (call: () => Promise<unknown>) => {
+    const before = await auditCount();
+    await call();
+    expect(await auditCount()).toBe(before + 1);
+  };
+
+  await unchanged(() => t.mutation(api.adminRota.finishSetup, args));
+
+  await changed(() =>
+    t.mutation(api.adminRota.markDone, { ...args, readId: dayRead.done }),
+  );
+  await unchanged(() =>
+    t.mutation(api.adminRota.markDone, { ...args, readId: dayRead.done }),
+  );
+  await unchanged(() =>
+    t.mutation(api.adminRota.markNotDone, { ...args, readId: dayRead.other }),
+  );
+  await changed(() =>
+    t.mutation(api.adminRota.markNotDone, { ...args, readId: dayRead.done }),
+  );
+
+  await unchanged(() =>
+    t.mutation(api.adminRota.removePauseDate, { ...args, date }),
+  );
+  await changed(() =>
+    t.mutation(api.adminRota.addPauseDate, { ...args, date }),
+  );
+  await unchanged(() =>
+    t.mutation(api.adminRota.addPauseDate, { ...args, date }),
+  );
+  await changed(() =>
+    t.mutation(api.adminRota.removePauseDate, { ...args, date }),
+  );
+
+  await unchanged(() =>
+    t.mutation(api.adminRota.setPaused, { ...args, paused: false }),
+  );
+  await changed(() =>
+    t.mutation(api.adminRota.setPaused, { ...args, paused: true }),
+  );
+  await unchanged(() =>
+    t.mutation(api.adminRota.setPaused, { ...args, paused: true }),
+  );
+});
+
+test("every admin rota mutation refuses anyone but an admin, and is on this list", async () => {
+  const t = convexTest(schema, modules);
+  const { khatmaId, readerId } = await running(t);
+  const ids = await t.run(async (ctx) => {
+    const dayId = await ctx.db.insert("rotaDays", {
+      khatmaId,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2027-01-16",
+      startedAt: NOW,
+      closesAt: NOW,
+      completedAt: null,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+      reminderSentAt: null,
+    });
+    const readId = await ctx.db.insert("rotaReads", {
+      dayId,
+      khatmaId,
+      juz: 8,
+      slot: 8,
+      holderId: readerId,
+      readerId,
+      doneAt: null,
+      doneByOrganizer: false,
+      reassignedAt: null,
+    });
+    const owner = (await ctx.db.get(khatmaId))!.creatorPersonId;
+    const contactId = await ctx.db.insert("rotaContacts", {
+      ownerPersonId: owner,
+      name: "محفوظ",
+      phone: "+971500009002",
+      personId: null,
+      createdAt: NOW,
+    });
+    const requestId = await ctx.db.insert("rotaJoinRequests", {
+      khatmaId,
+      phone: "+971500009003",
+      profileName: null,
+      createdAt: NOW,
+      resolvedAt: null,
+      outcome: null,
+    });
+    return { readId, contactId, requestId };
+  });
+  const participant = { khatmaId, participantId: readerId };
+  const read = { khatmaId, readId: ids.readId };
+  const request = { khatmaId, requestId: ids.requestId };
+  const date = { khatmaId, date: "2027-01-23" };
+  const mutations = {
+    finishSetup: () =>
+      t.mutation(api.adminRota.finishSetup, { adminToken: "nope", khatmaId }),
+    addParticipant: () =>
+      t.mutation(api.adminRota.addParticipant, {
+        adminToken: "nope",
+        khatmaId,
+        name: "س",
+        phone: "+971500009004",
+      }),
+    giveJuz: () =>
+      t.mutation(api.adminRota.giveJuz, {
+        adminToken: "nope",
+        ...participant,
+        juz: 9,
+      }),
+    moveJuz: () =>
+      t.mutation(api.adminRota.moveJuz, {
+        adminToken: "nope",
+        ...participant,
+        fromJuz: 8,
+        toJuz: 9,
+      }),
+    freeJuz: () =>
+      t.mutation(api.adminRota.freeJuz, {
+        adminToken: "nope",
+        ...participant,
+        juz: 8,
+      }),
+    removeParticipant: () =>
+      t.mutation(api.adminRota.removeParticipant, {
+        adminToken: "nope",
+        ...participant,
+      }),
+    addSaved: () =>
+      t.mutation(api.adminRota.addSaved, {
+        adminToken: "nope",
+        khatmaId,
+        contactId: ids.contactId,
+      }),
+    ensureJoinLink: () =>
+      t.mutation(api.adminRota.ensureJoinLink, {
+        adminToken: "nope",
+        khatmaId,
+      }),
+    acceptJoinRequest: () =>
+      t.mutation(api.adminRota.acceptJoinRequest, {
+        adminToken: "nope",
+        ...request,
+        juz: 9,
+      }),
+    declineJoinRequest: () =>
+      t.mutation(api.adminRota.declineJoinRequest, {
+        adminToken: "nope",
+        ...request,
+      }),
+    reassign: () =>
+      t.mutation(api.adminRota.reassign, {
+        adminToken: "nope",
+        ...read,
+        participantId: readerId,
+      }),
+    markDone: () =>
+      t.mutation(api.adminRota.markDone, { adminToken: "nope", ...read }),
+    markNotDone: () =>
+      t.mutation(api.adminRota.markNotDone, { adminToken: "nope", ...read }),
+    update: () =>
+      t.mutation(api.adminRota.update, {
+        adminToken: "nope",
+        khatmaId,
+        name: "اسم",
+      }),
+    setPaused: () =>
+      t.mutation(api.adminRota.setPaused, {
+        adminToken: "nope",
+        khatmaId,
+        paused: true,
+      }),
+    addPauseDate: () =>
+      t.mutation(api.adminRota.addPauseDate, { adminToken: "nope", ...date }),
+    removePauseDate: () =>
+      t.mutation(api.adminRota.removePauseDate, {
+        adminToken: "nope",
+        ...date,
+      }),
+    archive: () =>
+      t.mutation(api.adminRota.archive, { adminToken: "nope", khatmaId }),
+    remove: () =>
+      t.mutation(api.adminRota.remove, { adminToken: "nope", khatmaId }),
+  };
+
+  // A new public mutation fails here until it joins the table.
+  const exported = Object.entries(adminRotaModule)
+    .filter(
+      ([, fn]) =>
+        (fn as { isMutation?: boolean; isPublic?: boolean }).isMutation ===
+          true && (fn as { isPublic?: boolean }).isPublic === true,
+    )
+    .map(([name]) => name)
+    .sort();
+  expect(Object.keys(mutations).sort()).toEqual(exported);
+
+  const before = await auditRows(t);
+  for (const [name, call] of Object.entries(mutations)) {
+    expect(await codeOf(call()), name).toBe("not_admin");
+  }
+  expect(await auditRows(t)).toEqual(before);
 });

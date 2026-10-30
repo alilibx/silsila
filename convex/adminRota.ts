@@ -68,14 +68,18 @@ async function requireLiveRota(
   return found;
 }
 
-/** Records one operation of an admin on the khatma, unless it was refused, and returns its result. */
+/**
+ * Records one operation of an admin on the khatma and returns its result. A
+ * refused one writes nothing, and neither does one that `changed` says did nothing.
+ */
 async function audited<Result extends object>(
   ctx: AdminMutationCtx,
   { khatmaId, ...after }: { khatmaId: Id<"khatmas"> },
   note: string,
   result: Result,
+  changed = true,
 ): Promise<Result> {
-  if ("error" in result) return result;
+  if ("error" in result || !changed) return result;
   await writeAudit(ctx, {
     actor: ctx.admin,
     action: "rota.adminChange",
@@ -221,6 +225,7 @@ export const finishSetup = adminMutation({
       args,
       "finishSetup",
       await ops.finishSetup(ctx, khatma, rota),
+      rota.setupDoneAt === null,
     );
   },
 });
@@ -423,11 +428,13 @@ export const markDone = adminMutation({
   args: { khatmaId: v.id("khatmas"), readId: v.id("rotaReads") },
   handler: async (ctx, args): ReturnType<typeof ops.markDone> => {
     const { khatma, rota } = await requireLiveRota(ctx, args.khatmaId);
+    const read = await ctx.db.get(args.readId);
     return audited(
       ctx,
       args,
       "markDone",
       await ops.markDone(ctx, khatma, rota, args, ADMIN),
+      read?.doneAt === null,
     );
   },
 });
@@ -436,11 +443,13 @@ export const markNotDone = adminMutation({
   args: { khatmaId: v.id("khatmas"), readId: v.id("rotaReads") },
   handler: async (ctx, args): ReturnType<typeof ops.markNotDone> => {
     const { khatma, rota } = await requireLiveRota(ctx, args.khatmaId);
+    const read = await ctx.db.get(args.readId);
     return audited(
       ctx,
       args,
       "markNotDone",
       await ops.markNotDone(ctx, khatma, rota, args),
+      read?.doneAt !== null,
     );
   },
 });
@@ -486,6 +495,7 @@ export const setPaused = adminMutation({
       args,
       "setPaused",
       await ops.setPaused(ctx, khatma, rota, args),
+      args.paused !== (rota.pausedAt !== null),
     );
   },
 });
@@ -499,6 +509,7 @@ export const addPauseDate = adminMutation({
       args,
       "addPauseDate",
       await ops.addPauseDate(ctx, khatma, rota, args),
+      !rota.pauseDates.includes(args.date),
     );
   },
 });
@@ -512,6 +523,7 @@ export const removePauseDate = adminMutation({
       args,
       "removePauseDate",
       await ops.removePauseDate(ctx, khatma, rota, args),
+      rota.pauseDates.includes(args.date),
     );
   },
 });

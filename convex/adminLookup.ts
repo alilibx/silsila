@@ -5,6 +5,7 @@ import type { QueryCtx } from "./_generated/server";
 import { normalizeAdminPhone } from "./admins";
 import { adminQuery } from "./lib/adminSession";
 import { isBlocked } from "./lib/blocked";
+import { isArchived } from "./lib/khatma";
 import { JUZ_COUNT } from "./lib/juz";
 import { ROTA_SIZE } from "./lib/rota";
 import { khatmaJoinLink } from "./lib/rotaJoin";
@@ -131,11 +132,7 @@ export const organizers = adminQuery({
         khatmas,
       });
     }
-    return {
-      page,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
+    return { ...result, page };
   },
 });
 
@@ -213,6 +210,7 @@ export const khatma = adminQuery({
     return {
       name: k.name,
       kind: k.kind === "rota" ? ("rota" as const) : ("pool" as const),
+      archived: isArchived(k),
       rota: await rotaFacts(ctx, k),
       inviteCode: k.inviteCode,
       schedule: k.schedule,
@@ -228,6 +226,32 @@ export const khatma = adminQuery({
     };
   },
 });
+
+/**
+ * The rota khatmas an admin set up that wait for this person. They have no
+ * membership until the person sends the join message, only a participant row.
+ */
+async function waitingKhatmas(ctx: QueryCtx, p: Doc<"people">) {
+  const rows = await ctx.db
+    .query("rotaParticipants")
+    .withIndex("by_phone", (q) => q.eq("phone", p.phone))
+    .collect();
+  const waiting = [];
+  for (const row of rows) {
+    const k = await ctx.db.get(row.khatmaId);
+    if (k?.rota?.pendingOrganizer !== true) continue;
+    if (k.creatorPersonId !== p._id) continue;
+    waiting.push({
+      khatmaId: k._id,
+      name: k.name,
+      inviteCode: k.inviteCode,
+      isOrganizer: true,
+      status: "active" as const,
+      pending: true,
+    });
+  }
+  return waiting;
+}
 
 /** A person's account for an admin: never their reading (spec 8). */
 export const person = adminQuery({
@@ -250,11 +274,13 @@ export const person = adminQuery({
                 inviteCode: k.inviteCode,
                 isOrganizer: k.creatorPersonId === p._id,
                 status: m.status,
+                pending: false,
               }
             : null;
         }),
       )
     ).filter((k) => k !== null);
+    khatmas.push(...(await waitingKhatmas(ctx, p)));
     const sessions = await ctx.db
       .query("sessions")
       .withIndex("by_person", (q) => q.eq("personId", p._id))
