@@ -1216,3 +1216,171 @@ test("an archived waiting khatma only says it has ended", async () => {
   expect(state.members).toEqual([]);
   expect(sent[0]?.body).toContain(endedText);
 });
+
+// ---------------------------------------------------------------------------
+// Members of an archived khatma
+
+/** Archives the khatma as its organizer would: it stops, and its day closes. */
+async function archiveOf(t: T, s: Setup) {
+  await t.run(async (ctx) => {
+    const khatma = (await ctx.db.get(s.khatmaId))!;
+    await ctx.db.patch(s.khatmaId, {
+      rota: { ...khatma.rota!, archivedAt: Date.now() },
+    });
+    const days = await ctx.db
+      .query("rotaDays")
+      .withIndex("by_khatma_n", (q) => q.eq("khatmaId", s.khatmaId))
+      .collect();
+    for (const day of days) {
+      await ctx.db.patch(day._id, { closedAt: Date.now() });
+    }
+  });
+}
+
+const windowOf = (t: T, phone: string) =>
+  t.run((ctx) =>
+    ctx.db
+      .query("waContacts")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique(),
+  );
+
+test("someone only on archived khatmas hears that it ended, for a typed reply or any other text", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }], { name: "ختمة العائلة" });
+  await startDay(t, s);
+  await archiveOf(t, s);
+
+  for (const text of ["تم", "ليس بعد", "دعاء", "كيف الحال"]) {
+    await send(t, phoneOf(0), text);
+  }
+
+  const ended = `*ختمة العائلة*\n${endedText}`;
+  expect(sent.map((m) => m.body)).toEqual([ended, ended, ended, ended]);
+});
+
+test("with several archived khatmas the reply names the newest", async () => {
+  const t = convexTest(schema, modules);
+  const phone = "+971500000100";
+  const old = await setup(t, [{ slot: 1, phone }], {
+    name: "القديمة",
+    joinCode: "OLD234",
+  });
+  const newest = await setup(t, [{ slot: 1, phone }], {
+    name: "الأحدث",
+    joinCode: "NEW234",
+    organizerId: old.personId,
+  });
+  await t.run((ctx) => ctx.db.patch(newest.khatmaId, { createdAt: 5 }));
+  await archiveOf(t, newest);
+  await archiveOf(t, old);
+
+  await send(t, phoneOf(0), "تم");
+
+  expect(sent.map((m) => m.body)).toEqual([`*الأحدث*\n${endedText}`]);
+});
+
+test("a live khatma alongside an archived one keeps the usual replies", async () => {
+  const t = convexTest(schema, modules);
+  const phone = "+971500000100";
+  const archived = await setup(t, [{ slot: 1, phone }], { joinCode: "OLD234" });
+  await setup(t, [{ slot: 1, phone }], {
+    joinCode: "NEW234",
+    organizerId: archived.personId,
+  });
+  await archiveOf(t, archived);
+
+  await send(t, phoneOf(0), "كيف الحال");
+
+  expect(sent.map((m) => m.body)).toEqual([helpText]);
+});
+
+test("«إيقاف» from someone only on archived khatmas still stops them", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+
+  await send(t, phoneOf(0), "إيقاف");
+
+  expect(sent.map((m) => m.body)).toEqual([stopText]);
+  expect((await participant(t, s.participants[0]!)).stoppedAt).toBe(Date.now());
+});
+
+test("a tap on an old button of an archived khatma says the day is closed", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  const day = await startDay(t, s);
+  await archiveOf(t, s);
+
+  await send(t, phoneOf(0), "", {
+    payload: tap("done", day._id, s.participants[0]!),
+  });
+
+  expect(sent.map((m) => m.body)).toEqual([`*ختمة*\n${closedText}`]);
+});
+
+test("what may be a sign-in code from someone only on archived khatmas is left alone", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+
+  const result = await t.mutation(internal.rotaInbound.handle, {
+    phone: `+${phoneOf(0)}`,
+    text: "ABCD-EFGH-JK",
+    mayBeSignIn: true,
+    now: Date.now(),
+  });
+
+  expect(result).toEqual({ kind: "none" });
+});
+
+test("someone never joined to an archived khatma gets no ended reply", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1, joinedAt: null }]);
+  await archiveOf(t, s);
+
+  await send(t, phoneOf(0), "تم");
+
+  expect(sent.map((m) => m.body)).toEqual([helpText]);
+});
+
+test("a message from a phone only on archived khatmas opens no window", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+  const phone = `+${phoneOf(0)}`;
+
+  await send(t, phoneOf(0), "تم");
+  await send(t, phoneOf(0), "", { media: true });
+
+  expect(await windowOf(t, phone)).toBeNull();
+});
+
+test("a window already open isn't refreshed by a phone only on archived khatmas", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t, [{ slot: 1 }]);
+  await archiveOf(t, s);
+  const phone = `+${phoneOf(0)}`;
+  await t.run((ctx) =>
+    ctx.db.insert("waContacts", { phone, lastInboundAt: 1 }),
+  );
+
+  await send(t, phoneOf(0), "تم");
+
+  expect((await windowOf(t, phone))?.lastInboundAt).toBe(1);
+});
+
+test("a phone with a live khatma too still opens its window", async () => {
+  const t = convexTest(schema, modules);
+  const phone = "+971500000100";
+  const archived = await setup(t, [{ slot: 1, phone }], { joinCode: "OLD234" });
+  await setup(t, [{ slot: 1, phone }], {
+    joinCode: "NEW234",
+    organizerId: archived.personId,
+  });
+  await archiveOf(t, archived);
+
+  await send(t, phoneOf(0), "تم");
+
+  expect((await windowOf(t, phone))?.lastInboundAt).toBe(Date.now());
+});

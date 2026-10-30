@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { isArchived } from "./khatma";
 import {
   addDays,
   khatmaNumber,
@@ -15,7 +16,7 @@ export type TargetDay = {
   n: number;
   /** Its khatma number within the cycle, 1 to 30. */
   number: number;
-  /** Its reading date, or null while the khatma is paused or has no more days. */
+  /** Its reading date, or null while the khatma is paused, archived, or has no more days. */
   date: string | null;
   started: false;
 };
@@ -63,7 +64,7 @@ export async function targetDay(
   const rota = rotaOf(khatma);
   const last = await lastRotaDay(ctx, khatma._id);
   const n = (last?.n ?? 0) + 1;
-  if (rota.pausedAt !== null) {
+  if (rota.pausedAt !== null || isArchived(khatma)) {
     return { n, number: khatmaNumber(n), date: null, started: false };
   }
   const from = earliestOpenDate(

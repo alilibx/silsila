@@ -13,7 +13,8 @@ const PURGE_BATCH = 200;
 /**
  * Stops a khatma and leaves it read-only: its uncleared notes go, and a rota
  * khatma's unsent messages are skipped, all but the cycle thank-you, which is
- * for reading already finished. Its open day closes, so a late reply can't
+ * for reading already finished. Its open join requests are declined, since
+ * nobody can answer them now. Its open day closes, so a late reply can't
  * change it. Does nothing for one already archived.
  */
 export async function archiveKhatma(
@@ -43,6 +44,19 @@ export async function archiveKhatma(
     .collect();
   for (const row of unsent) {
     if (row.kind !== "cycle") await ctx.db.patch(row._id, { skippedAt: now });
+  }
+  const requests = await ctx.db
+    .query("rotaJoinRequests")
+    .withIndex("by_khatma_open", (q) =>
+      q.eq("khatmaId", khatma._id).eq("resolvedAt", null),
+    )
+    .collect();
+  for (const request of requests) {
+    await ctx.db.patch(request._id, {
+      resolvedAt: now,
+      outcome: "declined",
+      declinedBy: "organizer",
+    });
   }
   const day = await lastRotaDay(ctx, khatma._id);
   if (day && day.closedAt === null) {

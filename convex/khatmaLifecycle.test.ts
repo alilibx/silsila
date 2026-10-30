@@ -359,6 +359,42 @@ test("archive stamps a rota khatma, skips its unsent rows and closes its open da
   expect(day?.closedAt).toBe(stamp);
 });
 
+test("archive declines a rota khatma's open join requests", async () => {
+  const t = convexTest(schema, modules);
+  const org = await signedIn(t, "المنظم");
+  const { code, khatmaId } = await rotaKhatma(t, org);
+
+  await t.mutation(api.khatmaLifecycle.archive, {
+    sessionToken: org.token,
+    inviteCode: code,
+  });
+
+  const stamp = (await byCode(t, code)).rota?.archivedAt;
+  const requests = await t.run((ctx) =>
+    ctx.db
+      .query("rotaJoinRequests")
+      .withIndex("by_khatma_open", (q) => q.eq("khatmaId", khatmaId))
+      .collect(),
+  );
+  expect(requests).toMatchObject([
+    { resolvedAt: stamp, outcome: "declined", declinedBy: "organizer" },
+  ]);
+});
+
+test("an archived rota khatma promises no next day, paused or not", async () => {
+  const t = convexTest(schema, modules);
+  const org = await signedIn(t, "المنظم");
+  const { code } = await rotaKhatma(t, org);
+  const args = { sessionToken: org.token, inviteCode: code };
+  expect((await t.query(api.rota.people, args))?.target.date).not.toBeNull();
+
+  await t.mutation(api.khatmaLifecycle.archive, args);
+
+  expect((await t.query(api.rota.people, args))?.target.date).toBeNull();
+  expect((await t.query(api.rota.today, args))?.next.date).toBeNull();
+  expect((await t.query(api.rota.people, args))?.archived).toBe(true);
+});
+
 test("archive leaves a rota khatma's unsent cycle thank-you to go out", async () => {
   const t = convexTest(schema, modules);
   const org = await signedIn(t, "المنظم");

@@ -10,6 +10,7 @@ import {
   slotFor,
   type ReadingDaysKind,
 } from "../rota";
+import { isArchived } from "../khatma";
 import { khatmaJoinLink } from "../rotaJoin";
 import { slotRowsByJuz, targetDay, type RotaConfig } from "../rotaPlace";
 import { NEW_MEMBER_NAME } from "../rotaTemplates";
@@ -85,6 +86,8 @@ type PersonState = {
 export type PeopleView = {
   /** The khatma's title, as the join message names it. */
   title: string;
+  /** Read-only: nothing can be set up on it any more. */
+  archived: boolean;
   /** How often the khatma is read, as the share message says it. */
   daysKind: ReadingDaysKind;
   /** The wa.me link members tap to join; null until the khatma has a join code. */
@@ -168,6 +171,7 @@ export async function people(
   ).sort((a, b) => a.createdAt - b.createdAt);
   return {
     title: khatmaTitle(khatma),
+    archived: isArchived(khatma),
     daysKind: readingDaysKind(rota.days),
     joinLink: khatmaJoinLink(khatma, env("WHATSAPP_PUBLIC_NUMBER")),
     requests: requests.map((r) => ({

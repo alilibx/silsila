@@ -68,11 +68,23 @@ const hasJoined = (p: Participant) => isActive(p) && p.joinedAt != null;
 /** A declined join request holds off another from the same phone for this long. */
 const DECLINED_COOLDOWN_MS = 7 * 86_400_000;
 
+/** Whether any of these participants is on a khatma that is still running. */
+async function onRunningKhatma(
+  ctx: MutationCtx,
+  participants: Participant[],
+): Promise<boolean> {
+  for (const p of participants) {
+    const khatma = await ctx.db.get(p.khatmaId);
+    if (khatma && !isArchived(khatma)) return true;
+  }
+  return false;
+}
+
 /**
  * Opens the phone's 24-hour window, but only for a phone Wirdak may write to:
- * one on a rota khatma's list (`active`, the phone's participants that
- * `recordReply` loaded), or with a join request waiting. Every other number's
- * messages leave no trace here.
+ * one on the list of a rota khatma still running (`active`, the phone's
+ * participants that `recordReply` loaded), or with a join request waiting.
+ * Every other number's messages leave no trace here.
  */
 async function openWindow(
   ctx: MutationCtx,
@@ -80,7 +92,7 @@ async function openWindow(
   now: number,
   active: Participant[],
 ): Promise<void> {
-  const listed = active.length > 0;
+  const listed = await onRunningKhatma(ctx, active);
   const asking =
     !listed &&
     (
@@ -476,6 +488,24 @@ async function answerTyped(
   ];
 }
 
+/**
+ * The newest of the phone's joined khatmas when every one of them is archived,
+ * so a reply can say it ended; null with one still running.
+ */
+async function allEnded(
+  ctx: MutationCtx,
+  joined: Participant[],
+): Promise<Khatma | null> {
+  let newest: Khatma | null = null;
+  for (const p of joined) {
+    const khatma = await ctx.db.get(p.khatmaId);
+    if (!khatma) continue;
+    if (!isArchived(khatma)) return null;
+    if (!newest || khatma.createdAt > newest.createdAt) newest = khatma;
+  }
+  return newest;
+}
+
 /** Whether the phone is on any rota khatma's list (not removed). */
 export const hasParticipant = internalQuery({
   args: { phone: v.string() },
@@ -494,10 +524,12 @@ export const hasParticipant = internalQuery({
  * button tap, a join message, and a typed reply from a phone with a rota
  * participant (a rota word from any of them; anything else only from a
  * joined one, and not when `mayBeSignIn`, so another deployment's sign-in
- * code is left for the relay). `none` means it isn't a rota message here (a
- * phone with no participant, or a join code or a tap this deployment
- * doesn't have). Last, the phone's 24-hour window opens if it is on a list
- * or has a join request waiting.
+ * code is left for the relay). When all the phone's joined khatmas are
+ * archived, only «إيقاف» still acts, and anything else hears that it ended.
+ * `none` means it isn't a rota message here (a phone with no participant, or
+ * a join code or a tap this deployment doesn't have). Last, the phone's
+ * 24-hour window opens if it is on a running khatma's list or has a join
+ * request waiting.
  */
 export const handle = internalMutation({
   args: {
@@ -558,17 +590,21 @@ async function route(
   }
   const joined = active.filter(hasJoined);
   const word = classifyReply(args.text);
+  if (word === "stop") {
+    // Withdraws any join request too, so accepting one can't write to them.
+    await declineRequests(ctx, args.phone, args.now);
+    return await stop(ctx, joined, args.now);
+  }
+  if (word === null && args.mayBeSignIn) return NONE;
+  const ended = await allEnded(ctx, joined);
+  if (ended) return [about(ended, endedText)];
   switch (word) {
-    case "stop":
-      // Withdraws any join request too, so accepting one can't write to them.
-      await declineRequests(ctx, args.phone, args.now);
-      return await stop(ctx, joined, args.now);
     case "done":
     case "notYet":
       return await answerTyped(ctx, joined, word, args.now);
     case "dua":
       return [reply(duaText())];
     case null:
-      return joined.length === 0 || args.mayBeSignIn ? NONE : [reply(helpText)];
+      return joined.length === 0 ? NONE : [reply(helpText)];
   }
 }
