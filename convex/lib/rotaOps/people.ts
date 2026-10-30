@@ -2,7 +2,7 @@ import { ConvexError } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
-import { enqueue } from "../../rotaOutbox";
+import { enqueue, takeFreeJuzToday, welcomeGoesNow } from "../../rotaOutbox";
 import { env } from "../../whatsapp";
 import {
   readingDaysKind,
@@ -638,6 +638,20 @@ function welcomeRow(
   };
 }
 
+/** Queues an accepted member's welcome. When it would go at once, it can carry today's free juz' too. */
+async function welcomeAccepted(
+  ctx: MutationCtx,
+  khatma: Doc<"khatmas">,
+  rota: RotaConfig,
+  participant: { id: Id<"rotaParticipants">; phone: string },
+  now: number,
+): Promise<void> {
+  if (await welcomeGoesNow(ctx, rota, participant.phone, now)) {
+    await takeFreeJuzToday(ctx, rota, khatma._id, participant.id, now);
+  }
+  await enqueue(ctx, welcomeRow(khatma._id, participant.id));
+}
+
 /** An open join request of this khatma, or null. */
 async function openRequest(
   ctx: QueryCtx,
@@ -661,7 +675,7 @@ async function openRequest(
 export async function acceptJoinRequest(
   ctx: MutationCtx,
   khatma: Doc<"khatmas">,
-  _rota: RotaConfig,
+  rota: RotaConfig,
   args: { requestId: Id<"rotaJoinRequests">; juz: number },
 ): Promise<
   | { ok: true; participantId: Id<"rotaParticipants"> }
@@ -698,7 +712,13 @@ export async function acceptJoinRequest(
       await ctx.db.patch(existing._id, { joinedAt: now });
     }
     await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
-    await enqueue(ctx, welcomeRow(khatma._id, existing._id));
+    await welcomeAccepted(
+      ctx,
+      khatma,
+      rota,
+      { id: existing._id, phone: existing.phone },
+      now,
+    );
     return { error: "already_added" };
   }
 
@@ -732,7 +752,13 @@ export async function acceptJoinRequest(
     });
   }
   await ctx.db.patch(request._id, { resolvedAt: now, outcome: "accepted" });
-  await enqueue(ctx, welcomeRow(khatma._id, placed.participantId));
+  await welcomeAccepted(
+    ctx,
+    khatma,
+    rota,
+    { id: placed.participantId, phone: request.phone },
+    now,
+  );
   return { ok: true, participantId: placed.participantId };
 }
 

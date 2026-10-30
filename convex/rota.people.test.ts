@@ -716,6 +716,84 @@ test("accepting queues one welcome for the new member, with no day", async () =>
   });
 });
 
+/** A day dated today (NOW is 11:00 in Dubai), with nobody on any juz'. */
+async function openDay(t: T, s: Setup) {
+  const khatma = await khatmaOf(t, s);
+  return await t.run(async (ctx) => {
+    const dayId = await ctx.db.insert("rotaDays", {
+      khatmaId: khatma._id,
+      n: 1,
+      number: 1,
+      cycle: 1,
+      date: "2027-01-15",
+      startedAt: NOW - 3_600_000,
+      closesAt: NOW + 3_600_000,
+      completedAt: null,
+      closedAt: null,
+      unreadSentAt: null,
+      summarySentAt: null,
+    });
+    for (let juz = 1; juz <= 30; juz++) {
+      await ctx.db.insert("rotaReads", {
+        dayId,
+        khatmaId: khatma._id,
+        juz,
+        slot: slotFor(juz, 1),
+        holderId: null,
+        readerId: null,
+        doneAt: null,
+        doneByOrganizer: false,
+        reassignedAt: null,
+      });
+    }
+    return dayId;
+  });
+}
+
+const contactedAt = (t: T, lastInboundAt: number) =>
+  t.run((ctx) =>
+    ctx.db.insert("waContacts", { phone: "+971501112233", lastInboundAt }),
+  );
+
+test("someone accepted during a day takes today's free juz', when the welcome can say so", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const dayId = await openDay(t, s);
+  await contactedAt(t, NOW - 1000);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+
+  const reads = await t.run((ctx) =>
+    ctx.db
+      .query("rotaReads")
+      .withIndex("by_reader_day", (q) =>
+        q.eq("readerId", res.participantId).eq("dayId", dayId),
+      )
+      .collect(),
+  );
+  expect(reads).toHaveLength(1);
+  expect(reads[0]?.holderId).toBe(res.participantId);
+});
+
+test("someone accepted outside their 24-hour window takes nothing today: no welcome could tell them", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  const dayId = await openDay(t, s);
+  await contactedAt(t, NOW - 25 * 3_600_000);
+  const res = await accept(t, s, await request(t, s), 7);
+  if (!("participantId" in res)) throw new Error(JSON.stringify(res));
+
+  const taken = await t.run((ctx) =>
+    ctx.db
+      .query("rotaReads")
+      .withIndex("by_reader_day", (q) =>
+        q.eq("readerId", res.participantId).eq("dayId", dayId),
+      )
+      .collect(),
+  );
+  expect(taken).toEqual([]);
+});
+
 test("a refused accept queues no welcome", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);
