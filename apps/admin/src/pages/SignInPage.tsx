@@ -1,7 +1,8 @@
+import { Input } from "@/components/ui/input";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { normalizeDigits } from "@convex/lib/digits";
-import { Button } from "@web/components/Button";
+import { Button } from "@/components/ui/button";
 import { WhatsAppIcon } from "@web/components/WhatsAppIcon";
 import { convexSiteUrl } from "@web/lib/env";
 import { deviceLabel } from "@web/lib/format";
@@ -148,13 +149,13 @@ export function SignInPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-5 px-6">
-      <h1 className="text-center font-display text-3xl text-green-deep">
+      <h1 className="text-center font-display text-3xl text-primary">
         {t.signIn.title}
       </h1>
       {shownError !== null && (
         <p
           role="alert"
-          className="rounded-ui bg-saffron-soft p-3 text-center text-saffron-ink"
+          className="rounded-lg bg-saffron-soft p-3 text-center text-saffron-ink"
         >
           {t.signIn.errors[shownError]}
         </p>
@@ -162,7 +163,7 @@ export function SignInPage() {
 
       {started === null && (
         <>
-          <p className="text-center leading-relaxed text-ink-soft">
+          <p className="text-center leading-relaxed text-muted-foreground">
             {t.signIn.intro}
           </p>
           <Button variant="whatsapp" disabled={busy} onClick={start}>
@@ -173,7 +174,7 @@ export function SignInPage() {
       )}
 
       {started !== null && terminal && (
-        <Button variant="ghost" onClick={reset}>
+        <Button variant="outline" onClick={reset}>
           {t.signIn.again}
         </Button>
       )}
@@ -185,7 +186,7 @@ export function SignInPage() {
             href={waLink(started.waNumber, started.message)}
             target="_blank"
             rel="noreferrer"
-            className="text-center font-medium text-green underline underline-offset-4"
+            className="text-center font-medium text-primary underline underline-offset-4"
           >
             {t.signIn.openAgain}
           </a>
@@ -202,7 +203,7 @@ export function SignInPage() {
         >
           <label className="flex flex-col gap-2 text-center">
             <span>{t.signIn.pinLabel}</span>
-            <input
+            <Input
               value={pin}
               onChange={(e) => {
                 setPin(e.target.value);
@@ -213,7 +214,7 @@ export function SignInPage() {
               autoFocus
               maxLength={12}
               dir="ltr"
-              className="rounded-ui border-2 border-line bg-white p-3 text-center text-2xl tracking-[0.4em]"
+              className="h-14 text-center text-2xl tracking-[0.4em]"
             />
           </label>
           {pasteEmpty && (
@@ -223,7 +224,7 @@ export function SignInPage() {
           )}
           {canPaste && (
             <Button
-              variant="ghost"
+              variant="outline"
               disabled={busy}
               onClick={() => void paste()}
             >

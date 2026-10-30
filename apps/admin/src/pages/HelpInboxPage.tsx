@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/PageHeader";
 import { api } from "@convex/_generated/api";
 import { formatDate } from "@web/lib/format";
 import { usePaginatedQuery } from "convex/react";
@@ -26,7 +27,7 @@ export function HelpInboxPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">{t.help.title}</h1>
+      <PageHeader title={t.help.title} />
       <div role="tablist" className="flex gap-2">
         {TABS.map((tab) => (
           <button
@@ -35,26 +36,26 @@ export function HelpInboxPage() {
             role="tab"
             aria-selected={tab === status}
             onClick={() => setStatus(tab)}
-            className={`rounded-full px-4 py-2 text-sm ${tab === status ? "bg-green text-white" : "border border-line bg-card"}`}
+            className={`rounded-full px-4 py-2 text-sm ${tab === status ? "bg-primary text-primary-foreground" : "border bg-card"}`}
           >
             {t.help.tabs[tab]}
           </button>
         ))}
       </div>
       {loading !== "LoadingFirstPage" && results.length === 0 && (
-        <p className="text-ink-soft">{t.help.empty}</p>
+        <p className="text-muted-foreground">{t.help.empty}</p>
       )}
       <ul className="flex flex-col gap-2">
         {results.map((r) => (
           <li key={r._id}>
             <Link
               to={`/help/${r._id}`}
-              className="block rounded-ui border-2 border-line bg-card px-4 py-3"
+              className="block rounded-lg border bg-card px-4 py-3"
             >
               <span className="block font-medium">
                 {r.firstLine || t.help.voice}
               </span>
-              <span className="mt-1 flex flex-wrap gap-x-3 text-sm text-ink-soft">
+              <span className="mt-1 flex flex-wrap gap-x-3 text-sm text-muted-foreground">
                 <span>{r.who ?? t.help.visitor}</span>
                 {r.khatmaName !== null && <span>{r.khatmaName}</span>}
                 {r.hasVoice && <span>{t.help.voice}</span>}
@@ -68,7 +69,7 @@ export function HelpInboxPage() {
       {loading === "CanLoadMore" && (
         <button
           type="button"
-          className="font-medium text-green underline underline-offset-4"
+          className="font-medium text-primary underline underline-offset-4"
           onClick={() => loadMore(PAGE)}
         >
           {t.help.more}

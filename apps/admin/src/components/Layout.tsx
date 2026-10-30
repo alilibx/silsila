@@ -1,66 +1,27 @@
-import { api } from "@convex/_generated/api";
-import { toArabicDigits } from "@convex/lib/digits";
-import { useQuery } from "convex/react";
-import { NavLink, Outlet } from "react-router";
-import { t } from "../i18n/ar";
-import { useAdminToken } from "../lib/adminSession";
+import type { ReactNode } from "react";
+import { Outlet } from "react-router";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { AppSidebar } from "./AppSidebar";
+import { BottomBar } from "./BottomBar";
+import { TopBar } from "./TopBar";
 
-const NAV = [
-  { to: "/", label: t.nav.home },
-  { to: "/help", label: t.nav.help },
-  { to: "/search", label: t.nav.search },
-  { to: "/organizers", label: t.nav.organizers },
-  { to: "/settings", label: t.nav.settings },
-  { to: "/audit", label: t.nav.audit },
-  { to: "/admins", label: t.nav.admins },
-] as const;
-
-/** How many help requests wait, on the help tab. */
-function OpenHelpBadge() {
-  const adminToken = useAdminToken() ?? "";
-  const counts = useQuery(api.adminHelp.counts, { adminToken });
-  if (!counts || counts.open === 0) return null;
+/** The signed-in frame: sidebar on a desktop, a bottom bar on a phone. */
+export function Layout({ actions }: { actions?: ReactNode }) {
+  const mobile = useIsMobile();
   return (
-    <span className="ms-1 rounded-full bg-saffron px-1.5 text-xs text-white">
-      {counts.open >= 100 ? t.help.manyOpen : toArabicDigits(counts.open)}
-    </span>
-  );
-}
-
-/** The signed-in frame: header, the page, and the bottom nav (phone first, spec 4.1). */
-export function Layout({ actions }: { actions?: React.ReactNode }) {
-  return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col">
-      <header className="flex items-center justify-between px-4 pb-2 pt-4">
-        <div className="flex items-center gap-2">
-          <span className="font-display text-2xl text-green">{t.app.name}</span>
-          <span className="rounded-md bg-ink px-2 py-0.5 text-xs text-white">
-            {t.badge}
-          </span>
-        </div>
-        {actions}
-      </header>
-      <main className="flex-1 px-4 pb-28">
-        <Outlet />
-      </main>
-      <nav className="fixed inset-x-0 bottom-0 border-t border-line bg-card pb-[env(safe-area-inset-bottom)]">
-        <ul className="mx-auto flex max-w-3xl justify-around">
-          {NAV.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.to === "/"}
-                className={({ isActive }) =>
-                  `block px-3 py-3 text-sm ${isActive ? "font-semibold text-green" : "text-ink-soft"}`
-                }
-              >
-                {item.label}
-                {item.to === "/help" && <OpenHelpBadge />}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </div>
+    <TooltipProvider delayDuration={200}>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="min-w-0 bg-background">
+          <TopBar actions={actions} />
+          <div className="mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-4 pb-24 md:px-5 md:pt-5 md:pb-10">
+            <Outlet />
+          </div>
+        </SidebarInset>
+        {mobile && <BottomBar />}
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }

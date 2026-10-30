@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 type Props = {
   label: string;
   value: string;
@@ -18,11 +20,14 @@ export function StatTile({
     <div
       data-testid={testId}
       data-tone={tone}
-      className={`rounded-ui border-2 px-3 py-2.5 ${tone === "warn" ? "border-saffron bg-saffron-soft" : "border-line bg-card"}`}
+      className={cn(
+        "rounded-lg border p-3.5",
+        tone === "warn" ? "border-saffron bg-saffron-soft" : "bg-card",
+      )}
     >
-      <p className="text-xs text-ink-soft">{label}</p>
-      <p className="text-2xl font-semibold text-ink">{value}</p>
-      {detail && <p className="text-xs text-ink-soft">{detail}</p>}
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="tabular text-2xl font-semibold">{value}</p>
+      {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
     </div>
   );
 }

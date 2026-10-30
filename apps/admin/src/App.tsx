@@ -62,7 +62,7 @@ function SignOutButton({ adminToken }: { adminToken: string }) {
   return (
     <button
       type="button"
-      className="text-sm font-medium text-ink-soft underline underline-offset-4"
+      className="text-[13px] font-medium underline underline-offset-4"
       onClick={() => {
         // Signed out here even if the server call fails (the session ends by itself).
         void signOut({ adminToken }).catch(() => undefined);

@@ -33,9 +33,12 @@ const SLOW_MOBILE: Throttle = {
 /** Specs that only mean something on a throttled project. */
 const SLOW_ONLY = "**/load.spec.ts";
 /** A smoke test of the admin site, which admins use on a desktop: one browser is enough. */
-const DESKTOP_CHROME_ONLY = "**/admin-rota.spec.ts";
+const DESKTOP_CHROME_ONLY = [
+  "**/admin-rota.spec.ts",
+  "**/admin-layout.spec.ts",
+];
 /** What every project skips but the one that spec is for. */
-const NOT_HERE = [SLOW_ONLY, DESKTOP_CHROME_ONLY];
+const NOT_HERE = [SLOW_ONLY, ...DESKTOP_CHROME_ONLY];
 
 export default defineConfig({
   testDir: "./e2e",
