@@ -1,14 +1,7 @@
 import { expect } from "@playwright/test";
 import { t } from "../apps/admin/src/i18n/ar";
 import { t as webT } from "../apps/web/src/i18n/ar";
-import { adminSession, blockExternal, randomPhone, test } from "./support";
-
-/** Where `playwright.config.ts` serves the admin site's build. */
-const ADMIN_URL = "http://localhost:5174";
-/** The key `apps/admin/src/lib/adminSession.ts` keeps its token under. */
-const ADMIN_TOKEN_KEY = "wirdak.admin.session";
-/** One fixed admin, so runs don't leave a new admin row each time on the shared local backend. */
-const ADMIN_PHONE = "+971500000077";
+import { ADMIN_URL, randomPhone, signInAsAdmin, test } from "./support";
 
 const KHATMA_NAME = "ختمة نيابة عن منظّم";
 const ORGANIZER = "أم خالد";
@@ -21,12 +14,7 @@ const PERSON = "سارة";
 test("admin: set up a rotating khatma for someone, help it, archive and delete", async ({
   page,
 }) => {
-  await blockExternal(page.context());
-  const token = await adminSession(ADMIN_PHONE);
-  await page.addInitScript(
-    ([key, value]) => localStorage.setItem(key ?? "", value ?? ""),
-    [ADMIN_TOKEN_KEY, token],
-  );
+  await signInAsAdmin(page);
 
   // --- The organizers page leads to setting one up -------------------------------------------
   await page.goto(`${ADMIN_URL}/organizers`);

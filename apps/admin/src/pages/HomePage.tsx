@@ -1,6 +1,7 @@
+import { PageHeader } from "../components/PageHeader";
 import { api } from "@convex/_generated/api";
 import { toArabicDigits } from "@convex/lib/digits";
-import { buttonClass } from "@web/components/Button";
+import { buttonVariants } from "@/components/ui/button";
 import { formatDate } from "@web/lib/format";
 import { useQuery } from "convex/react";
 import { useId, useState } from "react";
@@ -22,7 +23,7 @@ function OpenHelpCard({ adminToken }: { adminToken: string }) {
   return (
     <Link
       to="/help"
-      className="flex items-center justify-between rounded-ui bg-saffron-soft px-4 py-3 text-saffron-ink"
+      className="flex items-center justify-between rounded-lg bg-saffron-soft px-4 py-3 text-saffron-ink"
     >
       <span>
         <span className="block font-semibold">{t.help.homeCard}</span>
@@ -32,7 +33,7 @@ function OpenHelpCard({ adminToken }: { adminToken: string }) {
           </span>
         )}
       </span>
-      <span className="rounded-full bg-saffron px-3 py-1 font-semibold text-white">
+      <span className="rounded-full bg-sidebar-primary px-3 py-1 font-semibold text-sidebar-primary-foreground">
         {counts.open >= 100 ? t.help.manyOpen : toArabicDigits(counts.open)}
       </span>
     </Link>
@@ -69,7 +70,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <StatTile
           label={t.stats.activeKhatmas}
           value={formatCount(o.activeKhatmas)}
@@ -120,7 +121,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
         />
       </div>
 
-      <section className="flex flex-col gap-2 rounded-ui border-2 border-line bg-card px-3 py-3">
+      <section className="flex flex-col gap-2 rounded-lg border bg-card px-3 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <label htmlFor={metricId} className="sr-only">
             {t.stats.metric}
@@ -129,7 +130,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
             id={metricId}
             value={metric}
             onChange={(e) => setMetric(e.target.value as Metric)}
-            className="rounded-ui border border-line bg-white px-2 py-1 text-sm"
+            className="rounded-lg border bg-card px-2 py-1 text-sm"
           >
             {METRICS.map((m) => (
               <option key={m} value={m}>
@@ -149,7 +150,7 @@ function Dashboard({ adminToken }: { adminToken: string }) {
                 role="radio"
                 aria-checked={p === days}
                 onClick={() => setDays(p)}
-                className={`rounded-full px-2.5 py-1 text-xs ${p === days ? "bg-green text-white" : "border border-line"}`}
+                className={`rounded-full px-2.5 py-1 text-xs ${p === days ? "bg-primary text-primary-foreground" : "border "}`}
               >
                 {t.stats.periods[p]}
               </button>
@@ -189,9 +190,12 @@ export function HomePage() {
   const rows = useQuery(api.adminSettings.list, { adminToken });
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">{t.home.title}</h1>
+      <PageHeader title={t.home.title} />
       <OpenHelpCard adminToken={adminToken} />
-      <Link to="/rota/new" className={buttonClass("ghost", "no-underline")}>
+      <Link
+        to="/rota/new"
+        className={`${buttonVariants({ variant: "outline" })} sm:self-start`}
+      >
         {t.rota.create}
       </Link>
       <Dashboard adminToken={adminToken} />

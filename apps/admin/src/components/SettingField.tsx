@@ -1,12 +1,14 @@
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { api } from "@convex/_generated/api";
 import { normalizeDigits } from "@convex/lib/digits";
 import type { Grace } from "@convex/lib/grace";
 import { SCHEDULES, type Schedule } from "@convex/lib/schedule";
 import type { SettingSpec } from "@convex/lib/settingSpecs";
 import type { SettingKey } from "@convex/lib/settings";
-import { Button } from "@web/components/Button";
+import { Button } from "@/components/ui/button";
 import { GraceField } from "@web/components/GraceField";
-import { Sheet } from "@web/components/Sheet";
+import { AdminSheet } from "./AdminSheet";
 import { t as webT } from "@web/i18n/ar";
 import { useMutation } from "convex/react";
 import { useId, useState } from "react";
@@ -86,7 +88,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
 
   const { what, why } = t.settings.help[setting.key];
   const changed = !setting.isDefault && (
-    <span className="rounded-full bg-saffron-soft px-2 py-0.5 text-xs font-normal text-saffron-ink">
+    <span className="rounded-md bg-saffron-soft px-1.5 py-0.5 text-xs font-normal text-saffron-ink">
       {t.settings.custom}
     </span>
   );
@@ -100,10 +102,10 @@ export function SettingField({ setting }: { setting: SettingRow }) {
   const reason = (
     <>
       <p>{why}</p>
-      <p className="mt-2 text-ink-soft">
+      <p className="mt-2 text-muted-foreground">
         {t.settings.defaultValue}: {formatSetting(spec, setting.defaultValue)}
       </p>
-      {range !== null && <p className="text-ink-soft">{range}</p>}
+      {range !== null && <p className="text-muted-foreground">{range}</p>}
     </>
   );
   const errorLine = (className: string) =>
@@ -123,7 +125,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
               <span id={labelId}>{label}</span>
               {changed}
             </span>
-            <span className="text-sm text-ink-soft">{what}</span>
+            <span className="text-sm text-muted-foreground">{what}</span>
           </div>
           <button
             type="button"
@@ -132,12 +134,12 @@ export function SettingField({ setting }: { setting: SettingRow }) {
             aria-labelledby={labelId}
             disabled={busy}
             onClick={() => void save(!on)}
-            className={`flex shrink-0 items-center gap-2 pt-0.5 disabled:opacity-50 ${on ? "text-green-deep" : "text-ink-soft"}`}
+            className={`flex shrink-0 items-center gap-2 pt-0.5 disabled:opacity-50 ${on ? "text-primary" : "text-muted-foreground"}`}
           >
             {on ? t.settings.on : t.settings.off}
             <span
               aria-hidden="true"
-              className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${on ? "bg-green" : "bg-line"}`}
+              className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${on ? "bg-primary" : "bg-line"}`}
             >
               <span
                 className={`size-5 rounded-full bg-white transition-[margin] ${on ? "ms-auto" : "me-auto"}`}
@@ -146,7 +148,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
           </button>
         </div>
         <details className="mt-1 text-sm">
-          <summary className="cursor-pointer text-green underline underline-offset-4">
+          <summary className="cursor-pointer text-primary underline underline-offset-4">
             {t.settings.whyDefault}
           </summary>
           <div className="mt-1">{reason}</div>
@@ -163,7 +165,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
         aria-label={`${t.settings.edit} ${label}`}
         // The label replaces the content's name, so the value, badge and description come back as its description.
         aria-describedby={`${labelId}-value ${labelId}-what`}
-        className="flex w-full flex-col gap-0.5 px-4 py-3 text-start hover:bg-paper"
+        className="flex w-full flex-col gap-0.5 px-4 py-3 text-start hover:bg-accent"
         onClick={() => {
           setError(null);
           setOpen(true);
@@ -174,7 +176,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
             {label}
             {changed}
           </span>
-          <span className="flex max-w-[50%] shrink-0 items-start gap-2 text-end font-semibold text-green-deep">
+          <span className="flex max-w-[50%] shrink-0 items-start gap-2 text-end font-semibold text-primary">
             <span id={`${labelId}-value`} className="line-clamp-2">
               {formatSetting(spec, setting.value)}
               {!setting.isDefault && (
@@ -184,19 +186,22 @@ export function SettingField({ setting }: { setting: SettingRow }) {
                 </>
               )}
             </span>
-            <span aria-hidden="true" className="font-normal text-ink-soft">
+            <span
+              aria-hidden="true"
+              className="font-normal text-muted-foreground"
+            >
               ‹
             </span>
           </span>
         </span>
-        <span id={`${labelId}-what`} className="text-sm text-ink-soft">
+        <span id={`${labelId}-what`} className="text-sm text-muted-foreground">
           {what}
         </span>
       </button>
       {open && (
-        <Sheet title={label} onClose={() => setOpen(false)}>
+        <AdminSheet title={label} onClose={() => setOpen(false)}>
           <p>{what}</p>
-          <div className="mt-3 rounded-ui bg-paper-2 p-3 text-sm">
+          <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
             <p className="mb-1 font-semibold">{t.settings.whyDefault}</p>
             {reason}
           </div>
@@ -212,7 +217,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
           <div className="mt-3 flex flex-col gap-2">
             {!setting.isDefault && (
               <Button
-                variant="ghost"
+                variant="outline"
                 disabled={busy}
                 onClick={() =>
                   void run(() => reset({ adminToken, key: setting.key }))
@@ -222,7 +227,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
               </Button>
             )}
           </div>
-        </Sheet>
+        </AdminSheet>
       )}
     </div>
   );
@@ -231,7 +236,7 @@ export function SettingField({ setting }: { setting: SettingRow }) {
 /** Settings as one card, a line between rows. */
 export function SettingList({ rows }: { rows: SettingRow[] }) {
   return (
-    <div className="divide-y divide-line overflow-hidden rounded-ui border-2 border-line bg-card">
+    <div className="divide-y divide-border overflow-hidden rounded-lg border bg-card">
       {rows.map((row) => (
         <SettingField key={row.key} setting={row} />
       ))}
@@ -309,20 +314,20 @@ function Editor({
             {label}
           </label>
           {spec.kind === "text" ? (
-            <textarea
+            <Textarea
               id={inputId}
               value={text}
               maxLength={spec.maxLength}
               rows={3}
               onChange={(e) => setText(e.target.value)}
-              className="w-full rounded-ui border-2 border-line bg-white p-3"
+              className="w-full rounded-lg border bg-card p-3"
             />
           ) : spec.kind === "time" ? (
             <select
               id={inputId}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full rounded-ui border-2 border-line bg-white p-3 text-lg"
+              className="w-full rounded-lg border bg-card p-3 text-lg"
             >
               {TIME_STEPS.map((minutes) => (
                 <option key={minutes} value={String(minutes)}>
@@ -331,13 +336,13 @@ function Editor({
               ))}
             </select>
           ) : (
-            <input
+            <Input
               id={inputId}
               value={text}
               onChange={(e) => setText(e.target.value)}
               inputMode={spec.kind === "version" ? "text" : "decimal"}
               dir="ltr"
-              className="w-full rounded-ui border-2 border-line bg-white p-3 text-center text-lg"
+              className="w-full text-center text-lg"
             />
           )}
           {spec.kind === "duration" && (
@@ -349,7 +354,7 @@ function Editor({
                 id={unitId}
                 value={unit}
                 onChange={(e) => setUnit(e.target.value as Unit)}
-                className="rounded-ui border-2 border-line bg-white p-3"
+                className="rounded-lg border bg-card p-3"
               >
                 {UNITS.map((u) => (
                   <option key={u} value={u}>

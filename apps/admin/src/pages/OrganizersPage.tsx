@@ -1,6 +1,8 @@
+import { PageHeader } from "../components/PageHeader";
+import { Input } from "@/components/ui/input";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button, buttonClass } from "@web/components/Button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   useConvex,
   useMutation,
@@ -40,16 +42,19 @@ function PersonRow({
   onToggle: () => void;
 }) {
   return (
-    <li className="flex flex-col gap-2 rounded-ui border-2 border-line bg-card px-4 py-3">
+    <li className="flex flex-col gap-2 rounded-lg border bg-card px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <Link
             to={`/people/${personId}`}
-            className="block font-medium text-green underline"
+            className="block font-medium text-primary underline"
           >
             {displayName}
           </Link>
-          <span dir="ltr" className="block text-start text-sm text-ink-soft">
+          <span
+            dir="ltr"
+            className="block text-start text-sm text-muted-foreground"
+          >
             {phone}
           </span>
         </div>
@@ -65,11 +70,11 @@ function PersonRow({
             <li key={k.khatmaId} className="flex justify-between gap-2">
               <Link
                 to={`/khatmas/${k.khatmaId}`}
-                className="text-green underline"
+                className="text-primary underline"
               >
                 {k.name ?? t.lookup.unnamed}
               </Link>
-              <span className="text-ink-soft">
+              <span className="shrink-0 text-muted-foreground">
                 {t.lookup.members(k.memberCount)}
               </span>
             </li>
@@ -166,37 +171,41 @@ export function OrganizersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">
-        {t.organizers.title}
-      </h1>
-      <Link to="/rota/new" className={buttonClass("ghost", "no-underline")}>
+      <PageHeader title={t.organizers.title} />
+      <Link
+        to="/rota/new"
+        className={`${buttonVariants({ variant: "outline" })} sm:self-start`}
+      >
         {t.organizers.createFor}
       </Link>
 
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void find();
         }}
       >
         <label htmlFor={phoneId}>{t.organizers.searchLabel}</label>
-        <input
+        <Input
           id={phoneId}
           value={phone}
           inputMode="tel"
           dir="ltr"
           onChange={(e) => setPhone(e.target.value)}
-          className="rounded-ui border-2 border-line bg-white p-3"
         />
-        <Button type="submit" disabled={phone.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={phone.trim() === ""}
+        >
           {t.lookup.find}
         </Button>
         {found?.kind === "invalid" && (
           <p className="text-saffron-ink">{t.lookup.invalidPhone}</p>
         )}
         {found?.kind === "none" && (
-          <p className="text-ink-soft">{t.lookup.noAccount}</p>
+          <p className="text-muted-foreground">{t.lookup.noAccount}</p>
         )}
       </form>
       {found?.kind === "person" && (
@@ -212,7 +221,7 @@ export function OrganizersPage() {
       {message && <p role="status">{message}</p>}
 
       {status === "Exhausted" && results.length === 0 && (
-        <p className="text-ink-soft">{t.organizers.empty}</p>
+        <p className="text-muted-foreground">{t.organizers.empty}</p>
       )}
       <ul className="flex flex-col gap-2">
         {results.map((o, i) => (
@@ -230,7 +239,7 @@ export function OrganizersPage() {
       {status === "CanLoadMore" && (
         <button
           type="button"
-          className="font-medium text-green underline underline-offset-4"
+          className="font-medium text-primary underline underline-offset-4"
           onClick={() => loadMore(PAGE)}
         >
           {t.organizers.more}

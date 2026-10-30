@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/PageHeader";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { AuditAction } from "@convex/lib/audit";
@@ -63,7 +64,7 @@ export function AuditPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">{t.audit.title}</h1>
+      <PageHeader title={t.audit.title} />
       <label htmlFor={adminFilterId} className="sr-only">
         {t.audit.byAdmin}
       </label>
@@ -74,7 +75,7 @@ export function AuditPage() {
           setAdminId(e.target.value as Id<"admins"> | "");
           setAction("");
         }}
-        className="rounded-ui border-2 border-line bg-white p-3"
+        className="rounded-lg border bg-card p-3"
       >
         <option value="">{t.audit.allAdmins}</option>
         {(admins ?? []).map((a) => (
@@ -93,7 +94,7 @@ export function AuditPage() {
           setAction(e.target.value as AuditAction | "");
           setAdminId("");
         }}
-        className="rounded-ui border-2 border-line bg-white p-3"
+        className="rounded-lg border bg-card p-3"
       >
         <option value="">{t.audit.all}</option>
         {(Object.keys(t.audit.actions) as AuditAction[]).map((a) => (
@@ -103,15 +104,15 @@ export function AuditPage() {
         ))}
       </select>
       {status !== "LoadingFirstPage" && results.length === 0 && (
-        <p className="text-ink-soft">{t.audit.empty}</p>
+        <p className="text-muted-foreground">{t.audit.empty}</p>
       )}
       <ul className="flex flex-col gap-2">
         {results.map((row) => (
           <li
             key={row._id}
-            className="rounded-ui border-2 border-line bg-card px-4 py-3 text-sm"
+            className="rounded-lg border bg-card px-4 py-3 text-sm"
           >
-            <div className="flex justify-between gap-2 text-ink-soft">
+            <div className="flex justify-between gap-2 text-muted-foreground">
               <span dir="ltr">{row.adminPhone ?? t.audit.system}</span>
               <span>{formatDate(row.at)}</span>
             </div>
@@ -128,7 +129,7 @@ export function AuditPage() {
               )}
             </p>
             {row.note !== null && (
-              <p className="mt-1 text-ink-soft">
+              <p className="mt-1 text-muted-foreground">
                 {t.audit.note}: {noteOf({ action: row.action, note: row.note })}
               </p>
             )}
@@ -138,7 +139,7 @@ export function AuditPage() {
       {status === "CanLoadMore" && (
         <button
           type="button"
-          className="font-medium text-green underline underline-offset-4"
+          className="font-medium text-primary underline underline-offset-4"
           onClick={() => loadMore(PAGE)}
         >
           {t.audit.more}

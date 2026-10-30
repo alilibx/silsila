@@ -1,9 +1,9 @@
 import { api } from "@convex/_generated/api";
-import { Button } from "@web/components/Button";
-import { SwitchRow } from "@web/components/SwitchRow";
+import { Button } from "@/components/ui/button";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { t } from "../i18n/ar";
+import { SwitchLine } from "./SwitchLine";
 import {
   adminPushSupport,
   currentAdminEndpoint,
@@ -35,9 +35,9 @@ export function AdminPushCard() {
 
   if (support !== "ready") {
     return (
-      <section className="rounded-ui border-2 border-line bg-card px-4 py-3">
+      <section className="rounded-lg border bg-card px-4 py-3">
         <h2 className="font-semibold">{t.adminPush.title}</h2>
-        <p className="mt-1 text-sm text-ink-soft">
+        <p className="mt-1 text-sm text-muted-foreground">
           {support === "ios_install"
             ? t.adminPush.iosInstall
             : t.adminPush.unsupported}
@@ -48,7 +48,7 @@ export function AdminPushCard() {
   if (mine === undefined) return null;
 
   return (
-    <section className="rounded-ui border-2 border-line bg-card px-4 py-3">
+    <section className="rounded-lg border bg-card px-4 py-3">
       <h2 className="font-semibold">{t.adminPush.title}</h2>
       {mine.thisDevice ? (
         <>
@@ -59,7 +59,7 @@ export function AdminPushCard() {
               ["milestones", t.adminPush.milestones, mine.notifyMilestones],
             ] as const
           ).map(([kind, label, on]) => (
-            <SwitchRow
+            <SwitchLine
               key={kind}
               label={label}
               on={on}
@@ -72,7 +72,7 @@ export function AdminPushCard() {
           <button
             type="button"
             disabled={busy}
-            className="mt-3 text-sm text-ink-soft underline underline-offset-4"
+            className="mt-3 text-sm text-muted-foreground underline underline-offset-4"
             onClick={async () => {
               setBusy(true);
               await disableAdminPush(adminToken);

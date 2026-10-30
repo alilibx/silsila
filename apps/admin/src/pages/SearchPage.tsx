@@ -1,6 +1,8 @@
+import { PageHeader } from "../components/PageHeader";
+import { Input } from "@/components/ui/input";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button } from "@web/components/Button";
+import { Button } from "@/components/ui/button";
 import { useConvex } from "convex/react";
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -69,29 +71,30 @@ export function SearchPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-display text-3xl text-green-deep">
-        {t.lookup.title}
-      </h1>
+      <PageHeader title={t.lookup.title} />
 
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void findKhatmas();
         }}
       >
         <label htmlFor={khatmaId}>{t.lookup.khatmaLabel}</label>
-        <input
+        <Input
           id={khatmaId}
           value={khatmaQuery}
           onChange={(e) => setKhatmaQuery(e.target.value)}
-          className="rounded-ui border-2 border-line bg-white p-3"
         />
-        <Button type="submit" disabled={khatmaQuery.trim().length < 2}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={khatmaQuery.trim().length < 2}
+        >
           {t.lookup.find}
         </Button>
         {hits !== null && hits.length === 0 && (
-          <p className="text-ink-soft">{t.lookup.noResults}</p>
+          <p className="text-muted-foreground">{t.lookup.noResults}</p>
         )}
         {hits !== null && hits.length > 0 && (
           <ul className="flex flex-col gap-2">
@@ -99,12 +102,12 @@ export function SearchPage() {
               <li key={k.khatmaId}>
                 <Link
                   to={`/khatmas/${k.khatmaId}`}
-                  className="block rounded-ui border-2 border-line bg-card px-4 py-3"
+                  className="block rounded-lg border bg-card px-4 py-3"
                 >
                   <span className="font-medium">
                     {k.name ?? t.lookup.unnamed}
                   </span>{" "}
-                  <span className="text-sm text-ink-soft">
+                  <span className="text-sm text-muted-foreground">
                     {t.lookup.members(k.members)}
                   </span>
                 </Link>
@@ -115,22 +118,25 @@ export function SearchPage() {
       </form>
 
       <form
-        className="flex flex-col gap-2"
+        className="flex max-w-md flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void findPerson();
         }}
       >
         <label htmlFor={phoneId}>{t.lookup.personLabel}</label>
-        <input
+        <Input
           id={phoneId}
           value={phone}
           inputMode="tel"
           dir="ltr"
           onChange={(e) => setPhone(e.target.value)}
-          className="rounded-ui border-2 border-line bg-white p-3"
         />
-        <Button type="submit" disabled={phone.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={phone.trim() === ""}
+        >
           {t.lookup.find}
         </Button>
         {phoneResult?.kind === "invalid" && (
@@ -138,11 +144,11 @@ export function SearchPage() {
         )}
         {phoneResult?.kind === "none" && (
           <div className="flex flex-col gap-2">
-            <p className="text-ink-soft">
+            <p className="text-muted-foreground">
               {t.lookup.noAccount} {phoneResult.blocked && t.lookup.blocked}
             </p>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() =>
                 setBlocking(phoneResult.blocked ? "unblock" : "block")
               }

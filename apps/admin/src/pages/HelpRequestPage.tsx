@@ -1,7 +1,8 @@
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button } from "@web/components/Button";
-import { Sheet } from "@web/components/Sheet";
+import { Button } from "@/components/ui/button";
+import { AdminSheet } from "../components/AdminSheet";
 import { formatDate } from "@web/lib/format";
 import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
@@ -60,16 +61,16 @@ export function HelpRequestPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link to="/help" className="text-green underline underline-offset-4">
+      <Link to="/help" className="text-primary underline underline-offset-4">
         {t.help.back}
       </Link>
       <ol className="flex flex-col gap-2">
         {request.messages.map((m) => (
           <li
             key={m._id}
-            className={`rounded-ui px-4 py-3 ${m.from === "team" ? "bg-saffron-soft text-saffron-ink" : "border-2 border-line bg-card"}`}
+            className={`rounded-lg px-4 py-3 ${m.from === "team" ? "bg-saffron-soft text-saffron-ink" : "border bg-card"}`}
           >
-            <p className="text-xs text-ink-soft">
+            <p className="text-xs text-muted-foreground">
               {m.from === "team"
                 ? t.help.team
                 : (request.person?.displayName ?? t.help.visitor)}{" "}
@@ -81,7 +82,7 @@ export function HelpRequestPage() {
                 type="button"
                 aria-label={t.help.openScreenshot}
                 onClick={() => setBigShot(m.screenshotUrl)}
-                className="mt-2 block h-40 w-28 overflow-hidden rounded-lg border border-line"
+                className="mt-2 block h-40 w-28 overflow-hidden rounded-lg border "
               >
                 <img
                   src={m.screenshotUrl}
@@ -94,22 +95,24 @@ export function HelpRequestPage() {
               <audio controls src={m.voiceUrl} className="mt-2 w-full" />
             )}
             {m.hadAttachment && !m.screenshotUrl && !m.voiceUrl && (
-              <p className="mt-1 text-sm text-ink-soft">{t.help.deleted}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t.help.deleted}
+              </p>
             )}
           </li>
         ))}
       </ol>
 
-      <section className="rounded-ui border-2 border-line bg-card px-4 py-3 text-sm">
+      <section className="rounded-lg border bg-card px-4 py-3 text-sm">
         <h2 className="mb-2 font-semibold">{t.help.context.title}</h2>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-          <dt className="text-ink-soft">{t.help.person}</dt>
+          <dt className="text-muted-foreground">{t.help.person}</dt>
           <dd>
             {request.person ? (
               <>
                 <Link
                   to={`/people/${request.person.personId}`}
-                  className="text-green underline"
+                  className="text-primary underline"
                 >
                   {request.person.displayName}
                 </Link>{" "}
@@ -119,12 +122,12 @@ export function HelpRequestPage() {
               t.help.visitor
             )}
           </dd>
-          <dt className="text-ink-soft">{t.help.khatma}</dt>
+          <dt className="text-muted-foreground">{t.help.khatma}</dt>
           <dd>
             {request.khatma ? (
               <Link
                 to={`/khatmas/${request.khatma.khatmaId}`}
-                className="text-green underline"
+                className="text-primary underline"
               >
                 {request.khatma.name ?? request.khatma.inviteCode}
               </Link>
@@ -134,7 +137,7 @@ export function HelpRequestPage() {
           </dd>
           {CONTEXT_FIELDS.map((field) => (
             <div key={field} className="contents">
-              <dt className="text-ink-soft">{t.help.context[field]}</dt>
+              <dt className="text-muted-foreground">{t.help.context[field]}</dt>
               <dd dir="ltr" className="break-all text-start">
                 {request.context[field]}
               </dd>
@@ -155,27 +158,31 @@ export function HelpRequestPage() {
         <label htmlFor={replyId} className="font-medium">
           {t.help.reply}
         </label>
-        <textarea
+        <Textarea
           id={replyId}
           value={text}
           maxLength={1000}
           rows={3}
           onChange={(e) => setText(e.target.value)}
-          className="rounded-ui border-2 border-line bg-white p-3"
+          className="rounded-lg border bg-card p-3"
         />
         {error !== null && (
           <p role="alert" className="text-saffron-ink">
             {error}
           </p>
         )}
-        <Button type="submit" disabled={busy || text.trim() === ""}>
+        <Button
+          type="submit"
+          className="sm:self-start"
+          disabled={busy || text.trim() === ""}
+        >
           {t.help.send}
         </Button>
       </form>
 
       {request.status === "closed" ? (
         <Button
-          variant="ghost"
+          variant="outline"
           disabled={busy}
           onClick={() => void run(() => reopen({ adminToken, requestId }))}
         >
@@ -183,7 +190,7 @@ export function HelpRequestPage() {
         </Button>
       ) : (
         <Button
-          variant="ghost"
+          variant="outline"
           disabled={busy}
           onClick={() => setConfirming(true)}
         >
@@ -192,7 +199,7 @@ export function HelpRequestPage() {
       )}
 
       {confirming && (
-        <Sheet
+        <AdminSheet
           title={t.help.confirmCloseTitle}
           onClose={() => setConfirming(false)}
         >
@@ -206,11 +213,11 @@ export function HelpRequestPage() {
             >
               {t.help.confirmClose}
             </Button>
-            <Button variant="ghost" onClick={() => setConfirming(false)}>
+            <Button variant="outline" onClick={() => setConfirming(false)}>
               {t.help.cancel}
             </Button>
           </div>
-        </Sheet>
+        </AdminSheet>
       )}
 
       {bigShot && (

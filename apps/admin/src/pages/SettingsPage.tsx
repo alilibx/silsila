@@ -1,3 +1,5 @@
+import { PageHeader } from "../components/PageHeader";
+import { Input } from "@/components/ui/input";
 import { api } from "@convex/_generated/api";
 import { normalizeDigits, toArabicDigits } from "@convex/lib/digits";
 import type { SettingGroup } from "@convex/lib/settingSpecs";
@@ -161,26 +163,24 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl text-green-deep">
-        {t.settings.title}
-      </h1>
-      <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-2 bg-paper px-4 pb-2 pt-1">
+      <PageHeader title={t.settings.title} />
+      <div className="sticky top-14 z-10 -mx-4 flex flex-col gap-2 bg-background px-4 pt-1 pb-2 md:-mx-5 md:px-5">
         <label className="sr-only" htmlFor={`${idPrefix}-search`}>
           {t.settings.searchLabel}
         </label>
-        <input
+        <Input
           id={`${idPrefix}-search`}
           type="search"
           value={query}
           placeholder={t.settings.searchPlaceholder}
           onChange={(e) => update({ q: e.target.value })}
-          className="w-full rounded-ui border-2 border-line bg-white px-4 py-2.5"
+          className="w-full rounded-lg border bg-card px-4 py-2.5"
         />
         <div
           role="tablist"
           aria-label={t.settings.tabsLabel}
           onKeyDown={onKeyDown}
-          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]"
+          className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]"
         >
           {TABS.map((name) => {
             const selected = !searching && name === tab;
@@ -201,16 +201,18 @@ export function SettingsPage() {
                 aria-controls={`${idPrefix}-panel`}
                 tabIndex={name === tab ? 0 : -1}
                 onClick={() => show(name)}
-                className={`shrink-0 whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-sm ${
+                className={`shrink-0 rounded-md border px-2.5 py-1 text-[13px] whitespace-nowrap ${
                   selected
-                    ? "border-green bg-green text-white"
-                    : "border-line bg-card text-ink"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-card text-foreground hover:bg-accent"
                 }`}
               >
                 {name === "changed"
                   ? t.settings.changedTab
                   : t.settings.groups[name]}{" "}
-                <span className={selected ? "text-white/80" : "text-ink-soft"}>
+                <span
+                  className={selected ? "opacity-70" : "text-muted-foreground"}
+                >
                   {toArabicDigits(count)}
                 </span>
               </button>
@@ -226,10 +228,12 @@ export function SettingsPage() {
         className="flex flex-col gap-5"
       >
         {!searching && tab !== "changed" && (
-          <p className="text-sm text-ink-soft">{t.settings.groupIntros[tab]}</p>
+          <p className="text-sm text-muted-foreground">
+            {t.settings.groupIntros[tab]}
+          </p>
         )}
         {shown.length === 0 && (
-          <p className="py-6 text-center text-ink-soft">
+          <p className="py-6 text-center text-muted-foreground">
             {searching ? t.settings.noResults : t.settings.noChanges}
           </p>
         )}
@@ -243,7 +247,7 @@ export function SettingsPage() {
             {sections.map(({ section, rows: sectionRows }) => (
               <div key={section} className="flex flex-col gap-1.5">
                 {SETTING_LAYOUT[group].length > 1 && (
-                  <h3 className="text-sm font-semibold text-ink-soft">
+                  <h3 className="text-sm font-semibold text-muted-foreground">
                     {t.settings.sections[section]}
                   </h3>
                 )}
