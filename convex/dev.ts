@@ -1,25 +1,35 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
 import { endGraceIfDue, isHeld } from "./grace";
 import { randomToken } from "./lib/crypto";
+import { encodePayload } from "./lib/rotaPayload";
 import { SETTING_DEFAULTS } from "./lib/settings";
-import { isDev } from "./whatsapp";
+import { isDev, isStaging } from "./whatsapp";
 
 /**
  * Dev-only stand-in for a WhatsApp message arriving at the webhook:
  * `bun run convex run dev:simulateIncoming '{"from":"971501234567","text":"…"}'`.
  */
 export const simulateIncoming = internalAction({
-  args: { from: v.string(), text: v.string() },
+  args: {
+    from: v.string(),
+    text: v.string(),
+    /** A button tap's payload, as `rotaPayload.encodePayload` makes it. */
+    payload: v.optional(v.string()),
+    profileName: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<void> => {
     if (!isDev()) {
       throw new Error("simulateIncoming runs only when WIRDAK_ENV is dev");
     }
     await ctx.runAction(internal.whatsapp.handleIncoming, {
       waMessageId: `dev.${randomToken(12)}`,
-      from: args.from,
-      text: args.text,
+      ...args,
     });
   },
 });
@@ -71,6 +81,56 @@ export const allowRota = internalMutation({
       .unique();
     if (!person) throw new Error("no such person");
     await ctx.db.patch(person._id, { rotaAllowed: true });
+  },
+});
+
+/**
+ * Dev-only: the payload of a button on the message that a rota participant got
+ * for the khatma's open day, the one `dev:simulateIncoming` takes as `payload`
+ * to stand in for a tap on «أتممت» (`done`), «ليس بعد» (`notYet`) or
+ * «دعاء الختم» (`dua`):
+ * `bun run convex run dev:rotaPayload '{"inviteCode":"…","phone":"+971501234567","action":"done"}'`.
+ */
+export const rotaPayload = internalQuery({
+  args: {
+    inviteCode: v.string(),
+    phone: v.string(),
+    action: v.union(v.literal("done"), v.literal("notYet"), v.literal("dua")),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    if (!isDev()) {
+      throw new Error("rotaPayload runs only when WIRDAK_ENV is dev");
+    }
+    const khatma = await ctx.db
+      .query("khatmas")
+      .withIndex("by_inviteCode", (q) => q.eq("inviteCode", args.inviteCode))
+      .unique();
+    if (khatma?.kind !== "rota") throw new Error("no such rota khatma");
+    const participant = (
+      await ctx.db
+        .query("rotaParticipants")
+        .withIndex("by_khatma_phone", (q) =>
+          q.eq("khatmaId", khatma._id).eq("phone", args.phone),
+        )
+        .collect()
+    ).find((p) => p.removedAt == null);
+    if (!participant) throw new Error("no such participant");
+    const days = await ctx.db
+      .query("rotaDays")
+      .withIndex("by_khatma_n", (q) => q.eq("khatmaId", khatma._id))
+      .order("desc")
+      .take(1);
+    const day = days[0];
+    if (!day || day.closedAt !== null)
+      throw new Error("the khatma has no open day");
+    return encodePayload(
+      {
+        action: args.action,
+        dayId: day._id,
+        participantId: participant._id,
+      },
+      isStaging(),
+    );
   },
 });
 

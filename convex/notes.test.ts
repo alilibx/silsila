@@ -323,6 +323,7 @@ test("forKhatma returns only the caller's uncleared notes, newest first; dismiss
       juz: [],
       count: 3,
       until: NOW + 2 * DAY,
+      name: null,
       createdAt: expect.any(Number),
     },
     {
@@ -331,6 +332,7 @@ test("forKhatma returns only the caller's uncleared notes, newest first; dismiss
       juz: [12],
       count: null,
       until: null,
+      name: null,
       createdAt: expect.any(Number),
     },
   ]);

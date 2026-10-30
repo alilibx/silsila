@@ -9,6 +9,8 @@ import { t } from "../../i18n/ar";
 import { getSessionToken, useSessionToken } from "../../lib/session";
 import { AddPersonForm } from "./AddPersonForm";
 import { ErrorLine } from "./ErrorLine";
+import { JoinChip, ShareJoinLink, useEnsureJoinLink } from "./JoinStatus";
+import { JoinRequests } from "./JoinRequests";
 import { useRotaCall } from "./useRotaCall";
 import { formatIsoDate } from "./format";
 
@@ -266,6 +268,7 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
   const sessionToken = useSessionToken();
   const view = useQuery(api.rota.people, { sessionToken, inviteCode });
   const [open, setOpen] = useState<Open | null>(null);
+  useEnsureJoinLink(inviteCode, view?.joinLink);
 
   if (view === undefined) {
     return (
@@ -292,6 +295,8 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
           : t.rota.nextBanner(view.target.number, date)}
       </p>
 
+      <JoinRequests inviteCode={inviteCode} view={view} />
+
       <ol className="mt-4 grid gap-2">
         {view.rows.map((row) => {
           const holder = row.participant;
@@ -299,7 +304,7 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
           const second = holder !== null && seen.has(holder.id);
           if (holder) seen.add(holder.id);
           return (
-            <li key={row.juz}>
+            <li key={row.juz} className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() =>
@@ -313,7 +318,7 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
                       : { kind: "add", juz: row.juz },
                   )
                 }
-                className={`flex min-h-14 w-full items-center gap-3 rounded-ui border-2 px-4 py-2 text-start ${
+                className={`flex min-h-14 min-w-[12rem] flex-1 items-center gap-3 rounded-ui border-2 px-4 py-2 text-start ${
                   holder
                     ? "border-line bg-card"
                     : "border-dashed border-[#8A7D62] bg-transparent text-ink-soft"
@@ -339,10 +344,27 @@ export function PeoplePanel({ inviteCode }: { inviteCode: string }) {
                   </span>
                 )}
               </button>
+              {holder && !second && (
+                <JoinChip
+                  person={holder}
+                  isMe={holder.isMe}
+                  title={view.title}
+                  daysKind={view.daysKind}
+                  joinLink={view.joinLink}
+                />
+              )}
             </li>
           );
         })}
       </ol>
+
+      <div className="mt-5">
+        <ShareJoinLink
+          title={view.title}
+          daysKind={view.daysKind}
+          joinLink={view.joinLink}
+        />
+      </div>
 
       {open?.kind === "add" && (
         <EmptyRowSheet

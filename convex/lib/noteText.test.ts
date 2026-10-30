@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { noteText } from "./noteText";
+import { juzPhrase, juzPhraseGenitive, noteText } from "./noteText";
 
 const NOW = 1_800_000_000_000; // Friday 2027-01-15, midday in Asia/Dubai
 const DAY = 86_400_000;
@@ -59,4 +59,40 @@ test("behind names the weekday within 6 days, the date beyond, and nothing once 
   );
   expect(text(NOW - DAY)).toBe("الختمة تحتاج جزأين. هل تأخذ جزءاً؟");
   expect(text(NOW)).toBe("الختمة تحتاج جزأين. هل تأخذ جزءاً؟");
+});
+
+test("the rota participant notes name them and count days in Arabic digits", () => {
+  const input = { ...base, name: "أحمد" };
+  expect(noteText({ ...input, kind: "rotaJoinRequest" })).toBe(
+    "طلب انضمام من أحمد.",
+  );
+  expect(noteText({ ...input, kind: "rotaSilent", count: 3 })).toBe(
+    "لم يردّ أحمد منذ ٣ أيام.",
+  );
+  expect(noteText({ ...input, kind: "rotaSilent", count: 12 })).toBe(
+    "لم يردّ أحمد منذ ١٢ يوماً.",
+  );
+  expect(noteText({ ...input, kind: "rotaSilenced" })).toBe(
+    "أوقفنا رسائل الختمة إلى أحمد لأنه لم يردّ منذ مدة.",
+  );
+  expect(noteText({ ...input, kind: "rotaStopped" })).toBe(
+    "أوقف أحمد رسائل الختمة.",
+  );
+});
+
+test("the juz' phrase agrees with one, two and three or more ajza'", () => {
+  expect(juzPhrase([26])).toBe("الجزء ٢٦");
+  expect(juzPhrase([5, 6])).toBe("الجزآن ٥ و٦");
+  expect(juzPhrase([3, 5, 6])).toBe("الأجزاء ٣، ٥ و٦");
+});
+
+test("the genitive phrase differs only in the dual", () => {
+  expect(juzPhraseGenitive([26])).toBe("الجزء ٢٦");
+  expect(juzPhraseGenitive([5, 6])).toBe("الجزأين ٥ و٦");
+  expect(juzPhraseGenitive([3, 5, 6])).toBe("الأجزاء ٣، ٥ و٦");
+});
+
+test("both phrases are empty, with no stray space, for no ajza'", () => {
+  expect(juzPhrase([])).toBe("");
+  expect(juzPhraseGenitive([])).toBe("");
 });

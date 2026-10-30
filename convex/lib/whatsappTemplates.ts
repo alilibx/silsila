@@ -2,16 +2,21 @@ import { toArabicDigits } from "./digits";
 import {
   behindPhrase,
   juzList,
+  juzPhraseGenitive,
   type NoteKind,
   type NoteTextInput,
 } from "./noteText";
 
-/** A template send: the header and body texts, and the first button's parameter. */
+/**
+ * A template send: the header and body texts, the first button's parameter,
+ * and a payload for each quick-reply button (button `i` of the template).
+ */
 export type TemplateMessage = {
   name: string;
   header?: string;
   body?: string[];
   buttonParam?: string;
+  quickReplies?: string[];
 };
 
 /**
@@ -41,9 +46,14 @@ export const NOTE_TEMPLATES: Record<NoteKind, string | null> = {
   completed: "wirdak_completed_v2",
   nowOrganizer: "wirdak_now_organizer_v2",
   organizerMoved: "wirdak_organizer_moved_v2",
-  // The organizer's rota day notes: in-app and push only.
-  rotaUnread: null,
-  rotaSummary: null,
+  // The organizer's rota notes, as updates on the khatma they run.
+  rotaUnread: "wirdak_rota_unread",
+  rotaSummary: "wirdak_rota_summary",
+  rotaJoinRequest: "wirdak_rota_join_request",
+  // Notes about a participant's own messages: in-app and push only.
+  rotaSilent: null,
+  rotaSilenced: null,
+  rotaStopped: null,
 };
 /** "Open for help" with two or more ajza': Arabic agreement needs its own body. */
 export const OPEN_FOR_HELP_MANY = "wirdak_open_for_help_many_v3";
@@ -109,12 +119,20 @@ function noteParams(note: NoteTextInput, now: number): string[] {
       return [juzList(note.juz)];
     case "behind":
       return [behindPhrase(note.count ?? 0, note.until, now)];
-    // the two rota kinds never reach WhatsApp (`NOTE_TEMPLATES` is null for both)
+    case "rotaUnread":
+      return [juzPhraseGenitive(note.juz)];
+    case "rotaSummary":
+      return [toArabicDigits(note.count ?? 0)];
+    case "rotaJoinRequest":
+      return [note.name ?? ""];
+    // no body values (`rotaSilent`, `rotaSilenced` and `rotaStopped` never
+    // reach WhatsApp: `NOTE_TEMPLATES` is null for them)
     case "completed":
     case "nowOrganizer":
     case "organizerMoved":
-    case "rotaUnread":
-    case "rotaSummary":
+    case "rotaSilent":
+    case "rotaSilenced":
+    case "rotaStopped":
       return [];
   }
 }

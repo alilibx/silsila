@@ -79,8 +79,11 @@ export default defineSchema({
     /** Missing means a pool khatma. A rota khatma has no rounds (`rota` holds its settings). */
     kind: v.optional(v.literal("rota")),
     rota: v.optional(rotaConfigValidator),
+    /** What a member sends on WhatsApp to ask to join a rota khatma. */
+    joinCode: v.optional(v.string()),
   })
     .index("by_inviteCode", ["inviteCode"])
+    .index("by_joinCode", ["joinCode"])
     .index("by_kind", ["kind"])
     .searchIndex("search_name", { searchField: "name" }),
 
@@ -157,7 +160,13 @@ export default defineSchema({
       v.literal("organizerMoved"),
       v.literal("rotaUnread"),
       v.literal("rotaSummary"),
+      v.literal("rotaJoinRequest"),
+      v.literal("rotaSilent"),
+      v.literal("rotaSilenced"),
+      v.literal("rotaStopped"),
     ),
+    /** A rota participant's name, in the organizer notes about them. */
+    name: v.optional(v.union(v.string(), v.null())),
     juz: v.array(v.number()),
     count: nullableNumber,
     until: nullableNumber,
@@ -183,9 +192,21 @@ export default defineSchema({
     personId: v.union(v.id("people"), v.null()),
     addedAt: v.number(),
     removedAt: nullableNumber,
+    // WhatsApp state; missing means null (or 0 for `silentDays`).
+    /** Their own join message: the opt-in for business-started messages. */
+    joinedAt: v.optional(nullableNumber),
+    /** They sent «إيقاف». */
+    stoppedAt: v.optional(nullableNumber),
+    /** Wirdak stopped messaging them after days without a reply. */
+    silencedAt: v.optional(nullableNumber),
+    lastReplyAt: v.optional(nullableNumber),
+    /** Reading days in a row they sent no reply. */
+    silentDays: v.optional(v.number()),
   })
     .index("by_khatma", ["khatmaId"])
-    .index("by_khatma_phone", ["khatmaId", "phone"]),
+    .index("by_khatma_phone", ["khatmaId", "phone"])
+    // Every khatma a phone reads in, for its WhatsApp replies.
+    .index("by_phone", ["phone"]),
 
   /** Which participant owns each of the 30 slots. */
   rotaSlots: defineTable({
@@ -209,6 +230,10 @@ export default defineSchema({
     closedAt: nullableNumber,
     unreadSentAt: nullableNumber,
     summarySentAt: nullableNumber,
+    /** When the participants' reminders went out; missing means not yet. */
+    reminderSentAt: v.optional(nullableNumber),
+    /** When the completion messages went out; missing means not yet. */
+    celebratedAt: v.optional(nullableNumber),
   })
     .index("by_khatma_n", ["khatmaId", "n"])
     .index("by_khatma_date", ["khatmaId", "date"]),
@@ -224,9 +249,63 @@ export default defineSchema({
     doneAt: nullableNumber,
     doneByOrganizer: v.boolean(),
     reassignedAt: nullableNumber,
+    /** The reader answered «ليس بعد»; missing means no. */
+    notYetAt: v.optional(nullableNumber),
   })
     .index("by_day_juz", ["dayId", "juz"])
     .index("by_reader_day", ["readerId", "dayId"]),
+
+  /** Someone who sent a rota khatma's join code and waits for the organizer's answer. */
+  rotaJoinRequests: defineTable({
+    khatmaId: v.id("khatmas"),
+    phone: v.string(), // E.164
+    profileName: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    resolvedAt: nullableNumber,
+    outcome: v.union(v.literal("accepted"), v.literal("declined"), v.null()),
+    // Who declined it: the organizer, or the requester with «إيقاف». Absent
+    // on older rows, which count as the organizer's.
+    declinedBy: v.optional(
+      v.union(v.literal("organizer"), v.literal("member")),
+    ),
+  })
+    .index("by_khatma_open", ["khatmaId", "resolvedAt"])
+    .index("by_khatma_phone", ["khatmaId", "phone"])
+    .index("by_phone", ["phone"]),
+
+  /**
+   * The last message each rota phone sent us: its 24-hour WhatsApp window.
+   * Only phones on a rota list or with a join request; purged once closed.
+   */
+  waContacts: defineTable({
+    phone: v.string(), // E.164
+    lastInboundAt: v.number(),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_lastInboundAt", ["lastInboundAt"]),
+
+  /** A message to a rota participant, queued for the sender to deliver. */
+  rotaOutbox: defineTable({
+    khatmaId: v.id("khatmas"),
+    participantId: v.id("rotaParticipants"),
+    dayId: v.union(v.id("rotaDays"), v.null()),
+    kind: v.union(
+      v.literal("juz"),
+      v.literal("reminder"),
+      v.literal("assigned"),
+      v.literal("covered"),
+      v.literal("complete"),
+      v.literal("cycle"),
+      v.literal("welcome"),
+    ),
+    juz: v.array(v.number()),
+    number: nullableNumber,
+    createdAt: v.number(),
+    sentAt: nullableNumber,
+    skippedAt: nullableNumber,
+  })
+    .index("by_day_kind_participant", ["dayId", "kind", "participantId"])
+    .index("by_createdAt", ["createdAt"]),
 
   pushSubscriptions: defineTable({
     personId: v.id("people"),

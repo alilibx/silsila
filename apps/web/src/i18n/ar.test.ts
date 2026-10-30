@@ -1,3 +1,4 @@
+import { DUAS } from "@convex/lib/duas";
 import { SCHEDULES } from "@convex/lib/schedule";
 import { describe, expect, it } from "vitest";
 import { t } from "./ar";
@@ -22,5 +23,25 @@ describe("separators next to numbers", () => {
     expect(t.celebration.subtitle("ختمة العائلة", "١٢")).toBe(
       "الحمد لله، ختمة العائلة، الختمة ١٢",
     );
+  });
+});
+
+describe("celebration duas", () => {
+  it("are the same ones the WhatsApp dua text sends", () => {
+    expect(t.celebration.duas).toBe(DUAS);
+  });
+});
+
+describe("the rota join link's share message", () => {
+  it("says how often the khatma is read", () => {
+    const link = "https://wa.me/971500000000?text=x";
+    const said = (days: "daily" | "weekly" | "biweekly" | "monthly") =>
+      t.rota.shareMessage("ختمة العائلة", link, days);
+    expect(said("daily")).toBe(
+      `السلام عليكم، بدأنا ختمة العائلة، ختمة يومية بالتناوب. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${link}`,
+    );
+    expect(said("weekly")).toContain("، ختمة أسبوعية بالتناوب.");
+    expect(said("biweekly")).toContain("، ختمة كل أسبوعين بالتناوب.");
+    expect(said("monthly")).toContain("، ختمة شهرية بالتناوب.");
   });
 });

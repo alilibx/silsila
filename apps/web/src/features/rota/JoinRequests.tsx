@@ -1,0 +1,112 @@
+import { api } from "@convex/_generated/api";
+import { toArabicDigits } from "@convex/lib/digits";
+import { useMutation, type useQuery } from "convex/react";
+import { useId, useState } from "react";
+import { Button } from "../../components/Button";
+import { t } from "../../i18n/ar";
+import { getSessionToken } from "../../lib/session";
+import { ErrorLine } from "./ErrorLine";
+import { useRotaCall } from "./useRotaCall";
+
+type View = NonNullable<ReturnType<typeof useQuery<typeof api.rota.people>>>;
+type Request = View["requests"][number];
+
+/** One number that sent the join code: give it a juz' of the next khatma, or say no. */
+function JoinRequestCard({
+  inviteCode,
+  request,
+  freeJuz,
+}: {
+  inviteCode: string;
+  request: Request;
+  freeJuz: number[];
+}) {
+  const accept = useMutation(api.rota.acceptJoinRequest);
+  const decline = useMutation(api.rota.declineJoinRequest);
+  const { busy, error, run } = useRotaCall(t.rota.joinRequestErrors);
+  const selectId = useId();
+  const [chosen, setChosen] = useState<number | null>(null);
+  // The juz' may be taken while the card is open: fall back to the first free one.
+  const juz = chosen !== null && freeJuz.includes(chosen) ? chosen : freeJuz[0];
+  const args = { sessionToken: getSessionToken() ?? undefined, inviteCode };
+
+  return (
+    <li className="rounded-ui border-2 border-gold bg-[#FBF1D9] p-4">
+      <p className="font-medium">
+        {t.rota.requestLine(request.name, request.phoneMasked)}
+      </p>
+      {juz === undefined ? (
+        <p className="mt-2 text-ink-soft">{t.rota.addErrors.no_free_juz}</p>
+      ) : (
+        <>
+          <label htmlFor={selectId} className="mt-3 block font-medium">
+            {t.rota.requestJuz}
+          </label>
+          <select
+            id={selectId}
+            value={juz}
+            onChange={(event) => setChosen(Number(event.target.value))}
+            className="mt-1.5 min-h-14 w-full rounded-ui border-2 border-line bg-white px-4 text-ink"
+          >
+            {freeJuz.map((n) => (
+              <option key={n} value={n}>
+                {toArabicDigits(n)}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+      <div className="mt-3 grid gap-3">
+        <Button
+          disabled={busy || juz === undefined}
+          onClick={() =>
+            void run(() =>
+              accept({ ...args, requestId: request.id, juz: juz ?? 0 }),
+            )
+          }
+        >
+          {t.rota.acceptRequest}
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() =>
+            void run(() => decline({ ...args, requestId: request.id }))
+          }
+        >
+          {t.rota.declineRequest}
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+    </li>
+  );
+}
+
+/** The people who asked to join with the khatma's link, above the list; nothing while none waits. */
+export function JoinRequests({
+  inviteCode,
+  view,
+}: {
+  inviteCode: string;
+  view: View;
+}) {
+  const headingId = useId();
+  if (view.requests.length === 0) return null;
+  return (
+    <section aria-labelledby={headingId} className="mt-4">
+      <h2 id={headingId} className="text-xl font-semibold">
+        {t.rota.requestsHeading}
+      </h2>
+      <ul className="mt-2 grid gap-3">
+        {view.requests.map((request) => (
+          <JoinRequestCard
+            key={request.id}
+            inviteCode={inviteCode}
+            request={request}
+            freeJuz={view.freeJuz}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}

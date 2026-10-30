@@ -83,9 +83,9 @@ export const SETTING_DEFAULTS = {
   /** active (not archived) rota khatmas one organizer may have */
   rotaMaxActivePerOrganizer: 2,
   rotaMaxSlotsPerPerson: 3,
-  /** days with nobody reading before the organizer is told */
+  /** days a participant sends no reply before the organizer is told */
   rotaSilenceNoticeDays: 3,
-  /** days with nobody reading before the khatma stops */
+  /** days a participant sends no reply before their messages stop */
   rotaSilenceStopDays: 7,
 };
 

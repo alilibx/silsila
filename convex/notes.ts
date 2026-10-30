@@ -17,6 +17,8 @@ export type NoteView = {
   juz: number[];
   count: number | null;
   until: number | null;
+  /** A rota participant's name, in the organizer notes about them. */
+  name?: string | null;
   createdAt: number;
 };
 
@@ -27,6 +29,7 @@ export type NotifyArgs = {
   juz?: number[];
   count?: number | null;
   until?: number | null;
+  name?: string | null;
   assignmentId?: Id<"assignments"> | null;
   roundNumber?: number | null;
 };
@@ -49,6 +52,7 @@ export async function notify(
     juz: n.juz ?? [],
     count: n.count ?? null,
     until: n.until ?? null,
+    name: n.name ?? null,
     assignmentId: n.assignmentId ?? null,
     roundNumber: n.roundNumber ?? null,
     createdAt: now,
@@ -174,6 +178,7 @@ export const forKhatma = sessionQuery({
         juz: n.juz,
         count: n.count,
         until: n.until,
+        name: n.name ?? null,
         createdAt: n.createdAt,
       }));
   },

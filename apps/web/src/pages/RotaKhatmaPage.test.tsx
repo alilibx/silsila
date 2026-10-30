@@ -6,7 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/ar";
 import { RotaKhatmaPage } from "./RotaKhatmaPage";
 
-type Person = { id: string; name: string; isMe: boolean; juz: number[] };
+type Person = {
+  id: string;
+  name: string;
+  isMe: boolean;
+  juz: number[];
+  phone?: string;
+  joined?: boolean;
+  stopped?: boolean;
+  silenced?: boolean;
+};
+
+const JOIN_LINK =
+  "https://wa.me/971500000000?text=%D8%A7%D9%86%D8%B6%D9%85%D8%A7%D9%85%20%D8%A5%D9%84%D9%89%20%D8%AE%D8%AA%D9%85%D8%A9%20%C2%B7%20ABC234";
 
 const m = vi.hoisted(() => ({
   today: undefined as unknown,
@@ -14,6 +26,7 @@ const m = vi.hoisted(() => ({
   people: undefined as unknown,
   mine: [] as unknown,
   me: null as unknown,
+  joinLink: null as string | null,
   notes: [] as unknown,
   fns: {
     reassign: vi.fn(),
@@ -24,6 +37,9 @@ const m = vi.hoisted(() => ({
     moveJuz: vi.fn(),
     removeParticipant: vi.fn(),
     freeJuz: vi.fn(),
+    ensureJoinLink: vi.fn(),
+    acceptJoinRequest: vi.fn(),
+    declineJoinRequest: vi.fn(),
     finishSetup: vi.fn(),
     dismiss: vi.fn(),
   },
@@ -110,6 +126,7 @@ function todayView(overrides: Record<string, unknown> = {}) {
         holderName: juz === 8 ? "سارة" : juz === 9 ? "خالد" : "مريم",
         readerName: juz === 9 ? "مريم" : "مريم",
         readerId: juz === 9 ? "p2" : juz === 8 ? "p3" : "p2",
+        answer: state === "done" ? null : juz === 10 ? "notYet" : "none",
       };
     }),
     participants: people.map((p) => ({ ...p, doneToday: p.id !== "p3" })),
@@ -117,20 +134,44 @@ function todayView(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const withState = (p: Person) => ({
+  phone: "+971500000000",
+  joined: true,
+  stopped: false,
+  silenced: false,
+  ...p,
+});
+
 function peopleView(
-  holders: Person[],
+  rawHolders: Person[],
   target = { number: 13, date: "2026-11-11", isFirst: false },
+  extra: Record<string, unknown> = {},
 ) {
-  const byJuz = new Map<number, Person>();
+  const holders = rawHolders.map(withState);
+  const byJuz = new Map<number, ReturnType<typeof withState>>();
   for (const p of holders) for (const juz of p.juz) byJuz.set(juz, p);
   return {
+    title: "ختمة العائلة",
+    daysKind: "monthly",
+    joinLink: JOIN_LINK,
+    requests: [],
+    ...extra,
     target,
     rows: Array.from({ length: 30 }, (_, i) => {
       const p = byJuz.get(i + 1);
       return {
         juz: i + 1,
         participant: p
-          ? { id: p.id, name: p.name, isMe: p.isMe, slots: p.juz.length }
+          ? {
+              id: p.id,
+              name: p.name,
+              isMe: p.isMe,
+              slots: p.juz.length,
+              phone: p.phone,
+              joined: p.joined,
+              stopped: p.stopped,
+              silenced: p.silenced,
+            }
           : null,
       };
     }),
@@ -158,7 +199,13 @@ function renderAt(url = "/j/CODE") {
   );
 }
 function Page() {
-  return <RotaKhatmaPage inviteCode="CODE" name="ختمة العائلة" />;
+  return (
+    <RotaKhatmaPage
+      inviteCode="CODE"
+      name="ختمة العائلة"
+      joinLink={m.joinLink}
+    />
+  );
 }
 
 const grid = () => screen.getByRole("region", { name: t.rota.gridLabel });
@@ -176,6 +223,7 @@ beforeEach(() => {
   m.people = peopleView(roster);
   m.mine = [];
   m.me = { displayName: "علي" };
+  m.joinLink = JOIN_LINK;
   m.notes = [];
 });
 afterEach(() => {
@@ -275,6 +323,51 @@ describe("Today", () => {
         within(sheet).getByRole("button", { name: action }),
       ).toBeInTheDocument();
     }
+  });
+
+  it("an unread juz' says whether the reader answered", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ٨، لم يُقرأ" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(t.rota.answerNone);
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      t.rota.answerNotYet,
+    );
+    await user.click(screen.getByRole("button", { name: t.sheet.close }));
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ١٠، لم يُقرأ" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(t.rota.answerNotYet);
+  });
+
+  it("a done juz' shows no answer", async () => {
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ١، تمّ" }),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(t.rota.answerNone);
+  });
+
+  it("shows no answer for a done juz' or one with no answer to show", async () => {
+    m.today = todayView({
+      tiles: (todayView().tiles as Record<string, unknown>[]).map((tile) =>
+        tile.juz === 8 ? { ...tile, answer: null } : tile,
+      ),
+    });
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ٨، لم يُقرأ" }),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(t.rota.answerNone);
+    await user.click(screen.getByRole("button", { name: t.sheet.close }));
+    await user.click(
+      within(grid()).getByRole("button", { name: "الجزء ١، تمّ" }),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(t.rota.answerNone);
   });
 
   it("a reassigned juz' also says who reads it now", async () => {
@@ -483,6 +576,22 @@ describe("page", () => {
     ).toBeNull();
   });
 
+  it("gives a visitor a big «انضمّ عبر واتساب» button to the join link", () => {
+    m.today = null;
+    renderAt();
+    const join = screen.getByRole("link", { name: t.rota.joinOnWhatsApp });
+    expect(join).toHaveAttribute("href", JOIN_LINK);
+  });
+
+  it("shows no join button while the khatma has no join link", () => {
+    m.today = null;
+    m.joinLink = null;
+    renderAt();
+    expect(
+      screen.queryByRole("link", { name: t.rota.joinOnWhatsApp }),
+    ).toBeNull();
+  });
+
   it("offers a signed-out visitor the sign-in sheet, to come back here as the organizer", async () => {
     m.today = null;
     m.me = null;
@@ -555,7 +664,11 @@ describe("page", () => {
 });
 
 describe("People", () => {
-  const rows = () => within(screen.getByRole("list")).getAllByRole("listitem");
+  // The join requests (when there are any) are a list of their own.
+  const rows = () =>
+    within(document.querySelector("ol") as HTMLElement).getAllByRole(
+      "listitem",
+    );
 
   it("shows the next khatma's banner and 30 rows, the open ones inviting an add", () => {
     renderAt("/j/CODE?tab=people");
@@ -815,5 +928,194 @@ describe("People", () => {
       t.rota.peopleErrors.not_found ?? "",
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  describe("joining", () => {
+    const rowOf = (n: number) => rows()[n - 1] as HTMLElement;
+    const request = {
+      id: "q1",
+      name: "خالد",
+      phoneMasked: "+971 50 ••• 2233",
+      createdAt: 1,
+    };
+    const withRequest = () => {
+      m.people = peopleView(roster, undefined, { requests: [request] });
+    };
+
+    it("says who joined, and offers a resend to a chat with each person who has not", () => {
+      m.people = peopleView([
+        { id: "p1", name: "علي", isMe: true, juz: [1] },
+        { id: "p2", name: "مريم", isMe: false, juz: [2, 3] },
+        {
+          id: "p3",
+          name: "سارة",
+          isMe: false,
+          juz: [4],
+          joined: false,
+          phone: "+971 50 555 0001",
+        },
+      ]);
+      renderAt("/j/CODE?tab=people");
+      expect(within(rowOf(2)).getByText(t.rota.joined)).toBeInTheDocument();
+      // A person's second juz' repeats no badge.
+      expect(within(rowOf(3)).queryByText(t.rota.joined)).toBeNull();
+      const resend = within(rowOf(4)).getByRole("link", {
+        name: t.rota.notJoined,
+      });
+      expect(resend).toHaveClass("min-h-14");
+      const url = new URL(resend.getAttribute("href") ?? "");
+      expect(url.origin + url.pathname).toBe("https://wa.me/971505550001");
+      expect(url.searchParams.get("text")).toBe(
+        t.rota.shareMessage("ختمة العائلة", JOIN_LINK, "monthly"),
+      );
+    });
+
+    it("the organizer who has not joined opens the join link itself", () => {
+      m.people = peopleView([
+        { id: "p1", name: "علي", isMe: true, juz: [1], joined: false },
+      ]);
+      renderAt("/j/CODE?tab=people");
+      expect(
+        within(rowOf(1)).getByRole("link", { name: t.rota.notJoinedMe }),
+      ).toHaveAttribute("href", JOIN_LINK);
+    });
+
+    it("tells apart someone who stopped the messages from someone Wirdak stopped", () => {
+      m.people = peopleView([
+        { id: "p1", name: "علي", isMe: true, juz: [1] },
+        { id: "p2", name: "مريم", isMe: false, juz: [2], stopped: true },
+        { id: "p3", name: "سارة", isMe: false, juz: [3], silenced: true },
+      ]);
+      renderAt("/j/CODE?tab=people");
+      expect(
+        within(rowOf(2)).getByText(t.rota.stoppedMessages),
+      ).toBeInTheDocument();
+      expect(within(rowOf(2)).queryByText(t.rota.joined)).toBeNull();
+      expect(
+        within(rowOf(3)).getByText(t.rota.silencedMessages),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: t.rota.notJoined })).toBeNull();
+    });
+
+    it("has the share button at the bottom, opening the group message that says how often it is read", () => {
+      renderAt("/j/CODE?tab=people");
+      const share = screen.getByRole("link", { name: t.rota.shareJoin });
+      expect(share).toHaveAttribute(
+        "href",
+        `https://wa.me/?text=${encodeURIComponent(
+          `السلام عليكم، بدأنا ختمة العائلة، ختمة شهرية بالتناوب. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${JOIN_LINK}`,
+        )}`,
+      );
+      expect(rows()[29]?.compareDocumentPosition(share)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    });
+
+    it("asks for a join link once when the khatma has none, and shows no share or resend meanwhile", () => {
+      m.people = peopleView(
+        [
+          { id: "p1", name: "علي", isMe: true, juz: [1] },
+          { id: "p2", name: "مريم", isMe: false, juz: [2], joined: false },
+        ],
+        undefined,
+        { joinLink: null },
+      );
+      renderAt("/j/CODE?tab=people");
+      expect(m.fns.ensureJoinLink).toHaveBeenCalledTimes(1);
+      expect(m.fns.ensureJoinLink).toHaveBeenCalledWith(args);
+      expect(screen.queryByRole("link", { name: t.rota.shareJoin })).toBeNull();
+      expect(screen.queryByRole("link", { name: t.rota.notJoined })).toBeNull();
+    });
+
+    it("does not ask while the link exists", () => {
+      renderAt("/j/CODE?tab=people");
+      expect(m.fns.ensureJoinLink).not.toHaveBeenCalled();
+    });
+
+    it("lists the join requests above the rows, the number masked, with a select of the free ajza'", () => {
+      withRequest();
+      renderAt("/j/CODE?tab=people");
+      const section = screen.getByRole("region", {
+        name: t.rota.requestsHeading,
+      });
+      expect(section).toHaveTextContent("خالد · +971 50 ••• 2233");
+      expect(
+        section.compareDocumentPosition(
+          document.querySelector("ol") as HTMLElement,
+        ),
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      const select = within(section).getByLabelText(t.rota.requestJuz);
+      // 30 minus the four held.
+      expect(within(select).getAllByRole("option")).toHaveLength(26);
+      expect(select).toHaveValue("5");
+    });
+
+    it("«أضفه واختر جزأه» sends the request and the chosen juz'", async () => {
+      withRequest();
+      const user = userEvent.setup();
+      renderAt("/j/CODE?tab=people");
+      await user.selectOptions(screen.getByLabelText(t.rota.requestJuz), "12");
+      await user.click(
+        screen.getByRole("button", { name: t.rota.acceptRequest }),
+      );
+      expect(m.fns.acceptJoinRequest).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        inviteCode: "CODE",
+        requestId: "q1",
+        juz: 12,
+      });
+    });
+
+    it("«لا» declines the request", async () => {
+      withRequest();
+      const user = userEvent.setup();
+      renderAt("/j/CODE?tab=people");
+      await user.click(
+        screen.getByRole("button", { name: t.rota.declineRequest }),
+      );
+      expect(m.fns.declineJoinRequest).toHaveBeenCalledWith({
+        sessionToken: "tok",
+        inviteCode: "CODE",
+        requestId: "q1",
+      });
+      expect(m.fns.acceptJoinRequest).not.toHaveBeenCalled();
+    });
+
+    it("says why a request was refused", async () => {
+      withRequest();
+      m.fns.acceptJoinRequest.mockResolvedValue({ error: "juz_taken" });
+      const user = userEvent.setup();
+      renderAt("/j/CODE?tab=people");
+      await user.click(
+        screen.getByRole("button", { name: t.rota.acceptRequest }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        t.rota.joinRequestErrors.juz_taken ?? "",
+      );
+    });
+
+    it("cannot accept when no juz' is free", () => {
+      m.people = peopleView(
+        Array.from({ length: 30 }, (_, i) => ({
+          id: `h${i}`,
+          name: `ق${i}`,
+          isMe: i === 0,
+          juz: [i + 1],
+        })),
+        undefined,
+        { requests: [request] },
+      );
+      renderAt("/j/CODE?tab=people");
+      expect(
+        screen.getByRole("button", { name: t.rota.acceptRequest }),
+      ).toBeDisabled();
+    });
+
+    it("shows no requests section without requests", () => {
+      renderAt("/j/CODE?tab=people");
+      expect(
+        screen.queryByRole("region", { name: t.rota.requestsHeading }),
+      ).toBeNull();
+    });
   });
 });

@@ -6,6 +6,14 @@ export type ReadingDays =
   | { kind: "weekly"; weekdays: number[]; everyWeeks: 1 | 2 }
   | { kind: "monthly"; days: number[] };
 
+/** How often a khatma is read, as one word: weekly every two weeks is `biweekly`. */
+export type ReadingDaysKind = "daily" | "weekly" | "biweekly" | "monthly";
+
+export function readingDaysKind(days: ReadingDays): ReadingDaysKind {
+  if (days.kind === "weekly" && days.everyWeeks === 2) return "biweekly";
+  return days.kind;
+}
+
 export const readingDaysValidator = v.union(
   v.object({ kind: v.literal("daily") }),
   v.object({

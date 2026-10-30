@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { sha256Hex } from "./lib/crypto";
+import { helpText } from "./lib/rotaTemplates";
 import schema from "./schema";
 import { describeMessage } from "./whatsapp";
 
@@ -162,6 +163,26 @@ function pinsSent(to = PHONE) {
 function otherPin(pin: string) {
   return String((Number(pin) + 1) % 1_000_000).padStart(6, "0");
 }
+
+test("a button tap never matches a pending sign-in code, whatever its title says", async () => {
+  const t = convexTest(schema, modules);
+  await addPerson(t);
+  const v = await start(t);
+  await t.action(internal.whatsapp.handleIncoming, {
+    waMessageId: "wamid.tap",
+    from: PHONE,
+    text: v.message,
+    payload: "r1|p|done|d1|p1",
+  });
+  expect((await status(t, v)).status).toBe("pending");
+  // only the rota's answer to a tap it can't place, never a sign-in reply
+  expect(sent.map((s) => s.body)).toEqual([helpText]);
+  sent = [];
+
+  // the same text typed is a sign-in message and matches
+  await send(t, v.message);
+  expect((await status(t, v)).status).not.toBe("pending");
+});
 
 test("start over HTTP returns a formatted code and the ready-made message", async () => {
   const t = convexTest(schema, modules);

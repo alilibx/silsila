@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
+import { DEFAULT_GRACE } from "./lib/grace";
 import { getSetting } from "./lib/settings";
 import schema from "./schema";
 
@@ -60,4 +61,81 @@ test("dev:setSetting refuses unknown and non-numeric settings", async () => {
   await expect(
     t.mutation(internal.dev.setSetting, { key: "graceDefaults", value: 1 }),
   ).rejects.toThrow(/not a numeric setting/);
+});
+
+test("dev:rotaPayload builds the participant's payload for the open day, in dev only", async () => {
+  const t = convexTest(schema, modules);
+  vi.stubEnv("WIRDAK_ENV", "dev");
+  const ids = await t.run(async (ctx) => {
+    const creatorPersonId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "المنظم",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
+    });
+    const khatmaId = await ctx.db.insert("khatmas", {
+      name: "ختمة",
+      schedule: "none",
+      grace: DEFAULT_GRACE.none,
+      creatorPersonId,
+      inviteCode: "invite-code",
+      completedRounds: 0,
+      createdAt: 0,
+      kind: "rota",
+    });
+    const participantId = await ctx.db.insert("rotaParticipants", {
+      khatmaId,
+      name: "قارئ",
+      phone: "+971500000100",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+    });
+    const day = (n: number, closedAt: number | null) =>
+      ctx.db.insert("rotaDays", {
+        khatmaId,
+        n,
+        number: n,
+        cycle: 1,
+        date: `2027-01-${15 + n}`,
+        startedAt: 0,
+        closesAt: 0,
+        completedAt: null,
+        closedAt,
+        unreadSentAt: null,
+        summarySentAt: null,
+      });
+    await day(1, 1);
+    const dayId = await day(2, null);
+    return { participantId, dayId };
+  });
+  const args = {
+    inviteCode: "invite-code",
+    phone: "+971500000100",
+    action: "done",
+  } as const;
+
+  expect(await t.query(internal.dev.rotaPayload, args)).toBe(
+    `r1|p|done|${ids.dayId}|${ids.participantId}`,
+  );
+  await expect(
+    t.query(internal.dev.rotaPayload, { ...args, phone: "+971500000999" }),
+  ).rejects.toThrow(/no such participant/);
+
+  // A removed participant isn't found, and neither is anyone while no day is open.
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { removedAt: 1 }));
+  await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
+    /no such participant/,
+  );
+  await t.run((ctx) => ctx.db.patch(ids.participantId, { removedAt: null }));
+  await t.run((ctx) => ctx.db.patch(ids.dayId, { closedAt: 2 }));
+  await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
+    /no open day/,
+  );
+
+  vi.stubEnv("WIRDAK_ENV", "prod");
+  await expect(t.query(internal.dev.rotaPayload, args)).rejects.toThrow(
+    /only when WIRDAK_ENV is dev/,
+  );
 });

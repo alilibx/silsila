@@ -3,6 +3,7 @@ import type { NoteView } from "@convex/notes";
 import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { buttonClass } from "../components/Button";
 import { KhatmaTabs } from "../components/KhatmaTabs";
 import { NoteCard } from "../components/NoteCard";
 import { SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
@@ -40,9 +41,12 @@ function Loading() {
  */
 function WhatsAppPage({
   title,
+  joinLink,
   onSignIn,
 }: {
   title: string;
+  /** Opens WhatsApp with the join message typed; null while the khatma has none. */
+  joinLink: string | null;
   onSignIn: (() => void) | null;
 }) {
   return (
@@ -59,6 +63,16 @@ function WhatsAppPage({
         {title}
       </h1>
       <p className="mt-4 text-xl leading-relaxed">{t.rota.whatsappOnly}</p>
+      {joinLink && (
+        <a
+          href={joinLink}
+          target="_blank"
+          rel="noopener"
+          className={buttonClass("whatsapp", "mt-5 no-underline")}
+        >
+          {t.rota.joinOnWhatsApp}
+        </a>
+      )}
       {onSignIn && (
         <button
           type="button"
@@ -111,10 +125,13 @@ function RotaNotes({ notes }: { notes: NoteView[] }) {
 export function RotaKhatmaPage({
   inviteCode,
   name,
+  joinLink,
 }: {
   inviteCode: string;
   /** The khatma's name, which anyone can see. */
   name: string | null;
+  /** The wa.me link that joins the khatma, which anyone can use. */
+  joinLink: string | null;
 }) {
   const sessionToken = useSessionToken();
   const [search, setSearch] = useSearchParams();
@@ -156,6 +173,7 @@ export function RotaKhatmaPage({
       <>
         <WhatsAppPage
           title={name ?? t.app.name}
+          joinLink={joinLink}
           onSignIn={me === null ? signIn.open : null}
         />
         {signIn.sheet}

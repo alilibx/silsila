@@ -17,6 +17,16 @@ const note = (kind: NoteKind, juz = [12]) => ({
   count: null,
   until: null,
 });
+const rotaNote = (
+  kind: NoteKind,
+  fields: { juz?: number[]; count?: number; name?: string },
+) => ({
+  kind,
+  juz: fields.juz ?? [],
+  count: fields.count ?? null,
+  until: null,
+  name: fields.name ?? null,
+});
 
 test("every note kind maps to its template and body values", () => {
   const cases: [NoteKind, string, string[]][] = [
@@ -37,6 +47,48 @@ test("every note kind maps to its template and body values", () => {
         buttonParam: "j/AB12CD",
       },
     );
+  }
+});
+
+test("the organizer's rota notes go out as templates with the open button", () => {
+  const send = (n: ReturnType<typeof rotaNote>) =>
+    noteTemplate(n, khatma, "https://wirdak.app", NOW);
+  expect(send(rotaNote("rotaUnread", { juz: [5, 6] }))).toEqual({
+    name: "wirdak_rota_unread",
+    header: "ختمة رمضان",
+    body: ["الجزأين ٥ و٦"],
+    buttonParam: "j/AB12CD",
+  });
+  expect(send(rotaNote("rotaUnread", { juz: [26] }))?.body).toEqual([
+    "الجزء ٢٦",
+  ]);
+  expect(send(rotaNote("rotaUnread", { juz: [3, 5, 6] }))?.body).toEqual([
+    "الأجزاء ٣، ٥ و٦",
+  ]);
+  expect(send(rotaNote("rotaSummary", { count: 24 }))).toEqual({
+    name: "wirdak_rota_summary",
+    header: "ختمة رمضان",
+    body: ["٢٤"],
+    buttonParam: "j/AB12CD",
+  });
+  expect(send(rotaNote("rotaJoinRequest", { name: "أحمد" }))).toEqual({
+    name: "wirdak_rota_join_request",
+    header: "ختمة رمضان",
+    body: ["أحمد"],
+    buttonParam: "j/AB12CD",
+  });
+});
+
+test("notes about a participant's own messages stay off WhatsApp", () => {
+  for (const kind of ["rotaSilent", "rotaSilenced", "rotaStopped"] as const) {
+    expect(
+      noteTemplate(
+        rotaNote(kind, { name: "أحمد", count: 3 }),
+        khatma,
+        "https://wirdak.app",
+        NOW,
+      ),
+    ).toBeNull();
   }
 });
 

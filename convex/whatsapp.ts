@@ -6,6 +6,11 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { hmacSha256Hex, randomPin, sha256Hex } from "./lib/crypto";
+import { findJoinCode } from "./lib/rotaJoin";
+import { decodePayload } from "./lib/rotaPayload";
+import { classifyReply } from "./lib/rotaReplies";
+import { unknownJoinText } from "./lib/rotaTemplates";
+import { cleanKhatmaName } from "./lib/text";
 import { cleanParam, type TemplateMessage } from "./lib/whatsappTemplates";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +56,11 @@ export function env(name: EnvName): string | undefined {
  */
 export function isDev(): boolean {
   return process.env.WIRDAK_ENV === "dev";
+}
+
+/** Whether this deployment is staging (`WIRDAK_ENV=staging`), which shares production's number. */
+export function isStaging(): boolean {
+  return process.env.WIRDAK_ENV === "staging";
 }
 
 /** Shorter relay secrets are treated as unset (`openssl rand -hex 32` is 64). */
@@ -202,10 +212,20 @@ const MAX_TEXT = 4096;
 /** Only this much of an incoming message is scanned for a code (or relayed). */
 export const MAX_SCANNED_TEXT = 500;
 
+/** A button payload is at most this long (Meta allows 256). */
+const MAX_PAYLOAD = 256;
+
 export type IncomingMessage = {
   waMessageId: string;
   from: string;
+  /** The message text; for a button tap, the button's title; empty for media. */
   text: string;
+  /** The tapped button's payload (a template quick reply, or an interactive reply). */
+  payload?: string;
+  /** The sender's WhatsApp profile name. */
+  profileName?: string;
+  /** A photo, sticker, voice note or other message with no text to read. */
+  media?: boolean;
 };
 
 function isObject(x: unknown): x is Record<string, unknown> {
@@ -231,9 +251,82 @@ function toMessage(
   return { waMessageId: id, from, text };
 }
 
+/** Messages with nothing to read that still come from the person: they count as a reply. */
+const MEDIA_TYPES: ReadonlySet<unknown> = new Set([
+  "image",
+  "sticker",
+  "audio",
+  "video",
+  "document",
+  "location",
+  "contacts",
+  "reaction",
+]);
+
+/** `m`'s text and button payload: a text message, a button tap, or media (no text). */
+function textAndPayload(
+  m: Record<string, unknown>,
+): { text: unknown; payload?: string; media?: true } | null {
+  if (m.type === "text" && isObject(m.text)) return { text: m.text.body };
+  if (MEDIA_TYPES.has(m.type)) return { text: "", media: true };
+  if (m.type === "button" && isObject(m.button)) {
+    return payloadOf(m.button.text, m.button.payload);
+  }
+  if (
+    m.type === "interactive" &&
+    isObject(m.interactive) &&
+    m.interactive.type === "button_reply" &&
+    isObject(m.interactive.button_reply)
+  ) {
+    const reply = m.interactive.button_reply;
+    return payloadOf(reply.title, reply.id);
+  }
+  return null;
+}
+
+function payloadOf(
+  text: unknown,
+  payload: unknown,
+): { text: unknown; payload: string } | null {
+  return typeof payload === "string" &&
+    payload.length > 0 &&
+    payload.length <= MAX_PAYLOAD
+    ? { text: typeof text === "string" ? text : "", payload }
+    : null;
+}
+
 /**
- * Text messages from a Cloud API webhook payload. Anything that isn't a
- * well-formed text message (statuses, media, malformed entries) is skipped.
+ * A profile name as `cleanKhatmaName` cleans it (control and bidi characters
+ * out, 60 code points, a letter or digit left), or `undefined` when there is none.
+ */
+function cleanProfileName(name: unknown): string | undefined {
+  if (typeof name !== "string") return undefined;
+  return cleanKhatmaName(name) ?? undefined;
+}
+
+/** `s` cut to `max` code points, so a cut never leaves half a surrogate pair. */
+function cutCodePoints(s: string, max: number): string {
+  return Array.from(s).slice(0, max).join("");
+}
+
+/** The profile names in `value.contacts`, by `wa_id`. */
+function profileNames(contacts: unknown): Map<string, string> {
+  const names = new Map<string, string>();
+  if (!Array.isArray(contacts)) return names;
+  for (const c of contacts) {
+    if (!isObject(c) || typeof c.wa_id !== "string") continue;
+    const name = isObject(c.profile) ? cleanProfileName(c.profile.name) : null;
+    if (name) names.set(c.wa_id, name);
+  }
+  return names;
+}
+
+/**
+ * Messages from a Cloud API webhook payload: text, template quick-reply taps
+ * and interactive reply-button taps (their title as `text`, their payload as
+ * `payload`), and media, stickers, voice notes and reactions (`media`, with
+ * no text), each with the sender's profile name. Anything else (statuses,
+ * malformed entries) is skipped.
  * With `onlyPhoneNumberId`, messages addressed to any other business number
  * (`value.metadata.phone_number_id`), or with no metadata, are skipped too.
  */
@@ -258,11 +351,21 @@ export function parseIncoming(
       }
       const messages = change.value.messages;
       if (!Array.isArray(messages)) continue;
+      const names = profileNames(change.value.contacts);
       for (const m of messages) {
-        if (!isObject(m) || m.type !== "text" || !isObject(m.text)) continue;
-        const message = toMessage(m.id, m.from, m.text.body);
+        if (!isObject(m)) continue;
+        const content = textAndPayload(m);
+        if (content === null) continue;
+        const message = toMessage(m.id, m.from, content.text);
         if (message === null) continue;
-        out.push({ ...message, text: message.text.slice(0, MAX_TEXT) });
+        const profileName = names.get(message.from);
+        out.push({
+          ...message,
+          text: message.text.slice(0, MAX_TEXT),
+          ...(content.payload !== undefined && { payload: content.payload }),
+          ...(content.media && { media: true }),
+          ...(profileName !== undefined && { profileName }),
+        });
       }
     }
   }
@@ -273,9 +376,24 @@ export function parseIncoming(
 export function parseRelayed(payload: unknown): IncomingMessage | null {
   if (!isObject(payload)) return null;
   const message = toMessage(payload.waMessageId, payload.from, payload.text);
-  return message !== null && message.text.length <= MAX_SCANNED_TEXT
-    ? message
-    : null;
+  if (message === null || message.text.length > MAX_SCANNED_TEXT) return null;
+  let relayed: IncomingMessage = message;
+  if (payload.payload !== undefined) {
+    if (
+      typeof payload.payload !== "string" ||
+      payload.payload.length === 0 ||
+      payload.payload.length > MAX_PAYLOAD
+    ) {
+      return null;
+    }
+    relayed = { ...relayed, payload: payload.payload };
+  }
+  if (payload.media !== undefined) {
+    if (payload.media !== true) return null;
+    relayed = { ...relayed, media: true };
+  }
+  const profileName = cleanProfileName(payload.profileName);
+  return profileName === undefined ? relayed : { ...relayed, profileName };
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +407,7 @@ const textParams = (values: string[]) =>
 
 /**
  * A message payload as one readable string: the text; the text, then the
- * button as `[label] url`; or `[template name]` and its parameters joined
+ * button as `[label] url`, or each reply button as `[title] id`; or `[template name]` and its parameters joined
  * by ` | `. Dev logs print it, and tests compare it.
  */
 export function describeMessage(payload: unknown): string {
@@ -299,6 +417,13 @@ export function describeMessage(payload: unknown): string {
   if (isObject(interactive)) {
     const body = isObject(interactive.body) ? interactive.body.text : "";
     const action = isObject(interactive.action) ? interactive.action : {};
+    if (Array.isArray(action.buttons)) {
+      const lines = action.buttons.map((b: unknown) => {
+        const reply = isObject(b) && isObject(b.reply) ? b.reply : {};
+        return `\n[${String(reply.title)}] ${String(reply.id)}`;
+      });
+      return `${String(body)}${lines.join("")}`;
+    }
     const button = isObject(action.parameters) ? action.parameters : {};
     return `${String(body)}\n[${String(button.display_text)}] ${String(button.url)}`;
   }
@@ -309,7 +434,11 @@ export function describeMessage(payload: unknown): string {
       : [];
     const params = components.flatMap((c: unknown) =>
       isObject(c) && Array.isArray(c.parameters)
-        ? c.parameters.map((p: unknown) => (isObject(p) ? String(p.text) : ""))
+        ? c.parameters.map((p: unknown) =>
+            isObject(p)
+              ? String(p.type === "payload" ? p.payload : p.text)
+              : "",
+          )
         : [],
     );
     return `[${String(template.name)}] ${params.join(" | ")}`;
@@ -438,6 +567,14 @@ async function postTemplate(
       parameters: textParams([message.buttonParam]),
     });
   }
+  (message.quickReplies ?? []).forEach((payload, i) => {
+    components.push({
+      type: "button",
+      sub_type: "quick_reply",
+      index: String(i),
+      parameters: [{ type: "payload", payload }],
+    });
+  });
   return await postMessage(to, {
     type: "template",
     template: { name: message.name, language: { code: "ar" }, components },
@@ -464,6 +601,39 @@ export async function sendWhatsAppLink(
   return outcome === "sent";
 }
 
+/** WhatsApp shows at most three reply buttons, each titled with 20 characters or fewer. */
+export const MAX_REPLY_BUTTONS = 3;
+export const MAX_BUTTON_TITLE = 20;
+
+/**
+ * A text with up to three reply buttons (inside the 24-hour window, no
+ * template needed). A tap comes back as an incoming message holding the
+ * button's `id` as its payload.
+ */
+export async function sendWhatsAppButtons(
+  to: string,
+  body: string,
+  buttons: { id: string; title: string }[],
+): Promise<boolean> {
+  const outcome = await postMessage(to, {
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: body },
+      action: {
+        buttons: buttons.slice(0, MAX_REPLY_BUTTONS).map((b) => ({
+          type: "reply",
+          reply: {
+            id: cutCodePoints(b.id, MAX_PAYLOAD),
+            title: cutCodePoints(b.title, MAX_BUTTON_TITLE),
+          },
+        })),
+      },
+    },
+  });
+  return outcome === "sent";
+}
+
 export const sendText = internalAction({
   args: { to: v.string(), body: v.string() },
   handler: async (_ctx, args): Promise<boolean> =>
@@ -474,8 +644,11 @@ export const sendText = internalAction({
 // Relay (production → staging)
 //
 // Staging shares production's number, so Meta delivers every message to
-// production. A message production has no pending code for is relayed to
-// staging, which answers whether one of its own codes took it. Staging then
+// production. A message production can't place is relayed to staging: a
+// sign-in code it has no pending code for, a join code no khatma here has, a
+// tap on a button staging sent, a rota reply from a phone that is no member
+// here, or media from such a phone (so staging records it; nobody answers
+// it). Staging answers whether it took it, and then
 // sends its own reply (with its own `SITE_URL`); production replies only if
 // staging didn't take it, couldn't be reached, or took too long. Staging sends
 // before it answers, so its reply is never left waiting in a queue (a PIN
@@ -497,8 +670,9 @@ export async function relaySignature(
 }
 
 /**
- * Relays a message to `WHATSAPP_RELAY_URL` and returns `true` only if the
- * other deployment took it (and so sends the reply). Never throws: any
+ * Relays a message, with its button payload and profile name, to
+ * `WHATSAPP_RELAY_URL` and returns `true` only if the other deployment took
+ * it (and so sends the reply). Never throws: any
  * failure returns `false`, so production still answers the person.
  */
 export async function relayIncoming(
@@ -573,9 +747,48 @@ export const recordInbound = internalMutation({
 });
 
 /**
- * Dedupes and matches one message and sends the reply for a match. Returns
- * `"taken"` when nothing more should be sent (a match, a duplicate, a bad
- * sender, or a rate-limited phone), else whether the text could hold a code.
+ * The rota's answer to a message, sent at once since it replies to the
+ * member's own message. Returns whether anything was sent. `mayBeSignIn`: the
+ * text could hold another deployment's sign-in code, so it gets no help reply.
+ */
+async function answerRota(
+  ctx: ActionCtx,
+  phone: string,
+  message: IncomingMessage,
+  mayBeSignIn = false,
+): Promise<boolean> {
+  const result = await ctx.runMutation(internal.rotaInbound.handle, {
+    phone,
+    text: message.text,
+    ...(message.payload !== undefined && { payload: message.payload }),
+    ...(message.profileName !== undefined && {
+      profileName: message.profileName,
+    }),
+    mayBeSignIn,
+    now: Date.now(),
+  });
+  if (!Array.isArray(result)) return false;
+  for (const reply of result) {
+    if (reply.buttons) {
+      await sendWhatsAppButtons(phone, reply.text, reply.buttons);
+    } else {
+      await sendWhatsAppText(phone, reply.text);
+    }
+  }
+  return true;
+}
+
+/**
+ * Dedupes one message, routes it and sends the reply. Media only counts as a
+ * rota reply and is never answered. A button tap, a join message, and a rota
+ * word from a phone with a rota participant go to the rota and never to
+ * sign-in matching (or its rate limit); anything else is matched against
+ * sign-in codes first, then left to the rota. Returns
+ * `"taken"` when nothing more should be sent (an answer, a duplicate, a bad
+ * sender, or a rate-limited phone), `"unknown_code"` when another deployment
+ * may place it (a sign-in code, a join code or a button tap this one doesn't
+ * have, or a rota word from a phone with no participant here), else
+ * `"no_code"`.
  */
 export async function takeIncoming(
   ctx: ActionCtx,
@@ -588,6 +801,35 @@ export async function takeIncoming(
   if (!fresh) return "taken";
 
   const phone = `+${message.from}`;
+  // Media has nothing to read: from a rota phone it counts as a reply, and it
+  // is never answered or matched against sign-in codes. From a phone with no
+  // rota participant here it goes to the other deployment (staging shares
+  // production's number), which records it the same way and answers nothing.
+  if (message.media) {
+    const listed = await ctx.runMutation(internal.rotaInbound.recordMedia, {
+      phone,
+      now: Date.now(),
+    });
+    if (!listed) await relayIncoming(message);
+    return "taken";
+  }
+  // A button tap is never a sign-in message, however its title reads.
+  if (message.payload !== undefined) {
+    if (await answerRota(ctx, phone, message)) return "taken";
+    return decodePayload(message.payload) !== null ? "unknown_code" : "taken";
+  }
+  // A sign-in message never says «انضمام», so a join text never reaches
+  // sign-in matching, even when its title holds a code. A member's «إيقاف» or
+  // «تم» skips it too, so the sign-in rate limit never silences them.
+  const word = classifyReply(message.text);
+  if (
+    findJoinCode(message.text) !== null ||
+    (word !== null &&
+      (await ctx.runQuery(internal.rotaInbound.hasParticipant, { phone })))
+  ) {
+    return (await answerRota(ctx, phone, message)) ? "taken" : "unknown_code";
+  }
+
   // Generated here (never in a mutation); used only if the number already
   // has an account.
   const pin = randomPin();
@@ -598,9 +840,14 @@ export async function takeIncoming(
   });
   switch (result.kind) {
     case "rate_limited":
+      // A text that can't be a sign-in still gets the rota's answer.
+      if (!result.codeShaped) await answerRota(ctx, phone, message);
       return "taken";
     case "no_match":
-      return result.codeShaped ? "unknown_code" : "no_code";
+      if (await answerRota(ctx, phone, message, result.codeShaped)) {
+        return "taken";
+      }
+      return result.codeShaped || word !== null ? "unknown_code" : "no_code";
     case "matched":
       await sendVerified(phone, result.returnPath);
       return "taken";
@@ -613,12 +860,24 @@ export async function takeIncoming(
 
 /** A message from Meta's webhook. */
 export const handleIncoming = internalAction({
-  args: { waMessageId: v.string(), from: v.string(), text: v.string() },
+  args: {
+    waMessageId: v.string(),
+    from: v.string(),
+    text: v.string(),
+    payload: v.optional(v.string()),
+    profileName: v.optional(v.string()),
+    media: v.optional(v.boolean()),
+  },
   handler: async (ctx, args): Promise<void> => {
     const outcome = await takeIncoming(ctx, args);
     if (outcome === "taken") return;
-    // A code we don't have may have been started on staging.
+    // A code, a tap or a rota reply we can't place may be staging's.
     if (outcome === "unknown_code" && (await relayIncoming(args))) return;
-    await sendWhatsAppText(`+${args.from}`, NO_MATCH_REPLY);
+    // A tap never gets the sign-in reply.
+    if (args.payload !== undefined) return;
+    // A join code neither deployment has is a khatma we can't find.
+    const reply =
+      findJoinCode(args.text) !== null ? unknownJoinText : NO_MATCH_REPLY;
+    await sendWhatsAppText(`+${args.from}`, reply);
   },
 });

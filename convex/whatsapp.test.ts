@@ -2,17 +2,22 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import { hmacSha256Hex } from "./lib/crypto";
+import { DEFAULT_GRACE } from "./lib/grace";
+import { joinText } from "./lib/rotaJoin";
+import { helpText, notOnListText } from "./lib/rotaTemplates";
 import { cleanParam } from "./lib/whatsappTemplates";
 import schema from "./schema";
 import {
   adminPinReply,
   describeMessage,
   parseIncoming,
+  parseRelayed,
   relayIncoming,
   relaySignature,
   sendPin,
   sendSignInAlert,
   sendVerified,
+  sendWhatsAppButtons,
   sendWhatsAppLink,
   sendWhatsAppTemplate,
   whatsappConfigured,
@@ -113,6 +118,7 @@ test("parseIncoming extracts text messages", () => {
       waMessageId: "wamid.1",
       from: "971501234567",
       text: "رمز التحقق في وِردك: K7Q2-9XMB-4T",
+      profileName: "Ali",
     },
   ]);
   expect(
@@ -120,7 +126,7 @@ test("parseIncoming extracts text messages", () => {
   ).toEqual([]);
 });
 
-test("parseIncoming ignores non-text messages and malformed input", () => {
+test("parseIncoming ignores malformed input", () => {
   expect(parseIncoming(null)).toEqual([]);
   expect(parseIncoming("nope")).toEqual([]);
   expect(parseIncoming({ entry: "x" })).toEqual([]);
@@ -128,7 +134,6 @@ test("parseIncoming ignores non-text messages and malformed input", () => {
   expect(
     parseIncoming(
       webhook([
-        { from: "971501234567", id: "wamid.img", type: "image", image: {} },
         { from: "971501234567", id: "wamid.bad", type: "text", text: {} },
         { from: "+97150", id: "wamid.from", type: "text", text: { body: "x" } },
         { from: "971501234567", type: "text", text: { body: "no id" } },
@@ -140,7 +145,50 @@ test("parseIncoming ignores non-text messages and malformed input", () => {
         },
       ]),
     ),
-  ).toEqual([{ waMessageId: "wamid.ok", from: "971501234567", text: "hi" }]);
+  ).toEqual([
+    {
+      waMessageId: "wamid.ok",
+      from: "971501234567",
+      text: "hi",
+      profileName: "Ali",
+    },
+  ]);
+});
+
+test("parseIncoming reads media, stickers, voice notes and reactions as media with no text", () => {
+  const types = [
+    "image",
+    "sticker",
+    "audio",
+    "video",
+    "document",
+    "location",
+    "contacts",
+    "reaction",
+  ];
+  expect(
+    parseIncoming(
+      webhook([
+        ...types.map((type) => ({
+          from: "971501234567",
+          id: `wamid.${type}`,
+          type,
+          [type]: {},
+        })),
+        // still not a message we read
+        { from: "971501234567", id: "wamid.sys", type: "system", system: {} },
+        { from: "+97150", id: "wamid.from", type: "sticker", sticker: {} },
+      ]),
+    ),
+  ).toEqual(
+    types.map((type) => ({
+      waMessageId: `wamid.${type}`,
+      from: "971501234567",
+      text: "",
+      media: true,
+      profileName: "Ali",
+    })),
+  );
 });
 
 test("parseIncoming can keep only messages to our business number", () => {
@@ -169,6 +217,143 @@ test("parseIncoming can keep only messages to our business number", () => {
   };
   expect(parseIncoming(bare)).toHaveLength(1);
   expect(parseIncoming(bare, "1234567890")).toEqual([]);
+});
+
+test("parseIncoming reads button taps and the sender's profile name", () => {
+  const messages = webhook(
+    [
+      {
+        from: "971501234567",
+        id: "wamid.btn",
+        type: "button",
+        button: { payload: "r1|p|done|d1|p1", text: "تمّ" },
+      },
+      {
+        from: "971501234567",
+        id: "wamid.int",
+        type: "interactive",
+        interactive: {
+          type: "button_reply",
+          button_reply: { id: "r1|p|notYet|d1|p1", title: "ليس بعد" },
+        },
+      },
+      // a list reply is not a button reply
+      {
+        from: "971501234567",
+        id: "wamid.list",
+        type: "interactive",
+        interactive: {
+          type: "list_reply",
+          list_reply: { id: "x", title: "y" },
+        },
+      },
+      // a button with no payload can't be told apart from noise
+      {
+        from: "971501234567",
+        id: "wamid.nopayload",
+        type: "button",
+        button: { text: "تمّ" },
+      },
+      {
+        from: "971501234567",
+        id: "wamid.long",
+        type: "button",
+        button: { payload: "x".repeat(257), text: "تمّ" },
+      },
+    ],
+    {
+      contacts: [
+        { wa_id: "971509999999", profile: { name: "Someone else" } },
+        { wa_id: "971501234567", profile: { name: "ن".repeat(80) } },
+      ],
+    },
+  );
+  expect(parseIncoming(messages)).toEqual([
+    {
+      waMessageId: "wamid.btn",
+      from: "971501234567",
+      text: "تمّ",
+      payload: "r1|p|done|d1|p1",
+      profileName: "ن".repeat(60),
+    },
+    {
+      waMessageId: "wamid.int",
+      from: "971501234567",
+      text: "ليس بعد",
+      payload: "r1|p|notYet|d1|p1",
+      profileName: "ن".repeat(60),
+    },
+  ]);
+  // a text message carries the profile name but no payload
+  const [text] = parseIncoming(sampleWebhook);
+  expect(text).toEqual({
+    waMessageId: "wamid.1",
+    from: "971501234567",
+    text: "رمز التحقق في وِردك: K7Q2-9XMB-4T",
+    profileName: "Ali",
+  });
+  expect("payload" in text!).toBe(false);
+});
+
+/** A UTF-16 surrogate with no partner: Convex refuses it in an argument. */
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+test("profile names lose control and bidi characters and are cut by code point", () => {
+  const name = (profileName: string) =>
+    parseIncoming(
+      webhook(
+        [
+          {
+            from: "971501234567",
+            id: "wamid.n",
+            type: "text",
+            text: { body: "hi" },
+          },
+        ],
+        {
+          contacts: [{ wa_id: "971501234567", profile: { name: profileName } }],
+        },
+      ),
+    )[0]!.profileName;
+  expect(name("\u202Eعلي\u202C\u0007  أحمد")).toBe("علي أحمد");
+  // an emoji straddling the cut is dropped whole, never split
+  const cut = name("ا".repeat(59) + "😀😀");
+  expect(cut).toBe("ا".repeat(59) + "😀");
+  expect(cut).not.toMatch(LONE_SURROGATE);
+  // nothing readable left: no name
+  expect(name("\u202E\u200B  ")).toBeUndefined();
+  expect(name("😀")).toBeUndefined();
+});
+
+test("parseRelayed carries the payload and profile name", () => {
+  const relayed = {
+    waMessageId: "wamid.btn",
+    from: "971501234567",
+    text: "تمّ",
+    payload: "r1|s|done|d1|p1",
+    profileName: "Ali",
+  };
+  expect(parseRelayed(relayed)).toEqual(relayed);
+  expect(
+    parseRelayed({ ...relayed, payload: undefined, profileName: undefined }),
+  ).toEqual({ waMessageId: "wamid.btn", from: "971501234567", text: "تمّ" });
+  expect(parseRelayed({ ...relayed, payload: "x".repeat(257) })).toBeNull();
+  expect(parseRelayed({ ...relayed, payload: 5 })).toBeNull();
+  expect(
+    parseRelayed({ ...relayed, profileName: "ن".repeat(80) })?.profileName,
+  ).toBe("ن".repeat(60));
+});
+
+test("parseRelayed carries media, and refuses a media flag that isn't true", () => {
+  const media = { waMessageId: "wamid.m", from: "971501234567", text: "" };
+  expect(parseRelayed({ ...media, media: true })).toEqual({
+    ...media,
+    media: true,
+  });
+  expect(parseRelayed(media)).toEqual(media);
+  expect(parseRelayed({ ...media, media: "yes" })).toBeNull();
+  expect(parseRelayed({ ...media, media: false })).toBeNull();
 });
 
 test("recordInbound returns true once per message id", async () => {
@@ -359,6 +544,77 @@ test("sendWhatsAppTemplate posts a template with header, body and url button", a
       },
     },
   ]);
+});
+
+test("sendWhatsAppTemplate adds a payload for each quick-reply button", async () => {
+  await sendWhatsAppTemplate("+971501234567", {
+    name: "wirdak_rota_day",
+    header: "ختمة رمضان",
+    body: ["١٢"],
+    quickReplies: ["r1|p|done|d1|p1", "r1|p|notYet|d1|p1"],
+  });
+  const template = payloads[0]!.template as { components: unknown[] };
+  expect(template.components.slice(2)).toEqual([
+    {
+      type: "button",
+      sub_type: "quick_reply",
+      index: "0",
+      parameters: [{ type: "payload", payload: "r1|p|done|d1|p1" }],
+    },
+    {
+      type: "button",
+      sub_type: "quick_reply",
+      index: "1",
+      parameters: [{ type: "payload", payload: "r1|p|notYet|d1|p1" }],
+    },
+  ]);
+});
+
+test("sendWhatsAppButtons posts an interactive reply-buttons message", async () => {
+  expect(
+    await sendWhatsAppButtons("+971501234567", "هل أتممت وردك؟", [
+      { id: "r1|p|done|d1|p1", title: "تمّ" },
+      { id: "r1|p|notYet|d1|p1", title: "ليس بعد" },
+      { id: "c", title: "ن".repeat(30) },
+      { id: "d", title: "رابع" },
+    ]),
+  ).toBe(true);
+  expect(payloads).toEqual([
+    {
+      messaging_product: "whatsapp",
+      to: "971501234567",
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: "هل أتممت وردك؟" },
+        action: {
+          buttons: [
+            { type: "reply", reply: { id: "r1|p|done|d1|p1", title: "تمّ" } },
+            {
+              type: "reply",
+              reply: { id: "r1|p|notYet|d1|p1", title: "ليس بعد" },
+            },
+            { type: "reply", reply: { id: "c", title: "ن".repeat(20) } },
+          ],
+        },
+      },
+    },
+  ]);
+  expect(describeMessage(payloads[0])).toBe(
+    `هل أتممت وردك؟\n[تمّ] r1|p|done|d1|p1\n[ليس بعد] r1|p|notYet|d1|p1\n[${"ن".repeat(20)}] c`,
+  );
+});
+
+test("sendWhatsAppButtons cuts titles by code point", async () => {
+  await sendWhatsAppButtons("+971501234567", "x", [
+    { id: "a", title: "ن".repeat(19) + "😀😀" },
+  ]);
+  const interactive = payloads[0]!.interactive as {
+    action: { buttons: { reply: { title: string } }[] };
+  };
+  const title = interactive.action.buttons[0]!.reply.title;
+  expect(title).toBe("ن".repeat(19) + "😀");
+  expect(title).not.toMatch(LONE_SURROGATE);
 });
 
 test("sendWhatsAppTemplate leaves out empty components", async () => {
@@ -582,7 +838,12 @@ test("webhook with a valid signature schedules handleIncoming per message", asyn
   expect(jobs.map((j) => [j.name, j.args[0]])).toEqual([
     [
       "whatsapp:handleIncoming",
-      { waMessageId: "wamid.1", from: "971501234567", text: "hello" },
+      {
+        waMessageId: "wamid.1",
+        from: "971501234567",
+        text: "hello",
+        profileName: "Ali",
+      },
     ],
     [
       "whatsapp:handleIncoming",
@@ -658,6 +919,66 @@ test("webhook verify handshake echoes the challenge only for the right token", a
     "/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=&hub.challenge=1",
   );
   expect(unset.status).toBe(403);
+});
+
+/** A rota khatma «ختمة» with join code JNC234 and nobody listed. */
+async function insertRotaKhatma(t: ReturnType<typeof convexTest>) {
+  return await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      phone: "+971500000001",
+      displayName: "المنظم",
+      verifiedAt: 0,
+      timeZone: "Asia/Dubai",
+      lastSeenAt: 0,
+    });
+    return await ctx.db.insert("khatmas", {
+      name: "ختمة",
+      schedule: "none",
+      grace: DEFAULT_GRACE.none,
+      creatorPersonId: personId,
+      inviteCode: "invite",
+      joinCode: "JNC234",
+      completedRounds: 0,
+      createdAt: 0,
+      kind: "rota",
+      rota: {
+        days: { kind: "daily" },
+        firstDate: "2027-01-16",
+        endDate: null,
+        timeZone: "Asia/Dubai",
+        messages: {
+          dayAt: 480,
+          reminder: { at: 960, on: true },
+          unread: { at: 1140, on: false },
+          summary: { at: 1260, on: false },
+        },
+        pausedAt: null,
+        pauseDates: [],
+        archivedAt: null,
+      },
+    });
+  });
+}
+
+test("simulateIncoming passes a button tap and profile name through", async () => {
+  const t = convexTest(schema, modules);
+  const khatmaId = await insertRotaKhatma(t);
+  await t.action(internal.dev.simulateIncoming, {
+    from: "971501234567",
+    text: "أتممت",
+    payload: "r1|p|done|d1|p1",
+  });
+  // a tap: it reaches the rota (which can't place it), never the sign-in path
+  expect(sent.map((s) => s.body)).toEqual([helpText]);
+  // and the profile name arrives with a join message
+  await t.action(internal.dev.simulateIncoming, {
+    from: "971501234567",
+    text: joinText("ختمة", "JNC234"),
+    profileName: "سعيد",
+  });
+  expect(
+    await t.run((ctx) => ctx.db.query("rotaJoinRequests").collect()),
+  ).toMatchObject([{ khatmaId, profileName: "سعيد" }]);
 });
 
 test("simulateIncoming refuses to run outside dev", async () => {
@@ -772,6 +1093,107 @@ test("relay endpoint is closed on a deployment Meta calls", async () => {
   expect(
     await t.run((ctx) => ctx.db.query("inboundMessages").collect()),
   ).toEqual([]);
+});
+
+test("relay endpoint never matches a button tap to a sign-in code", async () => {
+  asStaging();
+  // staging itself, so a tap marked for staging is this deployment's
+  vi.stubEnv("WIRDAK_ENV", "staging");
+  const t = convexTest(schema, modules);
+  await t.run((ctx) =>
+    ctx.db.insert("verifications", {
+      codeNormalized: "ZZZZ2222ZZ",
+      secretHash: "hash",
+      displayName: "علي",
+      status: "pending",
+      pinAttempts: 0,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 600_000,
+    }),
+  );
+  // a tap whose title holds a valid pending code
+  const res = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, payload: "r1|s|done|d1|p1" }),
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ handled: true });
+  // the rota's answer to a tap it can't place, never a sign-in reply
+  expect(sent.map((s) => s.body)).toEqual([helpText]);
+  const rows = await t.run((ctx) => ctx.db.query("verifications").collect());
+  expect(rows.map((r) => r.status)).toEqual(["pending"]);
+
+  // the same text without a payload is a sign-in message and matches
+  const typed = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, waMessageId: "wamid.r2" }),
+  );
+  expect(await typed.json()).toEqual({ handled: true });
+  expect(sent).toHaveLength(2);
+  expect(describeMessage(payloads[1])).toMatch(/^تمّ التحقق/);
+});
+
+test("relay endpoint takes a join for a staging khatma, with the profile name", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const khatmaId = await insertRotaKhatma(t);
+  const res = await relayPost(
+    t,
+    JSON.stringify({
+      ...relayed,
+      text: joinText("ختمة", "JNC234"),
+      profileName: "خالد",
+    }),
+  );
+  expect(await res.json()).toEqual({ handled: true });
+  const requests = await t.run((ctx) =>
+    ctx.db.query("rotaJoinRequests").collect(),
+  );
+  expect(requests).toMatchObject([
+    { khatmaId, phone: "+971501234567", profileName: "خالد" },
+  ]);
+  expect(sent.map((s) => s.body)).toEqual([`*ختمة*\n${notOnListText}`]);
+});
+
+test("relay endpoint records relayed media as a reply and answers nothing", async () => {
+  asStaging();
+  const t = convexTest(schema, modules);
+  const khatmaId = await insertRotaKhatma(t);
+  const participantId = await t.run((ctx) =>
+    ctx.db.insert("rotaParticipants", {
+      khatmaId,
+      name: "سارة",
+      phone: "+971501234567",
+      personId: null,
+      addedAt: 0,
+      removedAt: null,
+      joinedAt: 0,
+      silentDays: 3,
+      silencedAt: 1,
+    }),
+  );
+  const res = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, text: "", media: true }),
+  );
+  expect(res.status).toBe(200);
+  // taken, so production stays quiet; and nothing is sent from here either
+  expect(await res.json()).toEqual({ handled: true });
+  expect(sent).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.get(participantId))).toMatchObject({
+    lastReplyAt: NOW,
+    silentDays: 0,
+    silencedAt: null,
+  });
+  expect(await t.run((ctx) => ctx.db.query("waContacts").collect())).toEqual([
+    expect.objectContaining({ phone: "+971501234567", lastInboundAt: NOW }),
+  ]);
+  // media never reaches sign-in, and a redelivery is taken the same way
+  const again = await relayPost(
+    t,
+    JSON.stringify({ ...relayed, text: "", media: true }),
+  );
+  expect(await again.json()).toEqual({ handled: true });
 });
 
 test("relay endpoint rejects malformed messages", async () => {

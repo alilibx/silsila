@@ -574,13 +574,36 @@ test("view of a rota khatma says so, before looking for a round", async () => {
   await createRotaKhatma(t, ali, "rotaKhatma01");
   expect(
     await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
-  ).toEqual({ rota: true, name: "ختمة التناوب" });
+  ).toEqual({ rota: true, name: "ختمة التناوب", joinLink: null });
   expect(
     await t.query(api.khatmas.view, {
       inviteCode: "rotaKhatma01",
       sessionToken: ali.token,
     }),
-  ).toEqual({ rota: true, name: "ختمة التناوب" });
+  ).toEqual({ rota: true, name: "ختمة التناوب", joinLink: null });
+});
+
+test("view of a rota khatma has its join link for anyone, once it has a code and the public number is set", async () => {
+  vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", "971500000000");
+  try {
+    const t = convexTest(schema, modules);
+    const ali = await signedIn(t, "A");
+    const khatmaId = await createRotaKhatma(t, ali, "rotaKhatma01");
+    // Created before join codes: nothing to link to yet.
+    expect(
+      await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
+    ).toMatchObject({ joinLink: null });
+    await t.run((ctx) => ctx.db.patch(khatmaId, { joinCode: "ABC234" }));
+    expect(
+      await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
+    ).toEqual({
+      rota: true,
+      name: "ختمة التناوب",
+      joinLink: `https://wa.me/971500000000?text=${encodeURIComponent("انضمام إلى ختمة التناوب · ABC234")}`,
+    });
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test("mine lists a rota khatma with the open day's done count and no holding", async () => {

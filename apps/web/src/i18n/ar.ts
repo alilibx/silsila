@@ -1,5 +1,7 @@
 import { toArabicDigits } from "@convex/lib/digits";
+import { DUAS } from "@convex/lib/duas";
 import { noteText } from "@convex/lib/noteText";
+import type { ReadingDaysKind } from "@convex/lib/rota";
 import type { Schedule } from "@convex/lib/schedule";
 
 /** Copy every feature shares for failures it cannot explain more precisely. */
@@ -24,6 +26,14 @@ function counted(
     ? `${digits} ${forms.few}`
     : `${digits} ${forms.many}`;
 }
+
+/** A rota khatma as the share message names it, by how often it is read. */
+const rotaKindText: Record<ReadingDaysKind, string> = {
+  daily: "ختمة يومية بالتناوب",
+  weekly: "ختمة أسبوعية بالتناوب",
+  biweekly: "ختمة كل أسبوعين بالتناوب",
+  monthly: "ختمة شهرية بالتناوب",
+};
 
 /** Every UI string lives here. Components never contain Arabic literals. */
 export const ar = {
@@ -548,6 +558,31 @@ export const ar = {
     tabs: { today: "اليوم", people: "المشاركون" },
     whatsappOnly: "هذه الختمة تعمل على واتساب. يصلك جزؤك كل يوم مع زرّين.",
     imOrganizer: "أنت المنظّم؟ سجّل الدخول",
+    joinOnWhatsApp: "انضمّ عبر واتساب",
+    // Joining
+    shareJoin: "أرسل رابط الانضمام إلى مجموعتكم",
+    shareMessage: (title: string, link: string, days: ReadingDaysKind) =>
+      `السلام عليكم، بدأنا ${title}، ${rotaKindText[days]}. اضغطوا الرابط وأرسلوا الرسالة كما هي: ${link}`,
+    joined: "انضمّ",
+    notJoined: "لم ينضمّ · أعد الإرسال",
+    notJoinedShort: "لم ينضمّ",
+    notJoinedMe: "لم تنضمّ بعد · انضمّ الآن",
+    stoppedMessages: "أوقف الرسائل",
+    silencedMessages: "أوقفنا الرسائل",
+    requestsHeading: "طلبات الانضمام",
+    requestLine: (name: string | null, phone: string) =>
+      name ? `${name} · ${phone}` : phone,
+    requestJuz: "جزؤه",
+    acceptRequest: "أضفه واختر جزأه",
+    declineRequest: "لا",
+    joinRequestErrors: {
+      not_found: "لم نجد هذا الطلب. أعد تحميل الصفحة.",
+      juz_taken: "هذا الجزء له قارئ الآن. اختر جزءاً آخر.",
+      already_added: "هذا الرقم مضاف في الختمة.",
+      no_free_juz: "الأجزاء الثلاثون كلها لها قرّاء.",
+    } as Record<string, string>,
+    answerNone: "لم يردّ",
+    answerNotYet: "ردّ: ليس بعد",
     cardLine: (done: string, total: string) =>
       `ختمة بالتناوب · ${done} من ${total} اليوم`,
     // Today
@@ -761,17 +796,7 @@ export const ar = {
     shareMessage: (round: string) =>
       `الحمد لله، ختمنا القرآن معاً للمرة ${round} 🤍\nتقبّل الله منا ومنكم.`,
     continue: "تابع إلى الختمة",
-    // Tanzil Quran Text (Uthmani, Version 1.1), https://tanzil.net — copied verbatim, do not edit
-    duas: [
-      {
-        text: "رَبَّنَا تَقَبَّلْ مِنَّآ ۖ إِنَّكَ أَنتَ ٱلسَّمِيعُ ٱلْعَلِيمُ",
-        ref: "البقرة ١٢٧",
-      },
-      {
-        text: "رَبَّنَآ ءَاتِنَا فِى ٱلدُّنْيَا حَسَنَةً وَفِى ٱلْـَٔاخِرَةِ حَسَنَةً وَقِنَا عَذَابَ ٱلنَّارِ",
-        ref: "البقرة ٢٠١",
-      },
-    ],
+    duas: DUAS,
   },
 } as const;
 

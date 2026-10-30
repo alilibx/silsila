@@ -7,13 +7,23 @@ import { RotaPeopleSetup } from "../features/rota/RotaPeopleSetup";
 import { t } from "../i18n/ar";
 import { RotaCreatePage } from "./RotaCreatePage";
 
-type Person = { id: string; name: string; isMe: boolean; juz: number[] };
+type Person = {
+  id: string;
+  name: string;
+  isMe: boolean;
+  juz: number[];
+  joined?: boolean;
+};
+
+const JOIN_LINK = "https://wa.me/971500000000?text=join";
 
 const m = vi.hoisted(() => ({
   create: vi.fn(),
   addParticipant: vi.fn(),
   giveJuz: vi.fn(),
   finishSetup: vi.fn(),
+  ensureJoinLink: vi.fn(),
+  joinLink: null as string | null,
   me: undefined as unknown,
   people: undefined as unknown,
   listeners: new Set<() => void>(),
@@ -44,16 +54,28 @@ vi.mock("convex/react", async () => {
       const name = getFunctionName(ref);
       if (name === "rota:addParticipant") return m.addParticipant;
       if (name === "rota:finishSetup") return m.finishSetup;
+      if (name === "rota:ensureJoinLink") return m.ensureJoinLink;
       return m.giveJuz;
     },
   };
 });
 
 /** The view `api.rota.people` returns for these participants (their juz' already placed). */
-function peopleView(participants: Person[]) {
+function peopleView(people: Person[]) {
+  const participants = people.map((p) => ({
+    phone: "+971500000001",
+    joined: false,
+    stopped: false,
+    silenced: false,
+    ...p,
+  }));
   const holder = new Map<number, Person>();
   for (const p of participants) for (const juz of p.juz) holder.set(juz, p);
   return {
+    title: "ختمة العائلة",
+    daysKind: "weekly",
+    joinLink: m.joinLink,
+    requests: [],
     target: { number: 1, date: "2026-10-30", isFirst: true },
     rows: Array.from({ length: 30 }, (_, i) => {
       const person = holder.get(i + 1);
@@ -129,6 +151,9 @@ beforeEach(() => {
   m.giveJuz.mockReset();
   m.finishSetup.mockReset();
   m.finishSetup.mockResolvedValue({ ok: true });
+  m.ensureJoinLink.mockReset();
+  m.ensureJoinLink.mockResolvedValue({ ok: true });
+  m.joinLink = JOIN_LINK;
   m.me = { rotaAllowed: true };
   setRoster([{ id: "p1", name: "علي", isMe: true, juz: [1] }]);
 });
@@ -339,6 +364,53 @@ describe("RotaPeopleSetup (step 2)", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent("١");
     expect(items[0]).toHaveTextContent("أنا");
+  });
+
+  it("has the big share button next to «تمّ», opening the group message with the join link", () => {
+    m.joinLink =
+      "https://wa.me/971500000000?text=%D8%A7%D9%86%D8%B6%D9%85%D8%A7%D9%85";
+    setRoster(roster);
+    renderSetup();
+    const share = screen.getByRole("link", { name: t.rota.shareJoin });
+    expect(share).toHaveAttribute(
+      "href",
+      `https://wa.me/?text=${encodeURIComponent(t.rota.shareMessage("ختمة العائلة", m.joinLink, "weekly"))}`,
+    );
+    expect(
+      share.compareDocumentPosition(
+        screen.getByRole("button", { name: t.rota.done }),
+      ),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(m.ensureJoinLink).not.toHaveBeenCalled();
+  });
+
+  it("shows who has joined, and a resend for each who has not", () => {
+    setRoster([
+      { id: "p1", name: "علي", isMe: true, juz: [1], joined: true },
+      { id: "p2", name: "خالد", isMe: false, juz: [2] },
+    ]);
+    renderSetup();
+    const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(
+      within(items[0] as HTMLElement).getByText(t.rota.joined),
+    ).toBeInTheDocument();
+    const resend = within(items[1] as HTMLElement).getByRole("link", {
+      name: t.rota.notJoined,
+    });
+    expect(resend.getAttribute("href")).toMatch(
+      /^https:\/\/wa\.me\/971500000001\?text=/,
+    );
+  });
+
+  it("asks for a join link when the khatma has none and offers no share button until it comes", () => {
+    m.joinLink = null;
+    setRoster(roster);
+    renderSetup();
+    expect(m.ensureJoinLink).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("link", { name: t.rota.shareJoin })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: t.rota.done }),
+    ).toBeInTheDocument();
   });
 
   it("adds two people in order and lists them as 2 and 3", async () => {
