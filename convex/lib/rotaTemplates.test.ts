@@ -3,6 +3,7 @@ import { DUAS } from "./duas";
 import {
   alreadyText,
   assignedTemplate,
+  assignedText,
   clockText,
   closedText,
   completeTemplate,
@@ -15,6 +16,7 @@ import {
   notOnListText,
   notYetText,
   reminderTemplate,
+  reminderText,
   ROTA_BUTTONS,
   stopText,
   thanksText,
@@ -36,7 +38,7 @@ const three = [3, 5, 6];
 test("the juz' template: title header, khatma number and juz' (nominative), two reply payloads in order", () => {
   const body = (juz: number[]) => juzTemplate(khatma, juz, 12, payloads).body;
   expect(juzTemplate(khatma, two, 12, payloads)).toEqual({
-    name: "wirdak_rota_juz",
+    name: "wirdak_rota_juz_v2",
     header: "ختمة العائلة",
     body: ["١٢", "الجزآن ٥ و٦"],
     quickReplies: [payloads.done, payloads.notYet],
@@ -61,7 +63,7 @@ test("the assigned template puts the genitive juz' before the khatma number", ()
   const body = (juz: number[]) =>
     assignedTemplate(khatma, juz, 7, payloads).body;
   expect(assignedTemplate(khatma, three, 7, payloads)).toEqual({
-    name: "wirdak_rota_assigned",
+    name: "wirdak_rota_assigned_v2",
     header: "ختمة العائلة",
     body: ["الأجزاء ٣، ٥ و٦", "٧"],
     quickReplies: [payloads.done, payloads.notYet],
@@ -73,7 +75,7 @@ test("the assigned template puts the genitive juz' before the khatma number", ()
 test("the covered template has no buttons", () => {
   const body = (juz: number[]) => coveredTemplate(khatma, juz).body;
   expect(coveredTemplate(khatma, one)).toEqual({
-    name: "wirdak_rota_covered",
+    name: "wirdak_rota_covered_v2",
     header: "ختمة العائلة",
     body: ["الجزء ٢٦"],
   });
@@ -118,9 +120,21 @@ test("welcome text names the day and time of the next message, if any", () => {
 });
 
 test("the free texts use Arabic digits", () => {
-  expect(juzText(3, one)).toBe("الختمة ٣ اليوم. قراءتك: الجزء ٢٦.");
-  expect(juzText(3, two)).toBe("الختمة ٣ اليوم. قراءتك: الجزآن ٥ و٦.");
-  expect(juzText(3, three)).toBe("الختمة ٣ اليوم. قراءتك: الأجزاء ٣، ٥ و٦.");
+  expect(juzText(3, one)).toBe(
+    "تحديث على قراءتك اليوم في الختمة ٣: المسجَّل لك الجزء ٢٦ من هذه الختمة.",
+  );
+  expect(juzText(3, two)).toBe(
+    "تحديث على قراءتك اليوم في الختمة ٣: المسجَّل لك الجزآن ٥ و٦ من هذه الختمة.",
+  );
+  expect(juzText(3, three)).toBe(
+    "تحديث على قراءتك اليوم في الختمة ٣: المسجَّل لك الأجزاء ٣، ٥ و٦ من هذه الختمة.",
+  );
+  expect(reminderText(two)).toBe(
+    "تذكير بقراءتك اليوم: لم تُسجَّل بعد قراءة الجزأين ٥ و٦ في هذه الختمة.",
+  );
+  expect(assignedText(three, 7)).toBe(
+    "تحديث على قراءتك: سُجِّلت لك قراءة الأجزاء ٣، ٥ و٦ في الختمة ٧ لهذا اليوم.",
+  );
   expect(thanksText(12)).toBe("تقبّل الله منك. ١٢ من ٣٠ جزءاً تمّت اليوم.");
   expect(notYetText("٤:٠٠ م")).toBe("لا بأس، نذكّرك الساعة ٤:٠٠ م.");
   expect(notYetText(null)).toBe("لا بأس.");

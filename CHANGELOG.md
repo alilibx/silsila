@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/alilibx/wirdak/compare/v0.5.0...v0.6.0) (2026-10-30)
+
+
+### Features
+
+* add saved participants, archive and delete, and admin setup for rotating khatmas ([#45](https://github.com/alilibx/wirdak/issues/45)) ([aa41f21](https://github.com/alilibx/wirdak/commit/aa41f2152c9b80385c285b0ab8f244e9596b51fd))
+* add the rotating khatma, run by the organizer ([#42](https://github.com/alilibx/wirdak/issues/42)) ([b225981](https://github.com/alilibx/wirdak/commit/b225981484f9880a4dfd8facc78289cd173afdaf))
+* **admin:** group settings into tabs and explain each one ([#43](https://github.com/alilibx/wirdak/issues/43)) ([d37bfc8](https://github.com/alilibx/wirdak/commit/d37bfc842da14b0c3c21d688e34fa491bf62630b))
+* let rotating khatma members take part on WhatsApp ([#44](https://github.com/alilibx/wirdak/issues/44)) ([54f95bc](https://github.com/alilibx/wirdak/commit/54f95bca68c610cea040bec8a2c9cbe3e41b4b1d))
+* **web:** add the WhatsApp icon to buttons, a favicon, and a profile picture ([#47](https://github.com/alilibx/wirdak/issues/47)) ([0e2d265](https://github.com/alilibx/wirdak/commit/0e2d265aeb4ba1b677ad50a524b8312efcd9a20f))
+
+
+### Bug Fixes
+
+* **rota:** make the rota templates pass Meta's review, and quiet late-started days ([#46](https://github.com/alilibx/wirdak/issues/46)) ([9e0b5a8](https://github.com/alilibx/wirdak/commit/9e0b5a8a1d15bd18a28fc01aa2646e518235ea00))
+* **web:** retry a failed query inside the page instead of crashing the app ([#40](https://github.com/alilibx/wirdak/issues/40)) ([4923cd1](https://github.com/alilibx/wirdak/commit/4923cd1ce2f7d2d8a2a1c886a5bc6bfb3102bd2f))
+
 ## [0.5.0](https://github.com/alilibx/wirdak/compare/v0.4.0...v0.5.0) (2026-10-29)
 
 

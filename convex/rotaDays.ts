@@ -98,6 +98,9 @@ async function startDay(
 ): Promise<Doc<"rotaDays">> {
   const n = (last?.n ?? 0) + 1;
   const number = khatmaNumber(n);
+  // A day that starts after a message's time has none of it that day.
+  const minutes = localMinutes(now, rota.timeZone);
+  const skipIfPast = (at: number) => (minutes >= at ? now : null);
   const dayId = await ctx.db.insert("rotaDays", {
     khatmaId: khatma._id,
     n,
@@ -108,13 +111,9 @@ async function startDay(
     closesAt: instantAt(addDays(today, 1), rota.messages.dayAt, rota.timeZone),
     completedAt: null,
     closedAt: null,
-    unreadSentAt: null,
-    summarySentAt: null,
-    // A day that starts after the reminder time has none that day.
-    reminderSentAt:
-      localMinutes(now, rota.timeZone) >= rota.messages.reminder.at
-        ? now
-        : null,
+    unreadSentAt: skipIfPast(rota.messages.unread.at),
+    summarySentAt: skipIfPast(rota.messages.summary.at),
+    reminderSentAt: skipIfPast(rota.messages.reminder.at),
   });
   const byJuz = await slotRowsByJuz(ctx, khatma._id, number);
   const juzByHolder = new Map<Id<"rotaParticipants">, number[]>();

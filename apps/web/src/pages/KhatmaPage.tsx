@@ -17,6 +17,7 @@ import {
 } from "../components/KhatmaTabs";
 import { canSwitch, SwitchKhatmaSheet } from "../components/SwitchKhatmaSheet";
 import { SwitchRow } from "../components/SwitchRow";
+import { WhatsAppIcon } from "../components/WhatsAppIcon";
 import { WhatsAppSheet } from "../components/WhatsAppSheet";
 import { PoolGrid } from "../components/PoolGrid";
 import { PushPromptSheet } from "../components/PushPromptSheet";
@@ -485,6 +486,7 @@ function MemberContent({
               <>
                 <div className="mt-4 grid gap-3">
                   <Button variant="whatsapp" onClick={onInvite}>
+                    <WhatsAppIcon />
                     {t.share.inviteButton}
                   </Button>
                   {hasOpen && (

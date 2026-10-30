@@ -2,6 +2,7 @@ import type { ReadingDaysKind } from "@convex/lib/rota";
 import { useMutation } from "convex/react";
 import { useEffect, useRef } from "react";
 import { buttonClass } from "../../components/Button";
+import { WhatsAppIcon } from "../../components/WhatsAppIcon";
 import { t } from "../../i18n/ar";
 import { waLink, waShareLink } from "../../lib/whatsapp";
 import { useRotaBackend } from "./backend";
@@ -42,6 +43,7 @@ export function ShareJoinLink({
       rel="noopener"
       className={buttonClass(variant, "no-underline")}
     >
+      <WhatsAppIcon />
       {t.rota.shareJoin}
     </a>
   );
