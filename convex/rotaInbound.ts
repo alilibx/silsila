@@ -6,6 +6,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { isBlocked } from "./lib/blocked";
+import { isArchived } from "./lib/khatma";
 import { notify } from "./notes";
 import { celebrateIfComplete, completeIfDone } from "./rotaDays";
 import { titled, welcomeMessage } from "./rotaOutbox";
@@ -328,7 +329,7 @@ async function join(
   return [await welcome(ctx, khatma, joined, args.now)];
 }
 
-/** «إيقاف»: stops every khatma's messages for the phone and tells each organizer. */
+/** «إيقاف»: stops every khatma's messages for the phone and tells each live khatma's organizer. */
 async function stop(
   ctx: MutationCtx,
   joined: Participant[],
@@ -338,7 +339,7 @@ async function stop(
     if (p.stoppedAt != null) continue;
     await ctx.db.patch(p._id, { stoppedAt: now });
     const khatma = await ctx.db.get(p.khatmaId);
-    if (!khatma) continue;
+    if (!khatma || isArchived(khatma)) continue;
     await notify(ctx, {
       personId: khatma.creatorPersonId,
       khatmaId: khatma._id,

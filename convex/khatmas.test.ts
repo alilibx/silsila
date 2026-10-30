@@ -521,6 +521,7 @@ test("mine lists active memberships newest first with progress", async () => {
       done: 0,
       holding: null,
       hasNote: false,
+      archived: false,
     },
     {
       kind: "pool",
@@ -531,6 +532,7 @@ test("mine lists active memberships newest first with progress", async () => {
       done: 2,
       holding: 6,
       hasNote: false,
+      archived: false,
     },
   ]);
 });
@@ -574,13 +576,23 @@ test("view of a rota khatma says so, before looking for a round", async () => {
   await createRotaKhatma(t, ali, "rotaKhatma01");
   expect(
     await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
-  ).toEqual({ rota: true, name: "ختمة التناوب", joinLink: null });
+  ).toEqual({
+    rota: true,
+    name: "ختمة التناوب",
+    joinLink: null,
+    archived: false,
+  });
   expect(
     await t.query(api.khatmas.view, {
       inviteCode: "rotaKhatma01",
       sessionToken: ali.token,
     }),
-  ).toEqual({ rota: true, name: "ختمة التناوب", joinLink: null });
+  ).toEqual({
+    rota: true,
+    name: "ختمة التناوب",
+    joinLink: null,
+    archived: false,
+  });
 });
 
 test("view of a rota khatma has its join link for anyone, once it has a code and the public number is set", async () => {
@@ -600,6 +612,7 @@ test("view of a rota khatma has its join link for anyone, once it has a code and
       rota: true,
       name: "ختمة التناوب",
       joinLink: `https://wa.me/971500000000?text=${encodeURIComponent("انضمام إلى ختمة التناوب · ABC234")}`,
+      archived: false,
     });
   } finally {
     vi.unstubAllEnvs();

@@ -14,6 +14,7 @@ const card = (over: object = {}) => ({
   done: 18,
   holding: null as number | null,
   hasNote: false,
+  archived: false,
   ...over,
 });
 

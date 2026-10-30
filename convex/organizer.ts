@@ -11,7 +11,7 @@ import {
 import { activeMembership } from "./khatmas";
 import { randomToken } from "./lib/crypto";
 import { graceValidator, isValidGrace, type Grace } from "./lib/grace";
-import { khatmaByInviteCode } from "./lib/khatma";
+import { isArchived, khatmaByInviteCode } from "./lib/khatma";
 import { scheduleValidator, type Schedule } from "./lib/schedule";
 import type { SessionContext } from "./lib/session";
 import { sessionMutation, sessionQuery } from "./lib/session";
@@ -409,7 +409,7 @@ export const handOver = sessionMutation({
 
 /**
  * Daily: pages through every khatma and schedules a handover check for each
- * one whose organizer has been away longer than `organizerInactiveMs`.
+ * one not archived whose organizer has been away longer than `organizerInactiveMs`.
  * Paginated, and one mutation per khatma, like the behind sweep.
  */
 export const autoHandoverSweep = internalMutation({
@@ -421,7 +421,7 @@ export const autoHandoverSweep = internalMutation({
     const cutoff = Date.now() - (await getSetting(ctx, "organizerInactiveMs"));
     for (const khatma of page.page) {
       // a rota khatma keeps its organizer: readers are not members to hand it to
-      if (khatma.kind === "rota") continue;
+      if (khatma.kind === "rota" || isArchived(khatma)) continue;
       const organizer = await ctx.db.get(khatma.creatorPersonId);
       if (organizer && organizer.lastSeenAt >= cutoff) continue;
       await ctx.scheduler.runAfter(0, internal.organizer.autoHandover, {
@@ -445,7 +445,7 @@ export const autoHandover = internalMutation({
   args: { khatmaId: v.id("khatmas") },
   handler: async (ctx, args) => {
     const khatma = await ctx.db.get(args.khatmaId);
-    if (!khatma || khatma.kind === "rota") return;
+    if (!khatma || khatma.kind === "rota" || isArchived(khatma)) return;
     const now = Date.now();
     const organizer = await ctx.db.get(khatma.creatorPersonId);
     if (

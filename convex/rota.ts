@@ -10,6 +10,7 @@ import {
 import { organizerOf, requireOrganizer } from "./organizer";
 import { randomToken } from "./lib/crypto";
 import { DEFAULT_GRACE } from "./lib/grace";
+import { isArchived } from "./lib/khatma";
 import { checkRateLimit } from "./lib/rateLimit";
 import { khatmaJoinLink, randomJoinCode } from "./lib/rotaJoin";
 import {
@@ -77,7 +78,7 @@ async function activeRotaCount(
     if (
       khatma?.kind === "rota" &&
       khatma.creatorPersonId === personId &&
-      khatma.rota?.archivedAt === null
+      !isArchived(khatma)
     ) {
       count += 1;
     }
@@ -295,7 +296,7 @@ async function requireRotaOrganizer(
   if (khatma.kind !== "rota" || !rota) {
     throw new ConvexError({ code: "forbidden" });
   }
-  if (rota.archivedAt !== null) throw new ConvexError({ code: "archived" });
+  if (isArchived(khatma)) throw new ConvexError({ code: "archived" });
   return { person, khatma, rota };
 }
 
@@ -971,7 +972,7 @@ export const today = sessionQuery({
         : null,
       next: { number: target.number, date: target.date },
       paused: rota.pausedAt !== null,
-      archived: rota.archivedAt !== null,
+      archived: isArchived(khatma),
       setupDone: rota.setupDoneAt !== null,
       tiles,
       participants,
@@ -1167,7 +1168,7 @@ export const settings = sessionQuery({
         new Set(),
       ).filter((date) => rota.endDate === null || date <= rota.endDate),
       quiet: { startHour: quiet.startHour, endHour: quiet.endHour },
-      archived: rota.archivedAt !== null,
+      archived: isArchived(khatma),
     };
   },
 });

@@ -24,6 +24,7 @@ import type * as handoff from "../handoff.js";
 import type * as help from "../help.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
+import type * as khatmaLifecycle from "../khatmaLifecycle.js";
 import type * as khatmas from "../khatmas.js";
 import type * as lib_adminSession from "../lib/adminSession.js";
 import type * as lib_arabicCount from "../lib/arabicCount.js";
@@ -99,6 +100,7 @@ declare const fullApi: ApiFromModules<{
   help: typeof help;
   hooks: typeof hooks;
   http: typeof http;
+  khatmaLifecycle: typeof khatmaLifecycle;
   khatmas: typeof khatmas;
   "lib/adminSession": typeof lib_adminSession;
   "lib/arabicCount": typeof lib_arabicCount;

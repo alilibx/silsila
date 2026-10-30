@@ -81,6 +81,8 @@ export default defineSchema({
     rota: v.optional(rotaConfigValidator),
     /** What a member sends on WhatsApp to ask to join a rota khatma. */
     joinCode: v.optional(v.string()),
+    /** When a pool khatma was archived. A rota khatma keeps `rota.archivedAt`. */
+    archivedAt: v.optional(nullableNumber),
   })
     .index("by_inviteCode", ["inviteCode"])
     .index("by_joinCode", ["joinCode"])
@@ -142,6 +144,7 @@ export default defineSchema({
   })
     .index("by_round_juz", ["roundId", "juz"])
     .index("by_khatma_person", ["khatmaId", "personId"])
+    .index("by_khatma_finishedAt", ["khatmaId", "finishedAt"])
     .index("by_round", ["roundId"])
     .index("by_person_finishedAt", ["personId", "finishedAt"])
     .index("by_finishedAt", ["finishedAt"]),
@@ -253,7 +256,8 @@ export default defineSchema({
     notYetAt: v.optional(nullableNumber),
   })
     .index("by_day_juz", ["dayId", "juz"])
-    .index("by_reader_day", ["readerId", "dayId"]),
+    .index("by_reader_day", ["readerId", "dayId"])
+    .index("by_khatma", ["khatmaId"]),
 
   /** Someone who sent a rota khatma's join code and waits for the organizer's answer. */
   rotaJoinRequests: defineTable({
@@ -305,6 +309,7 @@ export default defineSchema({
     skippedAt: nullableNumber,
   })
     .index("by_day_kind_participant", ["dayId", "kind", "participantId"])
+    .index("by_khatma_unsent", ["khatmaId", "sentAt", "skippedAt"])
     .index("by_createdAt", ["createdAt"]),
 
   pushSubscriptions: defineTable({
@@ -428,6 +433,7 @@ export default defineSchema({
   })
     .index("by_person", ["personId", "lastMessageAt"])
     .index("by_reporter", ["reporterHash", "lastMessageAt"])
+    .index("by_khatma", ["khatmaId"])
     .index("by_status", ["status", "lastMessageAt"])
     .index("by_status_answeredAt", ["status", "answeredAt"])
     .index("by_closedAt", ["closedAt"])

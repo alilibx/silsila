@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { isArchived } from "./lib/khatma";
 import { clearNotes, notify } from "./notes";
 import { getSetting, quietHours } from "./lib/settings";
 import { nextAwake } from "./lib/wakingTime";
@@ -108,6 +109,15 @@ export async function scheduleGrace(
   });
 }
 
+/** Whether a job for a hold still has a khatma to act on: it exists and isn't archived. */
+async function khatmaIsLive(
+  ctx: MutationCtx,
+  khatmaId: Id<"khatmas">,
+): Promise<boolean> {
+  const khatma = await ctx.db.get(khatmaId);
+  return khatma !== null && !isArchived(khatma);
+}
+
 /** Sends the reader's private "almost up" note, once, while it still applies. */
 export const noticeDue = internalMutation({
   args: { assignmentId: v.id("assignments") },
@@ -122,6 +132,7 @@ export const noticeDue = internalMutation({
     ) {
       return;
     }
+    if (!(await khatmaIsLive(ctx, a.khatmaId))) return;
     await ctx.db.patch(a._id, { noticeSentAt: Date.now() });
     await notify(ctx, {
       personId: a.personId,
@@ -135,7 +146,8 @@ export const noticeDue = internalMutation({
 
 /**
  * What `endDue` does for a job scheduled for `endsAt`: open the juz' unless the
- * job is stale (the end has moved) or the row is no longer held or already open.
+ * job is stale (the end has moved), the row is no longer held or already open,
+ * or its khatma is archived or deleted.
  */
 export async function endGraceIfDue(
   ctx: MutationCtx,
@@ -145,6 +157,7 @@ export async function endGraceIfDue(
   if (!isHeld(a) || a.openedForHelpAt !== null || a.graceEndsAt !== endsAt) {
     return;
   }
+  if (!(await khatmaIsLive(ctx, a.khatmaId))) return;
   await openForHelpNow(ctx, a);
 }
 
