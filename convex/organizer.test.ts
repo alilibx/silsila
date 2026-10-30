@@ -221,6 +221,7 @@ test("settings lists names only, by join date", async () => {
   ]);
   expect(s.members.map((m) => m.isOrganizer)).toEqual([true, false, false]);
   expect(s.blocked.map((m) => m.displayName)).toEqual(["عمر"]);
+  expect(s.archived).toBe(false);
   expect(Object.keys(s.members[0] ?? {}).sort()).toEqual([
     "displayName",
     "isOrganizer",
@@ -647,6 +648,13 @@ async function archivedSetup() {
     blockedId: (await memberOf(t, khatma._id, blocked))._id,
   };
 }
+
+test("settings say the khatma is archived", async () => {
+  const { t, org, code } = await archivedSetup();
+  const s = await settingsOf(t, code, org);
+  if ("forbidden" in s) throw new Error("forbidden");
+  expect(s.archived).toBe(true);
+});
 
 test("update refuses an archived khatma", async () => {
   const { t, code, base } = await archivedSetup();

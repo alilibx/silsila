@@ -26,6 +26,7 @@ import { ShareSheets } from "../components/ShareSheets";
 import { TakeSheet } from "../components/TakeSheet";
 import { Toast } from "../components/Toast";
 import { ArchivedBanner } from "../features/khatma/ArchivedActions";
+import { DeletingPage, useDeleting } from "../features/khatma/deleting";
 import { useKhatmaActions } from "../features/khatma/useKhatmaActions";
 import { useShareSheet } from "../features/share/useShareSheet";
 import { VerifySheet } from "../features/verify/VerifySheet";
@@ -107,6 +108,7 @@ export function KhatmaPage() {
   // The switch button needs the member's other khatmas; nobody else sees it.
   const mine = useQuery(api.khatmas.mine, isMember ? { sessionToken } : "skip");
   const [switching, setSwitching] = useState(false);
+  const deleting = useDeleting(inviteCode);
 
   // The server decides who is signed in; a stored token alone proves nothing.
   const tokenIsDead =
@@ -124,11 +126,14 @@ export function KhatmaPage() {
     .filter((tile) => tile.state === "open")
     .map((tile) => tile.juz);
 
+  // Deleted from this khatma's settings: its link is about to die, and the page must not show that.
+  if (deleting) return <DeletingPage />;
   if (found !== undefined && "rota" in found) {
     return (
       <RotaKhatmaPage
         inviteCode={inviteCode}
         name={found.name}
+        archived={found.archived}
         joinLink={found.joinLink}
       />
     );
@@ -325,15 +330,18 @@ function VisitorContent({
         </Link>
       </header>
 
-      <p
-        role="note"
-        className="mb-3.5 rounded-ui border border-[#BFE0CB] bg-[#E7F5EC] p-3 text-ink"
-      >
-        {view.inviterName
-          ? t.khatma.invited(view.inviterName)
-          : t.khatma.invitedAnon}
-        {!view.me.signedIn && ` ${t.khatma.verifyHint}`}
-      </p>
+      {/* An archived khatma invites nobody, so it has no invitation to show. */}
+      {!view.archived && (
+        <p
+          role="note"
+          className="mb-3.5 rounded-ui border border-[#BFE0CB] bg-[#E7F5EC] p-3 text-ink"
+        >
+          {view.inviterName
+            ? t.khatma.invited(view.inviterName)
+            : t.khatma.invitedAnon}
+          {!view.me.signedIn && ` ${t.khatma.verifyHint}`}
+        </p>
+      )}
 
       <h1 className="font-display text-4xl leading-tight text-green-deep">
         {khatmaTitle(view)}

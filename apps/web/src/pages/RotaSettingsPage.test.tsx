@@ -588,6 +588,32 @@ describe("RotaSettingsPage", () => {
       ).toBeInTheDocument();
     });
 
+    it("while a delete runs, the page stays on «جارٍ الحذف» when its settings turn null", async () => {
+      m.settings = { ...baseSettings, archived: true };
+      m.fns.remove.mockReturnValue(new Promise(() => {}));
+      const user = userEvent.setup();
+      const view = renderPage();
+      await user.click(screen.getByRole("button", { name: t.archive.delete }));
+      await user.click(
+        screen.getByRole("button", { name: t.archive.deleteConfirm }),
+      );
+      expect(m.fns.remove).toHaveBeenCalledWith(args);
+      m.settings = null;
+      view.rerender(
+        <MemoryRouter initialEntries={["/j/CODE/settings"]}>
+          <Routes>
+            <Route
+              path="/j/:inviteCode/settings"
+              element={<RotaSettingsPage />}
+            />
+            <Route path="/j/:inviteCode" element={<Landing />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+      expect(screen.queryByText("landed /j/CODE")).toBeNull();
+    });
+
     it("deleting asks first, then goes home", async () => {
       m.settings = { ...baseSettings, archived: true };
       const user = userEvent.setup();

@@ -15,6 +15,7 @@ import {
   ArchivedSection,
   ArchiveSection,
 } from "../features/khatma/ArchivedActions";
+import { DeletingPage, useDeleting } from "../features/khatma/deleting";
 import { DateLine } from "../features/rota/DateLine";
 import { firstReadingDay } from "../features/rota/dates";
 import { formatIsoDate, formatTime } from "../features/rota/format";
@@ -84,7 +85,10 @@ export function RotaSettingsPage() {
   const { inviteCode = "" } = useParams();
   const sessionToken = useSessionToken();
   const settings = useQuery(api.rota.settings, { sessionToken, inviteCode });
+  const deleting = useDeleting(inviteCode);
 
+  // Deleted from here: the settings are about to turn null, and this page must not show that.
+  if (deleting) return <DeletingPage />;
   if (settings === undefined) {
     return (
       <main aria-busy="true" className="mx-auto max-w-xl p-5">

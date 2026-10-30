@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { addDays, type ReadingDays } from "@convex/lib/rota";
 import { localDate } from "@convex/lib/wakingTime";
 import { useAction, useMutation } from "convex/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "../../components/Button";
 import { Sheet } from "../../components/Sheet";
@@ -13,6 +13,12 @@ import { firstReadingDay } from "../rota/dates";
 import { ErrorLine } from "../rota/ErrorLine";
 import { formatIsoDate } from "../rota/format";
 import { useRotaCall } from "../rota/useRotaCall";
+import {
+  dismissDeleteFailure,
+  startDelete,
+  useDeleteFailure,
+  useDeleting,
+} from "./deleting";
 
 const errors: Record<string, string> = t.rota.errors;
 
@@ -136,7 +142,8 @@ function RestartSheet({
   // The first day must be a reading day, so the start moves on to the next one.
   const start = firstReadingDay(restart.days, picked ?? tomorrow);
 
-  let created: string | null = null;
+  // The code of the new khatma, known once the call answers and read when `run` is done.
+  const created = useRef<string | null>(null);
   return (
     <Sheet title={t.archive.restartTitle} onClose={onClose}>
       <p className="mt-1 mb-4 leading-relaxed text-ink-soft">
@@ -168,11 +175,13 @@ function RestartSheet({
                   inviteCode,
                   firstDate: start,
                 });
-                created = result.inviteCode;
+                created.current = result.inviteCode;
               },
               () => {
-                if (created !== null) {
-                  void navigate(`/j/${encodeURIComponent(created)}/setup`);
+                if (created.current !== null) {
+                  void navigate(
+                    `/j/${encodeURIComponent(created.current)}/setup`,
+                  );
                 }
               },
             )
@@ -189,7 +198,10 @@ function RestartSheet({
   );
 }
 
-/** Deletes the archived khatma for good, then goes home. */
+/**
+ * Deletes the archived khatma for good, then goes home. The khatma's pages show `DeletingPage`
+ * from the tap until the move, so none of them flashes a dead link or "not found".
+ */
 function DeleteSheet({
   inviteCode,
   onClose,
@@ -199,25 +211,29 @@ function DeleteSheet({
 }) {
   const navigate = useNavigate();
   const remove = useMutation(api.khatmaLifecycle.remove);
-  const { busy, error, run } = useRotaCall(errors);
+  const deleting = useDeleting(inviteCode);
   return (
     <ConfirmSheet
       title={t.archive.deleteTitle}
       body={t.archive.deleteBody}
       confirm={t.archive.deleteConfirm}
       busyLabel={t.archive.deleting}
-      busy={busy}
-      error={error}
+      busy={deleting}
+      error={null}
       danger
       onConfirm={() =>
-        void run(
+        // A failure is kept by `deleting.tsx` and shown under the buttons; the sheet closes.
+        void startDelete(
+          inviteCode,
           () =>
             remove({
               sessionToken: getSessionToken() ?? undefined,
               inviteCode,
             }),
           () => void navigate("/", { replace: true }),
-        )
+        ).then((deleted) => {
+          if (!deleted) onClose();
+        })
       }
       onClose={onClose}
     />
@@ -236,18 +252,24 @@ export function ArchivedSection({
   restart: Restart | null;
 }) {
   const [open, setOpen] = useState<"restart" | "delete" | null>(null);
+  const failure = useDeleteFailure(inviteCode);
+  const show = (sheet: "restart" | "delete") => {
+    dismissDeleteFailure();
+    setOpen(sheet);
+  };
   return (
     <div className="mt-8 grid gap-3">
       {restart && (
-        <Button onClick={() => setOpen("restart")}>{t.archive.restart}</Button>
+        <Button onClick={() => show("restart")}>{t.archive.restart}</Button>
       )}
       <Button
         variant="ghost"
         className={dangerClass}
-        onClick={() => setOpen("delete")}
+        onClick={() => show("delete")}
       >
         {t.archive.delete}
       </Button>
+      <ErrorLine error={failure} />
       {open === "restart" && restart && (
         <RestartSheet
           inviteCode={inviteCode}

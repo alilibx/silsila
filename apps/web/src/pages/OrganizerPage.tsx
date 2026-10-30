@@ -13,6 +13,7 @@ import {
   ArchivedSection,
   ArchiveSection,
 } from "../features/khatma/ArchivedActions";
+import { DeletingPage, useDeleting } from "../features/khatma/deleting";
 import { t } from "../i18n/ar";
 import { errorCode } from "../lib/errors";
 import { formatDate } from "../lib/format";
@@ -56,19 +57,19 @@ export function OrganizerPage() {
     sessionToken,
     inviteCode,
   });
-  // Whether the khatma is archived: then it can only be read, and deleted.
-  const view = useQuery(api.khatmas.view, { sessionToken, inviteCode });
   // Resetting the link kills the old code, so its query turns `forbidden` before the new code
   // is navigated to. That moment must not bounce the organizer to the dead address.
   const resetting = useRef(false);
+  // Deleted from here: the queries are about to turn null, and this page must not show that.
+  const deleting = useDeleting(inviteCode);
 
+  if (deleting) return <DeletingPage />;
   if (rotaSettings !== undefined && rotaSettings !== null) {
     return <RotaSettingsPage />;
   }
   if (
     settings === undefined ||
     rotaSettings === undefined ||
-    view === undefined ||
     ("forbidden" in settings && resetting.current)
   ) {
     return (
@@ -87,7 +88,7 @@ export function OrganizerPage() {
       settings={settings}
       inviteCode={inviteCode}
       resetting={resetting}
-      archived={"archived" in view && view.archived}
+      archived={settings.archived}
     />
   );
 }

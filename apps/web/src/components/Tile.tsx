@@ -37,9 +37,12 @@ export function Tile({ tile, onTake, readOnly = false }: Props) {
     .filter(Boolean)
     .join(t.common.listSeparator);
 
+  // An open tile of an archived khatma looks like the others: nothing invites a press.
   const look =
     state === "open"
-      ? "border-dashed border-[#8A7D62] bg-card text-ink hover:border-green focus-visible:border-green"
+      ? readOnly
+        ? "border-dashed border-[#8A7D62] bg-card text-ink"
+        : "border-dashed border-[#8A7D62] bg-card text-ink hover:border-green focus-visible:border-green"
       : state === "reading"
         ? "border-saffron bg-saffron-soft text-ink"
         : "border-green bg-green text-[#F4EEDD]";

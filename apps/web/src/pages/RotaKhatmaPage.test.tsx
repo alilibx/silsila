@@ -27,6 +27,8 @@ const m = vi.hoisted(() => ({
   mine: [] as unknown,
   me: null as unknown,
   joinLink: null as string | null,
+  /** What the khatma's public view says about being archived. */
+  archived: false,
   notes: [] as unknown,
   fns: {
     reassign: vi.fn(),
@@ -209,6 +211,7 @@ function Page() {
     <RotaKhatmaPage
       inviteCode="CODE"
       name="ختمة العائلة"
+      archived={m.archived}
       joinLink={m.joinLink}
     />
   );
@@ -230,6 +233,7 @@ beforeEach(() => {
   m.mine = [];
   m.me = { displayName: "علي" };
   m.joinLink = JOIN_LINK;
+  m.archived = false;
   m.notes = [];
   m.startAgain.mockReset().mockResolvedValue({ inviteCode: "NEWCODE" });
 });
@@ -776,6 +780,56 @@ describe("an archived khatma", () => {
     expect(m.fns.ensureJoinLink).not.toHaveBeenCalled();
   });
 
+  it("delete keeps showing «جارٍ الحذف» while it runs, however the queries turn out", async () => {
+    let finish: (value: { ok: true }) => void = () => {};
+    m.fns.remove.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    const view = renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.delete }));
+    await user.click(
+      screen.getByRole("button", { name: t.archive.deleteConfirm }),
+    );
+    expect(m.fns.remove).toHaveBeenCalledWith(args);
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+    // The delete lands: both queries turn null before the move home.
+    m.today = null;
+    m.settings = null;
+    view.rerender(
+      <MemoryRouter initialEntries={["/j/CODE"]}>
+        <Routes>
+          <Route path="/j/:inviteCode" element={<Page />} />
+          <Route path="/" element={<p>home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+    expect(screen.queryByText(t.rota.whatsappOnly)).toBeNull();
+    expect(screen.queryByText("home page")).toBeNull();
+    finish({ ok: true });
+    expect(await screen.findByText("home page")).toBeInTheDocument();
+  });
+
+  it("a failed delete gives the page back, with the reason under the buttons", async () => {
+    m.fns.remove.mockResolvedValue({ error: "not_archived" });
+    const user = userEvent.setup();
+    renderAt();
+    await user.click(screen.getByRole("button", { name: t.archive.delete }));
+    await user.click(
+      screen.getByRole("button", { name: t.archive.deleteConfirm }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      t.rota.errors.not_archived ?? "",
+    );
+    expect(
+      screen.getByRole("button", { name: t.archive.delete }),
+    ).toBeEnabled();
+  });
+
   it("the switch button counts only active khatmas", () => {
     const card = {
       name: "ختمة",
@@ -802,6 +856,39 @@ describe("an archived khatma", () => {
     expect(
       screen.getByRole("button", { name: t.nav.switchKhatma }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("an archived khatma, for anyone but the organizer", () => {
+  beforeEach(() => {
+    m.today = null;
+    m.archived = true;
+  });
+
+  it("says so, and offers no way to join", () => {
+    renderAt();
+    expect(screen.getByText(t.archive.banner)).toBeInTheDocument();
+    expect(screen.queryByText(t.rota.whatsappOnly)).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: t.rota.joinOnWhatsApp }),
+    ).toBeNull();
+  });
+
+  it("a signed-out visitor can still sign in as the organizer", () => {
+    m.me = null;
+    renderAt();
+    expect(
+      screen.getByRole("button", { name: t.rota.imOrganizer }),
+    ).toBeInTheDocument();
+  });
+
+  it("an active khatma keeps its join button", () => {
+    m.archived = false;
+    renderAt();
+    expect(
+      screen.getByRole("link", { name: t.rota.joinOnWhatsApp }),
+    ).toHaveAttribute("href", JOIN_LINK);
+    expect(screen.queryByText(t.archive.banner)).toBeNull();
   });
 });
 

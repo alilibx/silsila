@@ -619,6 +619,33 @@ test("view of a rota khatma has its join link for anyone, once it has a code and
   }
 });
 
+test("view of an archived rota khatma has no join link, so nothing offers it", async () => {
+  vi.stubEnv("WHATSAPP_PUBLIC_NUMBER", "971500000000");
+  try {
+    const t = convexTest(schema, modules);
+    const ali = await signedIn(t, "A");
+    const khatmaId = await createRotaKhatma(t, ali, "rotaKhatma01");
+    await t.run(async (ctx) => {
+      const khatma = await ctx.db.get(khatmaId);
+      if (!khatma?.rota) throw new Error("not a rota khatma");
+      await ctx.db.patch(khatmaId, {
+        joinCode: "ABC234",
+        rota: { ...khatma.rota, archivedAt: 5 },
+      });
+    });
+    expect(
+      await t.query(api.khatmas.view, { inviteCode: "rotaKhatma01" }),
+    ).toEqual({
+      rota: true,
+      name: "ختمة التناوب",
+      joinLink: null,
+      archived: true,
+    });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 test("mine lists a rota khatma with the open day's done count and no holding", async () => {
   const t = convexTest(schema, modules);
   const ali = await signedIn(t, "A");

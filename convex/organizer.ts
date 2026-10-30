@@ -36,6 +36,8 @@ export type OrganizerSettings = {
     isOrganizer: boolean;
   }[];
   blocked: { memberId: Id<"members">; displayName: string }[];
+  /** An archived khatma can only be read, and deleted. */
+  archived: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -153,6 +155,7 @@ export const settings = sessionQuery({
       suggestedGrace: (await getSetting(ctx, "graceDefaults"))[khatma.schedule],
       members,
       blocked,
+      archived: isArchived(khatma),
     };
   },
 });

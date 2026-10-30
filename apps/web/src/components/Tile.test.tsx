@@ -129,4 +129,21 @@ describe("Tile", () => {
     expect(reader).toHaveClass("text-base");
     expect(reader).not.toHaveClass("truncate");
   });
+
+  it("an open tile is pressable and invites it, until the khatma is archived", () => {
+    const open = {
+      juz: 4,
+      name: "والمحصنات",
+      state: "open" as const,
+      readerName: null,
+      isMine: false,
+    };
+    const { rerender } = render(<Tile tile={open} onTake={vi.fn()} />);
+    const tile = () => screen.getByRole("button", { name: /الجزء ٤/ });
+    expect(tile()).toBeEnabled();
+    expect(tile().className).toMatch(/hover:border-green/);
+    rerender(<Tile tile={open} onTake={vi.fn()} readOnly />);
+    expect(tile()).toBeDisabled();
+    expect(tile().className).not.toMatch(/hover:|focus-visible:/);
+  });
 });

@@ -18,9 +18,12 @@ export function PoolGrid({ tiles, onTake, readOnly = false }: Props) {
     <section id="pool" className="scroll-mt-4">
       <div className="mt-6 mb-2.5 flex items-baseline justify-between px-0.5">
         <h2 className="text-xl font-semibold">{t.khatma.poolHeading}</h2>
-        <span className="text-base text-ink-soft">
-          {t.khatma.openCount(toArabicDigits(open))}
-        </span>
+        {/* Nothing can be taken from an archived khatma, so "N open" would promise it. */}
+        {!readOnly && (
+          <span className="text-base text-ink-soft">
+            {t.khatma.openCount(toArabicDigits(open))}
+          </span>
+        )}
       </div>
       <ul className="mb-3 flex flex-wrap gap-3 px-0.5 text-base text-ink-soft">
         <li>

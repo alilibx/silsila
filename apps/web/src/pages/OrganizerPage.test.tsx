@@ -14,8 +14,6 @@ const m = vi.hoisted(() => ({
   settings: undefined as unknown,
   /** What `api.rota.settings` answers: null for a pool khatma. */
   rotaSettings: null as unknown,
-  /** What `api.khatmas.view` answers: the pool khatma, which says whether it is archived. */
-  view: { archived: false } as unknown,
   fns: {
     update: vi.fn(),
     removeMember: vi.fn(),
@@ -49,14 +47,8 @@ vi.mock("react-router", async () => {
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: (ref: never) => {
-      const name = getFunctionName(ref);
-      return name === "rota:settings"
-        ? m.rotaSettings
-        : name === "khatmas:view"
-          ? m.view
-          : m.settings;
-    },
+    useQuery: (ref: never) =>
+      getFunctionName(ref) === "rota:settings" ? m.rotaSettings : m.settings,
     useMutation: (ref: never) =>
       m.fns[getFunctionName(ref).split(":")[1] as Fn],
     useAction: () => m.resetInvite,
@@ -74,6 +66,7 @@ const organizerView = {
     { memberId: "m3", displayName: "خالد", isOrganizer: false },
   ],
   blocked: [{ memberId: "m9", displayName: "ليلى" }],
+  archived: false,
 };
 
 const visited: string[] = [];
@@ -118,7 +111,6 @@ describe("OrganizerPage", () => {
     m.holdNavigation = false;
     m.settings = structuredClone(organizerView);
     m.rotaSettings = null;
-    m.view = { archived: false };
   });
 
   it("shows the rotating khatma's own settings for a rota khatma", () => {
@@ -578,12 +570,6 @@ describe("OrganizerPage", () => {
   });
 
   describe("archiving and deleting", () => {
-    it("waits for the khatma to say whether it is archived", () => {
-      m.view = undefined;
-      renderPage();
-      expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
-    });
-
     it("archives after a confirmation that says messages stop and nothing is lost", async () => {
       const user = userEvent.setup();
       renderPage();
@@ -604,7 +590,7 @@ describe("OrganizerPage", () => {
     });
 
     it("an archived khatma hides every control that changes it", () => {
-      m.view = { archived: true };
+      m.settings = { ...organizerView, archived: true };
       renderPage();
       expect(screen.getByText(t.rota.archivedSettings)).toBeInTheDocument();
       // Names stay readable; no field, no save, no member action, no reset.
@@ -629,7 +615,7 @@ describe("OrganizerPage", () => {
     });
 
     it("an archived pool khatma can be deleted, not started again", async () => {
-      m.view = { archived: true };
+      m.settings = { ...organizerView, archived: true };
       const user = userEvent.setup();
       renderPage();
       expect(
@@ -646,6 +632,22 @@ describe("OrganizerPage", () => {
         sessionToken: "tok",
         inviteCode: "CODE",
       });
+    });
+
+    it("while a delete runs, the page stays on «جارٍ الحذف» when its settings turn forbidden", async () => {
+      m.settings = { ...organizerView, archived: true };
+      m.fns.remove.mockReturnValue(new Promise(() => {}));
+      const user = userEvent.setup();
+      const view = renderPage();
+      await user.click(screen.getByRole("button", { name: t.archive.delete }));
+      await user.click(
+        screen.getByRole("button", { name: t.archive.deleteConfirm }),
+      );
+      m.settings = { forbidden: true };
+      view.rerender(tree());
+      expect(screen.getByText(t.archive.deleting)).toBeInTheDocument();
+      expect(screen.queryByText("khatma-page")).toBeNull();
+      expect(visited).not.toContain("/j/CODE");
     });
 
     it("says an organizer change was refused because the khatma got archived", async () => {
