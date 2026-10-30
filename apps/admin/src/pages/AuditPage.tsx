@@ -30,6 +30,18 @@ function show(row: {
   return row.value === null ? t.settings.empty : JSON.stringify(row.value);
 }
 
+/**
+ * A row's note. The note of an admin's work on a rotating khatma is the
+ * operation's name in the code, shown in Arabic; any other note is as written.
+ */
+function noteOf(row: { action: AuditAction; note: string }): string {
+  const names: Record<string, string | undefined> = t.audit.rotaOps;
+  if (row.action !== "rota.adminChange" || !Object.hasOwn(names, row.note)) {
+    return row.note;
+  }
+  return names[row.note] ?? row.note;
+}
+
 /** Every recorded change, newest first (spec 4.5). */
 export function AuditPage() {
   const adminToken = useAdminToken() ?? "";
@@ -117,7 +129,7 @@ export function AuditPage() {
             </p>
             {row.note !== null && (
               <p className="mt-1 text-ink-soft">
-                {t.audit.note}: {row.note}
+                {t.audit.note}: {noteOf({ action: row.action, note: row.note })}
               </p>
             )}
           </li>

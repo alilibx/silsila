@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ConfirmSheet } from "../components/ConfirmSheet";
+import { RotaSwitch } from "../components/RotaSwitch";
 import { t } from "../i18n/ar";
 import { useAdminToken } from "../lib/adminSession";
 import { opsError, withNote } from "../lib/opsError";
@@ -119,22 +120,11 @@ export function PersonAdminPage() {
 
       <section className="flex items-center justify-between gap-3 rounded-ui border-2 border-line bg-card px-4 py-3">
         <span id={rotaLabelId}>{t.ops.rotaAllowed}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={p.rotaAllowed}
-          aria-labelledby={rotaLabelId}
-          onClick={() => setOp(p.rotaAllowed ? "rotaAllowOff" : "rotaAllowOn")}
-          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-            p.rotaAllowed ? "bg-green" : "bg-line"
-          }`}
-        >
-          <span
-            className={`absolute top-1 size-6 rounded-full bg-white transition-all ${
-              p.rotaAllowed ? "start-7" : "start-1"
-            }`}
-          />
-        </button>
+        <RotaSwitch
+          checked={p.rotaAllowed}
+          labelledBy={rotaLabelId}
+          onToggle={() => setOp(p.rotaAllowed ? "rotaAllowOff" : "rotaAllowOn")}
+        />
       </section>
 
       {message && <p role="status">{message}</p>}

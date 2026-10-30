@@ -80,6 +80,12 @@ test("the rota participant notes name them and count days in Arabic digits", () 
   );
 });
 
+test("the rotaEnabled note tells the organizer what they can now do", () => {
+  expect(noteText({ ...base, kind: "rotaEnabled" })).toBe(
+    "جديد لك: يمكنك الآن إنشاء ختمة بالتناوب: لكل شخص جزء ثابت يتقدّم مع كل ختمة، ويصله على واتساب.",
+  );
+});
+
 test("the juz' phrase agrees with one, two and three or more ajza'", () => {
   expect(juzPhrase([26])).toBe("الجزء ٢٦");
   expect(juzPhrase([5, 6])).toBe("الجزآن ٥ و٦");

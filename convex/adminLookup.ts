@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -8,6 +9,7 @@ import { JUZ_COUNT } from "./lib/juz";
 import { ROTA_SIZE } from "./lib/rota";
 import { khatmaJoinLink } from "./lib/rotaJoin";
 import { lastRotaDay } from "./lib/rotaPlace";
+import { maskPhone } from "./lib/text";
 import { membersByJoin } from "./organizer";
 import { roundAssignments } from "./rounds";
 import { env } from "./whatsapp";
@@ -22,6 +24,16 @@ async function activeCount(ctx: QueryCtx, khatmaId: Id<"khatmas">) {
     .withIndex("by_khatma", (q) => q.eq("khatmaId", khatmaId))
     .collect();
   return members.filter((m) => m.status === "active").length;
+}
+
+/** Who is in a khatma: its active members, or a rotating khatma's readers still on the list. */
+async function memberCount(ctx: QueryCtx, k: Doc<"khatmas">) {
+  if (k.kind !== "rota") return await activeCount(ctx, k._id);
+  const readers = await ctx.db
+    .query("rotaParticipants")
+    .withIndex("by_khatma", (q) => q.eq("khatmaId", k._id))
+    .collect();
+  return readers.filter((p) => p.removedAt === null).length;
 }
 
 /** A rota khatma's settings and where its latest reading day stands, as counts. */
@@ -78,6 +90,52 @@ export const findKhatmas = adminQuery({
         members: await activeCount(ctx, k._id),
       })),
     );
+  },
+});
+
+/**
+ * The people who organize khatmas, from a page of the newest khatmas: one row
+ * per organizer on the page with their khatmas on it, and the switch for
+ * rotating khatmas. Someone with older khatmas too appears again on a later
+ * page. Phones are masked: search by number to open a person (spec 10.2).
+ */
+export const organizers = adminQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query("khatmas")
+      .order("desc")
+      .paginate(args.paginationOpts);
+    const byCreator = new Map<
+      Id<"people">,
+      { khatmaId: Id<"khatmas">; name: string | null; memberCount: number }[]
+    >();
+    for (const k of result.page) {
+      const list = byCreator.get(k.creatorPersonId) ?? [];
+      list.push({
+        khatmaId: k._id,
+        name: k.name,
+        memberCount: await memberCount(ctx, k),
+      });
+      byCreator.set(k.creatorPersonId, list);
+    }
+    const page = [];
+    for (const [personId, khatmas] of byCreator) {
+      const p = await ctx.db.get(personId);
+      if (!p) continue;
+      page.push({
+        personId,
+        displayName: p.displayName,
+        phoneMasked: maskPhone(p.phone),
+        rotaAllowed: p.rotaAllowed === true,
+        khatmas,
+      });
+    }
+    return {
+      page,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 

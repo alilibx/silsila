@@ -253,6 +253,77 @@ test("khatmas waiting for someone count against the ones they create themselves"
   ).toBe("rota_cap");
 });
 
+test("create doesn't count against the organizer's own daily limit", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("settings", {
+      key: "createsPerPersonPerDay",
+      value: 1,
+      updatedAt: NOW,
+    });
+    await ctx.db.insert("settings", {
+      key: "rotaMaxActivePerOrganizer",
+      value: 5,
+      updatedAt: NOW,
+    });
+  });
+  await create(t);
+  await create(t);
+  await create(t);
+  expect(await t.run((ctx) => ctx.db.query("rateLimits").collect())).toEqual(
+    [],
+  );
+
+  // The person's own creates are untouched: their one a day is still free.
+  const sessionToken = "organizer-session";
+  await t.run(async (ctx) => {
+    const person = await ctx.db
+      .query("people")
+      .withIndex("by_phone", (q) => q.eq("phone", ORGANIZER_PHONE))
+      .first();
+    await ctx.db.patch(person!._id, { rotaAllowed: true });
+    await ctx.db.insert("sessions", {
+      personId: person!._id,
+      tokenHash: await sha256Hex(sessionToken),
+      alertTokenHash: "alert",
+      deviceLabel: "test",
+      createdAt: NOW,
+      lastUsedAt: NOW,
+    });
+  });
+  const own = () =>
+    t.action(api.rota.create, {
+      sessionToken,
+      name: "ختمتي",
+      days: { kind: "daily" },
+      firstDate: "2027-01-16",
+      endDate: null,
+    });
+  expect(await own()).toHaveProperty("inviteCode");
+  expect(await codeOf(own())).toBe("rate_limited");
+});
+
+test("create refuses a blocked number, and makes nothing", async () => {
+  const t = convexTest(schema, modules);
+  await admin(t);
+  await t.run(async (ctx) => {
+    const adminRow = await ctx.db.query("admins").first();
+    await ctx.db.insert("blockedPhones", {
+      phone: ORGANIZER_PHONE,
+      blockedBy: adminRow!._id,
+      at: 0,
+      note: null,
+    });
+  });
+  expect(await codeOf(create(t))).toBe("blocked");
+  expect(await t.run((ctx) => ctx.db.query("khatmas").collect())).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.query("people").collect())).toHaveLength(
+    0,
+  );
+  expect(await auditRows(t)).toEqual([]);
+});
+
 test("create refuses a bad name, number or dates, and anyone but an admin", async () => {
   const t = convexTest(schema, modules);
   await admin(t);
@@ -395,7 +466,9 @@ test("the organizer's row is an ordinary row to an admin, who can't remove it", 
   const people = await t.query(api.adminRota.people, args);
   const organizer = people?.participants.find((p) => p.name === "أم خالد");
   expect(organizer?.isMe).toBe(false);
+  expect(organizer?.isOrganizer).toBe(true);
   expect(people?.rows[0]?.participant?.isMe).toBe(false);
+  expect(people?.rows[0]?.participant?.isOrganizer).toBe(true);
 
   const before = (await auditRows(t)).length;
   expect(

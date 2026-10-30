@@ -175,13 +175,16 @@ function PersonSheet({
             </span>
           </Button>
         ) : (
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => setConfirming(true)}
-          >
-            {t.rota.remove}
-          </Button>
+          // A khatma keeps its organizer, whoever is looking at it.
+          !person.isOrganizer && (
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setConfirming(true)}
+            >
+              {t.rota.remove}
+            </Button>
+          )
         )}
       </div>
       <ErrorLine error={error} />

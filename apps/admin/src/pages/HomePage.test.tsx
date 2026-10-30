@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,6 +36,7 @@ const base = {
   ajzaToday: 214,
   ajzaAvg7: 190,
   completedThisWeek: 3,
+  rotaDaysCompletedThisWeek: 17,
   stalledKhatmas: 5,
   stalledCapped: false,
   daysPerRoundMedian: 4,
@@ -70,6 +71,13 @@ describe("dashboard", () => {
       expect(screen.getAllByText(text).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(t.stats.newThisWeek("١٤٠"))).toBeInTheDocument();
+  });
+
+  it("counts the rotating khatma days completed this week", () => {
+    renderPage();
+    const tile = screen.getByText(t.stats.rotaDaysCompleted).parentElement!;
+    expect(within(tile).getByText("١٧")).toBeInTheDocument();
+    expect(within(tile).getByText(t.stats.thisWeek)).toBeInTheDocument();
   });
 
   it("warns when sign-in success drops below 80%", () => {

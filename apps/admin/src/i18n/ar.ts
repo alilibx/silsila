@@ -77,6 +77,32 @@ const groups: Record<SettingGroup, string> = {
   rota: "الختمة بالتناوب",
 };
 
+/**
+ * What an admin did on a rotating khatma (the note of a `rota.adminChange` row
+ * is the operation's name in the code).
+ */
+const rotaOps = {
+  finishSetup: "أنهى إضافة القرّاء",
+  addParticipant: "أضاف قارئاً",
+  giveJuz: "أعطى قارئاً جزءاً",
+  moveJuz: "نقل جزءاً إلى قارئ آخر",
+  freeJuz: "أخلى جزءاً",
+  removeParticipant: "أزال قارئاً",
+  addSaved: "أضاف قارئاً من المحفوظين",
+  ensureJoinLink: "أنشأ رابط الانضمام",
+  acceptJoinRequest: "قبل طلب انضمام",
+  declineJoinRequest: "رفض طلب انضمام",
+  reassign: "أسند جزء اليوم إلى قارئ آخر",
+  markDone: "سجّل قراءة جزء",
+  markNotDone: "ألغى تسجيل قراءة جزء",
+  update: "غيّر إعدادات الختمة",
+  setPaused: "أوقف الختمة أو استأنفها",
+  addPauseDate: "أضاف يوم توقف",
+  removePauseDate: "حذف يوم توقف",
+  archive: "أرشف الختمة",
+  remove: "حذف الختمة",
+} as const;
+
 const actions: Record<AuditAction, string> = {
   "admin.bootstrap": "أضاف أول مشرف",
   "admin.add": "أضاف مشرفًا",
@@ -103,6 +129,7 @@ export const ar = {
     home: "الرئيسية",
     help: "المساعدة",
     search: "بحث",
+    organizers: "المنظّمون",
     settings: "الإعدادات",
     audit: "السجل",
     admins: "المشرفون",
@@ -198,6 +225,7 @@ export const ar = {
   audit: {
     title: "السجل",
     actions,
+    rotaOps,
     all: "كل التغييرات",
     filter: "نوع التغيير",
     byAdmin: "المشرف",
@@ -268,6 +296,8 @@ export const ar = {
     members: "أعضاء",
     ajzaToday: "أجزاء قُرئت اليوم",
     completedThisWeek: "ختمات مكتملة هذا الأسبوع",
+    rotaDaysCompleted: "أيام ختمات مكتملة",
+    thisWeek: "هذا الأسبوع",
     stalled: "ختمات متوقفة",
     daysPerRound: "مدة الختمة (الوسيط)",
     changeWeek: (n: string) => `${n} عن الأسبوع الماضي`,
@@ -400,7 +430,15 @@ export const ar = {
       bad_phone: "الرقم غير صحيح. اكتبه مع رمز الدولة، مثل \u200E+971",
       rota_cap: "لدى هذا المنظّم العدد الأقصى من الختمات بالتناوب.",
       rate_limited: "أُنشئت لهذا المنظّم ختمات كثيرة اليوم. جرّب غداً.",
+      blocked: "هذا الرقم محظور. ألغِ حظره أولاً.",
     },
+  },
+  organizers: {
+    title: "المنظّمون",
+    searchLabel: "ابحث عن شخص: رقم الهاتف مع رمز الدولة",
+    createFor: "أنشئ ختمة بالتناوب نيابةً عن منظّم",
+    empty: "لا منظّمين بعد.",
+    more: "المزيد",
   },
   signOut: {
     button: "تسجيل الخروج",

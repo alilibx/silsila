@@ -28,7 +28,12 @@ vi.mock("convex/react", async () => {
   };
 });
 
-const state = { joined: false, stopped: false, silenced: false };
+const state = {
+  joined: false,
+  stopped: false,
+  silenced: false,
+  isOrganizer: false,
+};
 const hidden = {
   id: "p1",
   name: "سعد",
@@ -121,6 +126,34 @@ describe("PeoplePanel", () => {
       within(rows[1] as HTMLElement).getByRole("link", {
         name: t.rota.notJoined,
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("nobody can remove the organizer, whoever is looking; anyone else can be removed", async () => {
+    const user = userEvent.setup();
+    const view = makeView();
+    // An admin's view: the organizer's row isn't "me".
+    view.rows[0] = {
+      juz: 1,
+      participant: { ...hidden, isOrganizer: true, slots: 1 },
+    };
+    view.participants[0] = { ...hidden, isOrganizer: true, juz: [1] };
+    m.view = view;
+    render(<PeoplePanel inviteCode="CODE" archived={false} />);
+
+    await user.click(screen.getByRole("button", { name: /سعد/ }));
+    const organizer = screen.getByRole("dialog", { name: "سعد" });
+    expect(
+      within(organizer).queryByRole("button", { name: t.rota.remove }),
+    ).toBeNull();
+    await user.click(
+      within(organizer).getByRole("button", { name: t.sheet.close }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /منى/ }));
+    const other = screen.getByRole("dialog", { name: "منى" });
+    expect(
+      within(other).getByRole("button", { name: t.rota.remove }),
     ).toBeInTheDocument();
   });
 });

@@ -11,6 +11,8 @@ import { normalizeAdminPhone } from "./admins";
 import { adminMutation, resolveAdminSession } from "./lib/adminSession";
 import { writeAudit } from "./lib/audit";
 import { randomToken } from "./lib/crypto";
+import { isArchived } from "./lib/khatma";
+import { notify } from "./notes";
 import { handOverTo, otherMember, resetInviteCode } from "./organizer";
 import { deleteSession } from "./sessions";
 
@@ -57,7 +59,37 @@ export const signOutEverywhere = adminMutation({
   },
 });
 
-/** Lets a person create rotating khatmas, or takes that away (existing ones keep running). */
+/**
+ * The khatma a person organizes that they joined last and that is still
+ * running, or null. A note needs a khatma to sit in.
+ */
+async function newestOrganized(
+  ctx: MutationCtx,
+  personId: Id<"people">,
+): Promise<Id<"khatmas"> | null> {
+  const memberships = await ctx.db
+    .query("members")
+    .withIndex("by_person", (q) => q.eq("personId", personId))
+    .collect();
+  let newest: { id: Id<"khatmas">; createdAt: number } | null = null;
+  for (const m of memberships) {
+    if (m.status !== "active") continue;
+    const khatma = await ctx.db.get(m.khatmaId);
+    if (!khatma || khatma.creatorPersonId !== personId || isArchived(khatma)) {
+      continue;
+    }
+    if (newest === null || khatma.createdAt > newest.createdAt) {
+      newest = { id: khatma._id, createdAt: khatma.createdAt };
+    }
+  }
+  return newest?.id ?? null;
+}
+
+/**
+ * Lets a person create rotating khatmas, or takes that away (existing ones keep running).
+ * Turning it on tells them, on their newest khatma; someone who organizes none
+ * has nowhere to see the note and gets none.
+ */
 export const setRotaAllowed = adminMutation({
   args: {
     personId: v.id("people"),
@@ -71,6 +103,16 @@ export const setRotaAllowed = adminMutation({
     const person = await ctx.db.get(args.personId);
     if (!person) return { error: "not_found" };
     await ctx.db.patch(person._id, { rotaAllowed: args.allowed });
+    if (args.allowed && person.rotaAllowed !== true) {
+      const khatmaId = await newestOrganized(ctx, person._id);
+      if (khatmaId !== null) {
+        await notify(ctx, {
+          personId: person._id,
+          khatmaId,
+          kind: "rotaEnabled",
+        });
+      }
+    }
     await writeAudit(ctx, {
       actor: ctx.admin,
       action: "person.rotaAllowed",

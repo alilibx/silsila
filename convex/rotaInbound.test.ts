@@ -1121,6 +1121,31 @@ test("a stranger's join on a waiting khatma files a request, and makes nobody or
   ).toBeNull();
 });
 
+test("a blocked organizer's join on a waiting khatma doesn't make them its organizer", async () => {
+  const t = convexTest(schema, modules);
+  const s = await pendingKhatma(t);
+  await t.run(async (ctx) => {
+    const admin = await ctx.db.insert("admins", {
+      phone: "+971500000099",
+      addedBy: null,
+      addedAt: 0,
+    });
+    await ctx.db.insert("blockedPhones", {
+      phone: ORGANIZER,
+      blockedBy: admin,
+      at: 0,
+      note: null,
+    });
+  });
+
+  await send(t, ORGANIZER.slice(1), joinText("ختمة", "JNC234"));
+
+  const state = await pendingState(t, s.khatmaId);
+  expect(state.pending).toBe(true);
+  expect(state.members).toEqual([]);
+  expect(state.notes).toEqual([]);
+});
+
 test("a listed reader's join on a waiting khatma joins them, and makes them no organizer", async () => {
   const t = convexTest(schema, modules);
   const s = await pendingKhatma(t);

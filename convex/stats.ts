@@ -31,6 +31,7 @@ export type DayCounts = {
   newMembers: number;
   newKhatmas: number;
   roundsCompleted: number;
+  rotaDaysCompleted: number;
   signInsStarted: number;
   signInsCompleted: number;
 };
@@ -69,11 +70,18 @@ export async function dayCounts(
       q.gte("completedAt", from).lt("completedAt", to),
     )
     .collect();
+  const rotaDays = await ctx.db
+    .query("rotaDays")
+    .withIndex("by_completedAt", (q) =>
+      q.gte("completedAt", from).lt("completedAt", to),
+    )
+    .collect();
   return {
     ajzaFinished: finished.length,
     newMembers: people.length,
     newKhatmas: khatmas.length,
     roundsCompleted: rounds.length,
+    rotaDaysCompleted: rotaDays.length,
     signInsStarted: await readCounter(ctx, signInKey(day, "started")),
     signInsCompleted: await readCounter(ctx, signInKey(day, "completed")),
   };

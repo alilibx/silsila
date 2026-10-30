@@ -80,7 +80,12 @@ test("the organizer's rota notes go out as templates with the open button", () =
 });
 
 test("notes about a participant's own messages stay off WhatsApp", () => {
-  for (const kind of ["rotaSilent", "rotaSilenced", "rotaStopped"] as const) {
+  for (const kind of [
+    "rotaSilent",
+    "rotaSilenced",
+    "rotaStopped",
+    "rotaEnabled",
+  ] as const) {
     expect(
       noteTemplate(
         rotaNote(kind, { name: "أحمد", count: 3 }),

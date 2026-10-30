@@ -242,7 +242,7 @@ async function welcome(
 /**
  * An admin set this khatma up on someone's behalf: the join message from that
  * person's own number makes them its organizer. Any other phone changes nothing
- * here. The membership has no share token: drawing one takes an action, and a
+ * here, and neither does a blocked one. The membership has no share token: drawing one takes an action, and a
  * rota khatma has no use for it.
  */
 async function takeUpOrganizing(
@@ -254,6 +254,8 @@ async function takeUpOrganizing(
   if (rota.pendingOrganizer !== true) return;
   const organizer = await ctx.db.get(khatma.creatorPersonId);
   if (organizer?.phone !== args.phone) return;
+  // A number an admin blocked takes nothing up.
+  if (await isBlocked(ctx, args.phone)) return;
   await ctx.db.insert("members", {
     khatmaId: khatma._id,
     personId: organizer._id,

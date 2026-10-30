@@ -141,13 +141,16 @@ export async function insertRotaKhatma(
     .first();
   if (joinTaken) return null;
 
-  const allowed = await checkRateLimit(
-    ctx,
-    `khatmaCreate:${person._id}`,
-    await getSetting(ctx, "createsPerPersonPerDay"),
-    DAY_MS,
-  );
-  if (!allowed) throw new ConvexError({ code: "rate_limited" });
+  // An admin setting one up is not the organizer creating: it leaves their daily allowance alone.
+  if (!pendingOrganizer) {
+    const allowed = await checkRateLimit(
+      ctx,
+      `khatmaCreate:${person._id}`,
+      await getSetting(ctx, "createsPerPersonPerDay"),
+      DAY_MS,
+    );
+    if (!allowed) throw new ConvexError({ code: "rate_limited" });
+  }
 
   const now = Date.now();
   const khatmaId = await ctx.db.insert("khatmas", {

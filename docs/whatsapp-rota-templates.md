@@ -37,4 +37,4 @@ Header `{{1}}` and one URL button, «افتح الختمة», to `https://wirdak
 | `wirdak_rota_summary` | `تحديث على الختمة التي تنظّمها: تمّت قراءة {{1}} من ٣٠ جزءاً اليوم.` | `٢٤` |
 | `wirdak_rota_join_request` | `تحديث على الختمة التي تنظّمها: طلب انضمام جديد من {{1}}.` | `أحمد` |
 
-The organizer notes `rotaSilent`, `rotaSilenced` and `rotaStopped` have no template: in-app and push only.
+The organizer notes `rotaSilent`, `rotaSilenced` and `rotaStopped`, and `rotaEnabled` (the note that tells someone rotating khatmas are on for them, an announcement Meta would read as marketing), have no template: in-app and push only.

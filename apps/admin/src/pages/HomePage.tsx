@@ -96,6 +96,11 @@ function Dashboard({ adminToken }: { adminToken: string }) {
           value={formatCount(o.completedThisWeek)}
         />
         <StatTile
+          label={t.stats.rotaDaysCompleted}
+          value={formatCount(o.rotaDaysCompletedThisWeek)}
+          detail={t.stats.thisWeek}
+        />
+        <StatTile
           label={t.stats.stalled}
           value={
             o.stalledCapped

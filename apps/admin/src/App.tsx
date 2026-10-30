@@ -13,6 +13,7 @@ import { HelpInboxPage } from "./pages/HelpInboxPage";
 import { HelpRequestPage } from "./pages/HelpRequestPage";
 import { HomePage } from "./pages/HomePage";
 import { KhatmaAdminPage } from "./pages/KhatmaAdminPage";
+import { OrganizersPage } from "./pages/OrganizersPage";
 import { PersonAdminPage } from "./pages/PersonAdminPage";
 import { RotaCreatePage, RotaSetupPage } from "./pages/RotaCreatePage";
 import { RotaHelpPage } from "./pages/RotaHelpPage";
@@ -107,6 +108,7 @@ function SignedIn({
             path="/khatmas/:khatmaId/rota/setup"
             element={<RotaSetupPage />}
           />
+          <Route path="/organizers" element={<OrganizersPage />} />
           <Route path="/rota/new" element={<RotaCreatePage />} />
           <Route path="/people/:personId" element={<PersonAdminPage />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -71,11 +71,60 @@ describe("AuditPage", () => {
     expect(
       screen.getAllByText(t.audit.actions["rota.adminCreate"]),
     ).not.toHaveLength(0);
-    expect(screen.getByText(/giveJuz/)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(t.audit.rotaOps.giveJuz)),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/giveJuz/)).not.toBeInTheDocument();
     expect(screen.getByText(/\+971500009000/)).toBeInTheDocument();
     // Both can be filtered on.
     expect(
       screen.getByRole("option", { name: t.audit.actions["rota.adminChange"] }),
     ).toBeInTheDocument();
+  });
+
+  it("names every operation an admin can do on a rota khatma, and shows an unknown note as it is", () => {
+    const rotaChange = (note: string, _id: string) => ({
+      _id,
+      adminPhone: "+971500000001",
+      at: 0,
+      action: "rota.adminChange",
+      targetKind: "khatma",
+      targetId: "k1",
+      before: null,
+      after: {},
+      note,
+    });
+    m.results = [
+      rotaChange("archive", "r1"),
+      rotaChange("markNotDone", "r2"),
+      rotaChange("somethingNew", "r3"),
+    ];
+    render(<AuditPage />);
+    expect(
+      screen.getByText(new RegExp(t.audit.rotaOps.archive)),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(t.audit.rotaOps.markNotDone)),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/somethingNew/)).toBeInTheDocument();
+    expect(screen.queryByText(/markNotDone/)).not.toBeInTheDocument();
+  });
+
+  it("leaves another action's note alone, even one named like an operation", () => {
+    m.results = [
+      {
+        _id: "r1",
+        adminPhone: "+971500000001",
+        at: 0,
+        action: "person.signOutAll",
+        targetKind: "person",
+        targetId: "p1",
+        before: null,
+        after: null,
+        note: "archive",
+      },
+    ];
+    render(<AuditPage />);
+    expect(screen.getByText(/archive/)).toBeInTheDocument();
   });
 });

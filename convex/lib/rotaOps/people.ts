@@ -78,6 +78,8 @@ type PersonState = {
   stopped: boolean;
   /** Wirdak stopped messaging them after days without a reply. */
   silenced: boolean;
+  /** They run the khatma, so nobody can take them out of it. */
+  isOrganizer: boolean;
 };
 
 export type PeopleView = {
@@ -116,8 +118,12 @@ export type PeopleView = {
   maxSlots: number;
 };
 
-function personState(p: Doc<"rotaParticipants">): PersonState {
+function personState(
+  p: Doc<"rotaParticipants">,
+  khatma: Doc<"khatmas">,
+): PersonState {
   return {
+    isOrganizer: p.personId === khatma.creatorPersonId,
     phone: p.phoneHidden === true ? null : p.phone,
     joined: p.joinedAt != null,
     stopped: p.stoppedAt != null,
@@ -187,7 +193,7 @@ export async function people(
               name: holder.name,
               isMe: isActor(holder, actor),
               slots: heldBy.get(holder._id)?.length ?? 0,
-              ...personState(holder),
+              ...personState(holder, khatma),
             }
           : null,
       };
@@ -197,7 +203,7 @@ export async function people(
       name: p.name,
       isMe: isActor(p, actor),
       juz: heldBy.get(p._id) ?? [],
-      ...personState(p),
+      ...personState(p, khatma),
     })),
     freeJuz: Array.from({ length: ROTA_SIZE }, (_, i) => i + 1).filter(
       (juz) => !byJuz.has(juz),

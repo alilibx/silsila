@@ -9,6 +9,7 @@ const NAV = [
   { to: "/", label: t.nav.home },
   { to: "/help", label: t.nav.help },
   { to: "/search", label: t.nav.search },
+  { to: "/organizers", label: t.nav.organizers },
   { to: "/settings", label: t.nav.settings },
   { to: "/audit", label: t.nav.audit },
   { to: "/admins", label: t.nav.admins },

@@ -15,6 +15,7 @@ import {
   type AdminContext,
 } from "./lib/adminSession";
 import { writeAudit } from "./lib/audit";
+import { isBlocked } from "./lib/blocked";
 import { randomToken } from "./lib/crypto";
 import { isArchived } from "./lib/khatma";
 import { readingDaysValidator, rotaMessagesValidator } from "./lib/rota";
@@ -133,6 +134,10 @@ export const insertForOrganizer = internalMutation({
   ): Promise<{ khatmaId: Id<"khatmas">; inviteCode: string } | null> => {
     const resolved = await resolveAdminSession(ctx, args.adminToken);
     if (!resolved) throw new ConvexError({ code: "not_admin" });
+    // A blocked number gets no khatma, and no account made for it.
+    if (await isBlocked(ctx, args.organizerPhone)) {
+      throw new ConvexError({ code: "blocked" });
+    }
     const person = await organizerFor(
       ctx,
       args.organizerName,

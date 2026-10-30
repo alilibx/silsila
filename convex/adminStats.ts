@@ -24,8 +24,9 @@ async function rows(
     .collect();
 }
 
+/** Rows from before a figure existed have none of it. */
 function sum(list: Doc<"dailyStats">[], key: keyof DayCounts): number {
-  return list.reduce((total, row) => total + row[key], 0);
+  return list.reduce((total, row) => total + (row[key] ?? 0), 0);
 }
 
 function median(values: number[]): number | null {
@@ -130,6 +131,8 @@ export const overview = adminQuery({
       ajzaToday: live.ajzaFinished,
       ajzaAvg7: oneDecimal(sum(week, "ajzaFinished") / 7),
       completedThisWeek: sum(lastSix, "roundsCompleted") + live.roundsCompleted,
+      rotaDaysCompletedThisWeek:
+        sum(lastSix, "rotaDaysCompleted") + live.rotaDaysCompleted,
       stalledKhatmas: stall.count,
       stalledCapped: stall.capped,
       daysPerRoundMedian: medianDays === null ? null : oneDecimal(medianDays),

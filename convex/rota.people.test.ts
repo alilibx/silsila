@@ -120,6 +120,16 @@ test("the first people added take the lowest free ajza' in order", async () => {
   expect(view?.participants.map((p) => p.juz)).toEqual([[1], [2], [3], [4]]);
 });
 
+test("people marks the organizer's row, in the juz' rows and the list alike", async () => {
+  const t = convexTest(schema, modules);
+  const s = await setup(t);
+  await add(t, s, { name: "الأول" });
+  const view = await people(t, s);
+  expect(view?.participants.map((p) => p.isOrganizer)).toEqual([true, false]);
+  expect(view?.rows[0]?.participant?.isOrganizer).toBe(true);
+  expect(view?.rows[1]?.participant?.isOrganizer).toBe(false);
+});
+
 test("refuses a held juz', a repeated phone, a bad name or phone", async () => {
   const t = convexTest(schema, modules);
   const s = await setup(t);

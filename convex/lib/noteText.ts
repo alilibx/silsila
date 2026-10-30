@@ -21,6 +21,7 @@ export const NOTE_KINDS = [
   "rotaSilent",
   "rotaSilenced",
   "rotaStopped",
+  "rotaEnabled",
 ] as const;
 
 export type NoteKind = (typeof NOTE_KINDS)[number];
@@ -138,5 +139,7 @@ export function noteText(n: NoteTextInput, now: number = Date.now()): string {
       return `أوقفنا رسائل الختمة إلى ${n.name ?? ""} لأنه لم يردّ منذ مدة.`;
     case "rotaStopped":
       return `أوقف ${n.name ?? ""} رسائل الختمة.`;
+    case "rotaEnabled":
+      return "جديد لك: يمكنك الآن إنشاء ختمة بالتناوب: لكل شخص جزء ثابت يتقدّم مع كل ختمة، ويصله على واتساب.";
   }
 }

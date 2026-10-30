@@ -167,6 +167,7 @@ export default defineSchema({
       v.literal("rotaSilent"),
       v.literal("rotaSilenced"),
       v.literal("rotaStopped"),
+      v.literal("rotaEnabled"),
     ),
     /** A rota participant's name, in the organizer notes about them. */
     name: v.optional(v.union(v.string(), v.null())),
@@ -257,7 +258,8 @@ export default defineSchema({
     celebratedAt: v.optional(nullableNumber),
   })
     .index("by_khatma_n", ["khatmaId", "n"])
-    .index("by_khatma_date", ["khatmaId", "date"]),
+    .index("by_khatma_date", ["khatmaId", "date"])
+    .index("by_completedAt", ["completedAt"]),
 
   /** One juz' of one rota day, and who holds, reads and finished it. */
   rotaReads: defineTable({
@@ -378,6 +380,8 @@ export default defineSchema({
     newMembers: v.number(),
     newKhatmas: v.number(),
     roundsCompleted: v.number(),
+    /** Rotating khatma days whose 30 ajza' were all read; missing on older rows. */
+    rotaDaysCompleted: v.optional(v.number()),
     signInsStarted: v.number(),
     signInsCompleted: v.number(),
     totalMembers: v.number(),
