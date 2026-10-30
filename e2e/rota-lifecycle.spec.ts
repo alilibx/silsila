@@ -5,20 +5,12 @@ import {
   blockExternal,
   randomPhone,
   test,
+  today,
   verifyInSheet,
 } from "./support";
 
 const KHATMA_NAME = "ختمة الأرشفة";
 const PERSON = "سارة";
-
-/** Today's date in the browser's time zone as `YYYY-MM-DD` (the backend uses the same zone). */
-function today(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 /** The invite code of the khatma whose page `page` is on (`/j/<code>` or `/j/<code>/...`). */
 function inviteCodeOf(page: Page): string {
@@ -123,7 +115,9 @@ test("rota: archive, start again, delete", async ({ page }) => {
   await expect(archivedAfter.getByRole("link")).toHaveCount(1);
   await expect(archivedAfter.getByText(KHATMA_NAME)).toBeVisible();
   await page.goto(`/j/${secondCode}`);
-  await expect(page.getByText(t.archive.banner)).toBeHidden();
+  await expect(
+    page.getByRole("heading", { level: 1, name: t.notFound.dead }),
+  ).toBeVisible();
 
   // --- The person A added is still saved in A's settings -------------------------------------
   await page.goto("/settings");
