@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /** The panel's own code, without generated components and tests. */
 function sources(
-  dir = fileURLToPath(new URL(".", import.meta.url)),
+  // A string, not `new URL`: under jsdom that's jsdom's URL, which Node refuses.
+  dir = dirname(fileURLToPath(import.meta.url)),
 ): { path: string; text: string }[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
