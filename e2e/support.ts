@@ -81,6 +81,13 @@ export async function allowRota(phone: string): Promise<void> {
   await convexRun("dev:allowRota", { phone: `+${phone}` });
 }
 
+/** A session token for the admin with this number, who is made if new (dev-only helper). */
+export async function adminSession(phone: string): Promise<string> {
+  const stdout = await convexRun("dev:adminSession", { phone });
+  // The CLI prints the return value as JSON on its last line.
+  return JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as string;
+}
+
 const FONTS_DIR = new URL("../node_modules/@fontsource/", import.meta.url)
   .pathname;
 
